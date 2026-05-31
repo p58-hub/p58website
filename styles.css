@@ -2493,6 +2493,17 @@ body[data-route="home"].hz-at-hero .nav {
   }
   .mhome-hero .vhome-brand { display: none; }
   body[data-route="home"] main ~ footer.foot { display: block; }
+
+  body.at-footer[data-route="home"],
+  body.at-footer[data-route="home"] main {
+    height: auto !important;
+    min-height: 100dvh !important;
+    overflow-y: visible !important;
+  }
+
+  body[data-route="home"] {
+    overscroll-behavior-y: auto !important;
+  }
   .hzone {
     display: block;
     height: auto;
