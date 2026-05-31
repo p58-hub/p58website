@@ -36,16 +36,24 @@ function Nav({ route, go }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [atTop, setAtTop] = useState(true);
   const [hideForFooter, setHideForFooter] = useState(false);
+  const [projectNavVisible, setProjectNavVisible] = useState(false);
   const menuRef = useRef(null);
+  const isProject = route.name === "project";
 
-  // scroll detection — only meaningful on home (which has the full-bleed hero)
+  // scroll detection — home: track atTop; project: show nav only while scrolling
   useEffect(() => {
-    if (!isHome) {setAtTop(false);return;}
+    if (!isHome && !isProject) { setAtTop(false); return; }
+    if (isProject) {
+      setProjectNavVisible(false);
+      const onScroll = () => setProjectNavVisible(window.scrollY > 60);
+      window.addEventListener("scroll", onScroll, { passive: true });
+      return () => window.removeEventListener("scroll", onScroll);
+    }
     const onScroll = () => setAtTop(window.scrollY < 80);
     setAtTop(window.scrollY < 80);
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
-  }, [isHome]);
+  }, [isHome, isProject]);
 
   // Header is always the full, standard nav now (no minimal "home-top" mode).
   const homeTop = false;
@@ -120,11 +128,18 @@ function Nav({ route, go }) {
     return () => document.body.classList.remove("at-footer");
   }, [hideForFooter]);
 
-  const currentBrand = route.brand || null;
+  // On project pages the nav is fixed (no layout space) and hidden until scroll.
+  useEffect(() => {
+    document.body.classList.toggle("project-page", isProject);
+    return () => document.body.classList.remove("project-page");
+  }, [isProject]);
+
+  const projectForRoute = route.name === "project" ? PROJECTS.find((p) => p.id === route.id || p.slug === route.id) : null;
+  const currentBrand = route.brand || (projectForRoute ? (projectForRoute.brandKey || (projectForRoute.brand === "Dinas" ? "dn" : "pg")) : null);
 
   return (
     <React.Fragment>
-      <nav className={`nav ${homeTop ? "home-top" : ""} ${hideForFooter ? "nav-hidden" : ""}`} aria-label="Primary">
+      <nav className={`nav ${homeTop ? "home-top" : ""} ${isHome && isMobile && atTop ? "mobile-home-top" : ""} ${hideForFooter || (isProject && !projectNavVisible) ? "nav-hidden" : ""}`} aria-label="Primary">
         <div className="nav-logo" onClick={() => go({ name: "home" })} role="button" aria-label="Project58 home">
           <img src="assets/logo-black.svg" alt="Project58" style={{ objectFit: "contain" }} />
         </div>
@@ -222,8 +237,8 @@ function Nav({ route, go }) {
         </div> :
       null}
 
-      {/* RETAIL sub-nav — brand strip */}
-      {isRetail ?
+      {/* RETAIL sub-nav — brand strip (interiors page only, not individual project) */}
+      {isRetail && !isProject ?
       <div className="subnav" aria-label="Retail brands">
           <button
           className={`sub-chip ${!currentBrand ? "on" : ""}`}
@@ -264,11 +279,11 @@ function SearchOverlay({ go, onClose }) {
       label: pick(p, "name"),
       sub: `${p.brand} · ${pick(p, "location")} · ${p.year}`,
       code: p.code,
-      onPick: () => go({ name: "project", id: p.id })
+      onPick: () => go({ name: "project", id: p.slug || p.id })
     }));
     const brands = [
-    { kind: "brand", label: "Protein Garden", sub: "8 rooms · 2023–2026", onPick: () => go({ name: "interiors", brand: "pg" }) },
-    { kind: "brand", label: "Dinas", sub: "4 rooms · 2025–2026", onPick: () => go({ name: "interiors", brand: "dn" }) }];
+    { kind: "brand", label: "Protein Garden", sub: `${PROJECTS.filter((p) => (p.brandKey || (p.brand === "Dinas" ? "dn" : "pg")) === "pg").length} rooms · 2023–2026`, onPick: () => go({ name: "interiors", brand: "pg" }) },
+    { kind: "brand", label: "Dinas", sub: `${PROJECTS.filter((p) => (p.brandKey || (p.brand === "Dinas" ? "dn" : "pg")) === "dn").length} rooms · 2025–2026`, onPick: () => go({ name: "interiors", brand: "dn" }) }];
 
     return [...brands, ...projects];
   }, [pick]);
@@ -408,7 +423,7 @@ function useSiteSettings() {
   const [site, setSite] = useState(() => {
     try {
       const raw = JSON.parse(localStorage.getItem("p58_data_v1") || "null");
-      if (raw && raw.site) return raw.site;
+      if (raw && raw.site) return window.normaliseSiteSettings ? window.normaliseSiteSettings(raw.site) : raw.site;
     } catch (e) {}
     return null;
   });
@@ -417,40 +432,49 @@ function useSiteSettings() {
       if (e.key !== "p58_data_v1") return;
       try {
         const raw = JSON.parse(e.newValue || "null");
-        setSite(raw && raw.site ? raw.site : null);
+        setSite(raw && raw.site ? (window.normaliseSiteSettings ? window.normaliseSiteSettings(raw.site) : raw.site) : null);
       } catch (err) {}
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
-  return site || {};
+  return window.normaliseSiteSettings ? window.normaliseSiteSettings(site || window.DEFAULT_SITE_SETTINGS || {}) : site || {};
+}
+
+function ContactItem({ href, children }) {
+  if (!children) return null;
+  if (!href) return <span>{children}</span>;
+  const external = /^https?:\/\//i.test(href);
+  return (
+    <a href={href} target={external ? "_blank" : null} rel={external ? "noopener noreferrer" : null}>
+      {children}
+    </a>
+  );
 }
 
 function Footer({ go }) {
   const t = window.useT();
   const site = useSiteSettings();
-  const athensAddr = site.athens_address || t("foot_addr_athens");
-  const athensPhone = site.athens_phone || "+30 210 000 5800";
-  const email = site.email || "g.grigoriadis@project58.gr";
+  const contact = site.contact || {};
   return (
     <footer className="foot">
       <div className="foot-top foot-top-2col" style={{ padding: "0px", textAlign: "left" }}>
         <div className="foot-big">
           <img src="assets/logo-black.svg" alt="Project58" className="foot-logo" style={{ height: 28, marginBottom: 24, display: "block", filter: "invert(1)" }} />
-          {t("foot_big")} <em style={{ fontSize: "122px" }}>{t("foot_big_em")}</em>
+          {site.foot_big || t("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }}>{site.foot_big_em || t("foot_big_em")}</em>
         </div>
         <div className="foot-col">
-          <h4>{t("foot_athens")}</h4>
-          <p>{athensAddr.split("\n").map((line, i) => <React.Fragment key={i}>{i > 0 ? <br /> : null}{line}</React.Fragment>)}</p>
-          <p style={{ marginTop: 8 }}>{athensPhone}</p>
-          <p style={{ marginTop: 4 }}><a href={`mailto:${email}`}>{email}</a></p>
-          <a style={{ marginTop: 14 }} href="#">{t("foot_instagram")}</a>
+          <h4>{contact.location_label}</h4>
+          <p><ContactItem href={contact.address_url}>{contact.address}</ContactItem></p>
+          <p style={{ marginTop: 8 }}><ContactItem href={contact.phone_url}>{contact.phone}</ContactItem></p>
+          <p style={{ marginTop: 4 }}><ContactItem href={contact.email_url}>{contact.email}</ContactItem></p>
+          <p style={{ marginTop: 14 }}><ContactItem href={contact.instagram_url}>{contact.instagram_text}</ContactItem></p>
         </div>
       </div>
       <div className="foot-bot">
-        <span>{t("foot_copy_left")}</span>
-        <span className="center">{t("foot_copy_mid")}</span>
-        <span className="right">{t("foot_copy_right")}</span>
+        <span>{site.foot_copy_left || t("foot_copy_left")}</span>
+        <span className="center">{site.foot_copy_mid || t("foot_copy_mid")}</span>
+        <span className="right">{site.foot_copy_right || t("foot_copy_right")}</span>
       </div>
     </footer>);
 

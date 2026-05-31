@@ -12,24 +12,58 @@ const { useState, useEffect, useMemo, useRef, Fragment } = React;
 const STORE_KEY = "p58_data_v1";
 
 /* ---------- Seed data (defaults from data.jsx) ---------- */
-const DEFAULT_SITE = {
-  athens_address: "Akademias 76\n106 76 Athens\nGreece",
-  athens_phone: "+30 210 000 5800",
-  email: "g.grigoriadis@project58.gr",
-  instagram: "@project.58",
+const DEFAULT_SITE = window.DEFAULT_SITE_SETTINGS || {
+  contact: {
+    location_label: "ATHENS",
+    address: "Akademias 76 · 106 76",
+    address_url: "",
+    phone: "+30 210 000 5800",
+    phone_url: "tel:+302100005800",
+    email: "g.grigoriadis@project58.gr",
+    email_url: "mailto:g.grigoriadis@project58.gr",
+    instagram_text: "Instagram → @project.58",
+    instagram_url: "",
+  },
+};
+const normaliseSite = window.normaliseSiteSettings || ((site) => ({ ...DEFAULT_SITE, ...(site || {}) }));
+const DEFAULT_CATEGORIES = [
+  { id: "retail", label: "Retail", description: "Multi-site retail and fast casual interiors", order: 0 },
+  { id: "hospitality", label: "Hospitality", description: "Restaurants, cafes, bars, and service-led rooms", order: 1 },
+  { id: "residential", label: "Residential", description: "Homes, renovations, and private commissions", order: 2 },
+  { id: "workplace", label: "Workplace", description: "Studios, offices, and work environments", order: 3 },
+];
+const normaliseCategories = (items) => {
+  const source = Array.isArray(items) && items.length ? items : DEFAULT_CATEGORIES;
+  return source
+    .map((c, order) => ({
+      id: c.id || String(c.label || "category").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || newId("cat"),
+      label: c.label || c.id || "Category",
+      description: c.description || "",
+      order: Number.isFinite(Number(c.order)) ? Number(c.order) : order,
+    }))
+    .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
 };
 const seed = () => ({
-  projects: (window.PROJECTS || []).map((p) => ({ ...p, body: p.body.map((b) => [...b]), gallery: p.gallery.map((g) => ({ ...g })) })),
+  projects: (window.PROJECTS || []).map((p, order) => ({
+    slug: p.slug || p.id,
+    category: p.category || p.typology || "retail",
+    order: p.order != null ? p.order : order,
+    featured: p.featured != null ? p.featured : order < 6,
+    ...p,
+    body: p.body.map((b) => [...b]),
+    gallery: p.gallery.map((g) => ({ ...g })),
+  })),
   news: (window.NEWS || []).map((n) => ({ ...n })),
   team: (window.TEAM || []).map((t) => ({ ...t })),
-  site: { ...DEFAULT_SITE },
+  categories: normaliseCategories(DEFAULT_CATEGORIES),
+  site: normaliseSite(DEFAULT_SITE),
 });
 
 const load = () => {
   try {
     const stored = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
     if (stored && stored.projects && stored.news && stored.team) {
-      return { ...stored, site: { ...DEFAULT_SITE, ...(stored.site || {}) } };
+      return { ...stored, categories: normaliseCategories(stored.categories), site: normaliseSite(stored.site || DEFAULT_SITE) };
     }
   } catch (e) { /* fallthrough */ }
   return seed();
@@ -81,8 +115,40 @@ function App() {
     const projects = exists >= 0
       ? data.projects.map((p, i) => i === exists ? proj : p)
       : [proj, ...data.projects];
-    update({ ...data, projects });
+    update({ ...data, projects: projects.map((p, order) => ({ ...p, order })) });
     setEditing(null);
+  };
+  const onSaveCategory = (category) => {
+    const nextCategory = {
+      ...category,
+      id: (category.id || category.label || newId("cat")).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
+    };
+    const exists = data.categories.findIndex((c) => c.id === nextCategory.id);
+    const categories = exists >= 0
+      ? data.categories.map((c, i) => i === exists ? nextCategory : c)
+      : [...data.categories, { ...nextCategory, order: data.categories.length }];
+    update({ ...data, categories: normaliseCategories(categories) });
+    setEditing(null);
+  };
+  const onMoveCategory = (id, dir) => {
+    const idx = data.categories.findIndex((c) => c.id === id);
+    const nextIdx = idx + dir;
+    if (idx < 0 || nextIdx < 0 || nextIdx >= data.categories.length) return;
+    const categories = data.categories.slice();
+    const tmp = categories[idx];
+    categories[idx] = categories[nextIdx];
+    categories[nextIdx] = tmp;
+    update({ ...data, categories: categories.map((c, order) => ({ ...c, order })) });
+  };
+  const onMoveProject = (id, dir) => {
+    const idx = data.projects.findIndex((p) => p.id === id);
+    const nextIdx = idx + dir;
+    if (idx < 0 || nextIdx < 0 || nextIdx >= data.projects.length) return;
+    const projects = data.projects.slice();
+    const tmp = projects[idx];
+    projects[idx] = projects[nextIdx];
+    projects[nextIdx] = tmp;
+    update({ ...data, projects: projects.map((p, order) => ({ ...p, order })) });
   };
   const onSaveNews = (n) => {
     const exists = data.news.findIndex((x) => x._id === n._id);
@@ -103,6 +169,7 @@ function App() {
   const onDelete = (kind, idOrIdx) => {
     if (!confirm("Delete this " + kind + "? This cannot be undone.")) return;
     if (kind === "project") update({ ...data, projects: data.projects.filter((p) => p.id !== idOrIdx) });
+    if (kind === "category") update({ ...data, categories: normaliseCategories(data.categories.filter((c) => c.id !== idOrIdx)) });
     if (kind === "news") update({ ...data, news: data.news.filter((n) => n._id !== idOrIdx) });
     if (kind === "team") update({ ...data, team: data.team.filter((t) => t._id !== idOrIdx) });
   };
@@ -144,13 +211,20 @@ function App() {
 
   const counts = {
     projects: data.projects.length,
+    categories: data.categories.length,
     news: data.news.length,
     team: data.team.length,
   };
 
   const onSaveSite = (site) => {
-    update({ ...data, site });
+    update({ ...data, site: normaliseSite(site) });
     setToast("Settings saved");
+  };
+
+  const onSaveHeroGallery = (heroGallery) => {
+    const site = normaliseSite({ ...(data.site || DEFAULT_SITE), heroGallery });
+    update({ ...data, site });
+    setToast("Hero gallery saved");
   };
 
   return (
@@ -165,6 +239,9 @@ function App() {
         <button className={`side-btn ${section === "projects" ? "on" : ""}`} onClick={() => setSection("projects")}>
           <span>Projects</span><span className="count">{counts.projects}</span>
         </button>
+        <button className={`side-btn ${section === "categories" ? "on" : ""}`} onClick={() => setSection("categories")}>
+          <span>Categories</span><span className="count">{counts.categories}</span>
+        </button>
         <button className={`side-btn ${section === "news" ? "on" : ""}`} onClick={() => setSection("news")}>
           <span>News &amp; press</span><span className="count">{counts.news}</span>
         </button>
@@ -173,6 +250,9 @@ function App() {
         </button>
         <button className={`side-btn ${section === "site" ? "on" : ""}`} onClick={() => setSection("site")}>
           <span>Site settings</span><span className="count">⚙</span>
+        </button>
+        <button className={`side-btn ${section === "hero" ? "on" : ""}`} onClick={() => setSection("hero")}>
+          <span>Hero gallery</span><span className="count">▶</span>
         </button>
 
         <div className="side-footer">
@@ -193,7 +273,7 @@ function App() {
             <span className="sep">/</span>
             <span>Dashboard</span>
             <span className="sep">/</span>
-            <b>{section === "projects" ? "Projects" : section === "news" ? "News" : section === "site" ? "Site settings" : "Team"}</b>
+            <b>{section === "projects" ? "Projects" : section === "categories" ? "Categories" : section === "news" ? "News" : section === "site" ? "Site settings" : section === "hero" ? "Hero gallery" : "Team"}</b>
           </div>
           <div className="actions">
             <input
@@ -212,15 +292,18 @@ function App() {
             <button className="btn ghost" onClick={onReset} title="Reset to defaults">
               <span className="ic">{Ic.reset}</span><span>Reset</span>
             </button>
-            <button className="btn primary" style={section === "site" ? { display: "none" } : null} onClick={() => setEditing({ kind: section.slice(0, -1) === "newss" ? "news" : (section === "projects" ? "project" : section === "news" ? "news" : "team"), id: null })}>
-              <span className="ic">{Ic.plus}</span><span>New {section === "projects" ? "project" : section === "news" ? "news item" : section === "site" ? "—" : "person"}</span>
+            <button className="btn primary" style={(section === "site" || section === "hero") ? { display: "none" } : null} onClick={() => setEditing({ kind: section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news" : "team", id: null })}>
+              <span className="ic">{Ic.plus}</span><span>New {section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news item" : section === "site" ? "—" : "person"}</span>
             </button>
           </div>
         </div>
 
         <div className="content">
           {section === "projects" && (
-            <ProjectsList data={data.projects} onEdit={(id) => setEditing({ kind: "project", id })} onDelete={(id) => onDelete("project", id)} onNew={() => setEditing({ kind: "project", id: null })} />
+            <ProjectsList data={data.projects} categories={data.categories} onEdit={(id) => setEditing({ kind: "project", id })} onDelete={(id) => onDelete("project", id)} onMove={onMoveProject} onNew={() => setEditing({ kind: "project", id: null })} />
+          )}
+          {section === "categories" && (
+            <CategoriesList data={data.categories} projects={data.projects} onEdit={(id) => setEditing({ kind: "category", id })} onDelete={(id) => onDelete("category", id)} onMove={onMoveCategory} onNew={() => setEditing({ kind: "category", id: null })} />
           )}
           {section === "news" && (
             <NewsList data={data.news} onEdit={(id) => setEditing({ kind: "news", id })} onDelete={(id) => onDelete("news", id)} onNew={() => setEditing({ kind: "news", id: null })} />
@@ -229,7 +312,10 @@ function App() {
             <TeamList data={data.team} onEdit={(id) => setEditing({ kind: "team", id })} onDelete={(id) => onDelete("team", id)} onNew={() => setEditing({ kind: "team", id: null })} />
           )}
           {section === "site" && (
-            <SiteSettings site={data.site || DEFAULT_SITE} onSave={onSaveSite} />
+            <SiteSettings site={normaliseSite(data.site || DEFAULT_SITE)} onSave={onSaveSite} />
+          )}
+          {section === "hero" && (
+            <HeroGallerySettings heroGallery={normaliseSite(data.site || DEFAULT_SITE).heroGallery} onSave={onSaveHeroGallery} />
           )}
         </div>
       </main>
@@ -237,7 +323,15 @@ function App() {
       {editing && editing.kind === "project" && (
         <ProjectSheet
           project={editing.id ? data.projects.find((p) => p.id === editing.id) : null}
+          categories={data.categories}
           onSave={onSaveProject}
+          onClose={() => setEditing(null)}
+        />
+      )}
+      {editing && editing.kind === "category" && (
+        <CategorySheet
+          category={editing.id ? data.categories.find((c) => c.id === editing.id) : null}
+          onSave={onSaveCategory}
           onClose={() => setEditing(null)}
         />
       )}
@@ -266,33 +360,93 @@ function App() {
 /* ============================================================
    LISTS
    ============================================================ */
-function ProjectsList({ data, onEdit, onDelete, onNew }) {
+function categoryLabel(categories, id) {
+  const cat = categories.find((c) => c.id === id);
+  return cat ? cat.label : id || "Uncategorised";
+}
+
+function ProjectsList({ data, categories, onEdit, onDelete, onMove, onNew }) {
   if (!data.length) return <Empty kind="projects" onNew={onNew} />;
+  const groups = categories.map((cat) => ({
+    category: cat,
+    projects: data.filter((p) => (p.category || p.typology || "retail") === cat.id),
+  }));
+  const uncategorised = data.filter((p) => !categories.find((c) => c.id === (p.category || p.typology || "retail")));
+  if (uncategorised.length) groups.push({ category: { id: "uncategorised", label: "Uncategorised", description: "Projects without a matching category" }, projects: uncategorised });
   return (
     <>
-      <SectionHead eyebrow="/ Retail rooms · two operators" title="Projects" />
+      <SectionHead eyebrow="/ Projects grouped by category" title="Projects" />
+      {groups.map((group) => (
+        <div className="category-group" key={group.category.id}>
+          <div className="category-group-head">
+            <div>
+              <h2>{group.category.label}</h2>
+              <p>{group.category.description || "No description"}</p>
+            </div>
+            <span>{group.projects.length}</span>
+          </div>
+          <div className="list">
+            <div className="list-head">
+              <span></span>
+              <span>Name</span>
+              <span>Location</span>
+              <span>Year · status</span>
+              <span>Code · flags</span>
+              <span></span>
+            </div>
+            {group.projects.length === 0 ? (
+              <div className="empty-row">No projects in {group.category.label}.</div>
+            ) : group.projects.map((p, i) => {
+              const globalIndex = data.findIndex((x) => x.id === p.id);
+              return (
+                <div className="row" key={p.id} onClick={() => onEdit(p.id)}>
+                  <div className="thumb">
+                    {p.hero ? <img src={p.hero} alt="" /> : <div className="placeholder">no img</div>}
+                  </div>
+                  <div className="name">
+                    {p.name}
+                    <span className="sub">{p.brand}</span>
+                  </div>
+                  <div className="meta">{p.location}</div>
+                  <div className="meta">{p.year} · {p.status}</div>
+                  <div className="meta">{p.code}{p.featured ? " · Featured" : ""}<span className="sub">{categoryLabel(categories, p.category || p.typology || "retail")} · /{p.slug || p.id}</span></div>
+                  <div className="row-actions">
+                    <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(p.id, -1); }} title="Move up" disabled={globalIndex === 0}>↑</button>
+                    <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(p.id, 1); }} title="Move down" disabled={globalIndex === data.length - 1}>↓</button>
+                    <button className="delete" onClick={(e) => { e.stopPropagation(); onDelete(p.id); }} title="Delete">{Ic.trash}</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </>
+  );
+}
+
+function CategoriesList({ data, projects, onEdit, onDelete, onMove, onNew }) {
+  if (!data.length) return <Empty kind="categories" onNew={onNew} />;
+  return (
+    <>
+      <SectionHead eyebrow="/ Categories · project grouping" title="Categories" />
       <div className="list">
-        <div className="list-head">
-          <span></span>
-          <span>Name</span>
-          <span>Location</span>
-          <span>Year · status</span>
-          <span>Code</span>
+        <div className="list-head head-categories">
+          <span>Category</span>
+          <span>Description</span>
+          <span>Projects</span>
           <span></span>
         </div>
-        {data.map((p) => (
-          <div className="row" key={p.id} onClick={() => onEdit(p.id)}>
-            <div className="thumb">
-              {p.hero ? <img src={p.hero} alt="" /> : <div className="placeholder">no img</div>}
+        {data.map((c, i) => (
+          <div className="row row-categories" key={c.id} onClick={() => onEdit(c.id)}>
+            <div className="name">{c.label}<span className="sub">/{c.id}</span></div>
+            <div className="meta">{c.description || "No description"}</div>
+            <div className="meta">{projects.filter((p) => (p.category || p.typology || "retail") === c.id).length}</div>
+            <div className="row-actions">
+              <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(c.id, -1); }} title="Move up" disabled={i === 0}>↑</button>
+              <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(c.id, 1); }} title="Move down" disabled={i === data.length - 1}>↓</button>
+              <button className="delete" onClick={(e) => { e.stopPropagation(); onDelete(c.id); }} title="Delete">{Ic.trash}</button>
             </div>
-            <div className="name">
-              {p.name}
-              <span className="sub">{p.brand}</span>
-            </div>
-            <div className="meta">{p.location}</div>
-            <div className="meta">{p.year} · {p.status}</div>
-            <div className="meta">{p.code}</div>
-            <button className="delete" onClick={(e) => { e.stopPropagation(); onDelete(p.id); }} title="Delete">{Ic.trash}</button>
           </div>
         ))}
       </div>
@@ -369,31 +523,112 @@ function SectionHead({ eyebrow, title }) {
 /* ============================================================
    SITE SETTINGS
    ============================================================ */
+function HeroGallerySettings({ heroGallery, onSave }) {
+  const [interval, setInterval_] = useState(heroGallery.interval || 5200);
+  const dirty = interval !== heroGallery.interval;
+  const seconds = Math.round(interval / 100) / 10;
+  return (
+    <>
+      <SectionHead eyebrow="/ Home page hero" title="Hero gallery" />
+      <div className="settings-card">
+        <div className="form-section">
+          <div className="form-section-title">Auto-rotate speed</div>
+          <div className="field-group cols-1">
+            <Field label={`Slide duration — ${seconds}s`} hint="How long each project image is shown before advancing. Range: 2–15 seconds.">
+              <input
+                type="range"
+                min={2000}
+                max={15000}
+                step={100}
+                value={interval}
+                onChange={(e) => setInterval_(Number(e.target.value))}
+                style={{ width: "100%" }}
+              />
+            </Field>
+          </div>
+        </div>
+        <div className="settings-foot">
+          <span className="muted">Changes take effect on the next page load.</span>
+          <button className="btn primary" disabled={!dirty} onClick={() => onSave({ interval })}>Save</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function SiteSettings({ site, onSave }) {
   const [s, setS] = useState(site);
-  const set = (k, v) => setS((x) => ({ ...x, [k]: v }));
+  const contact = s.contact || DEFAULT_SITE.contact;
+  const setContact = (k, v) => setS((x) => ({ ...x, contact: { ...(x.contact || DEFAULT_SITE.contact), [k]: v } }));
+  const setField = (k, v) => setS((x) => ({ ...x, [k]: v }));
   const dirty = JSON.stringify(s) !== JSON.stringify(site);
   return (
     <>
       <SectionHead eyebrow="/ Footer addresses · contact details" title="Site settings" />
       <div className="settings-card">
         <div className="form-section">
-          <div className="form-section-title">Athens studio</div>
+          <div className="form-section-title">Footer CTA text</div>
           <div className="field-group">
-            <Field label="Address" hint="Use line breaks for multi-line addresses">
-              <textarea value={s.athens_address || ""} onChange={(e) => set("athens_address", e.target.value)} rows={3} />
+            <Field label="Lead-in text" hint="The smaller line above the big CTA.">
+              <input type="text" value={s.foot_big || ""} onChange={(e) => setField("foot_big", e.target.value)} placeholder="Let's design your" />
             </Field>
-            <div>
-              <Field label="Phone">
-                <input type="text" value={s.athens_phone || ""} onChange={(e) => set("athens_phone", e.target.value)} />
-              </Field>
-              <Field label="Email">
-                <input type="text" value={s.email || ""} onChange={(e) => set("email", e.target.value)} />
-              </Field>
-              <Field label="Instagram">
-                <input type="text" value={s.instagram || ""} onChange={(e) => set("instagram", e.target.value)} />
-              </Field>
-            </div>
+            <Field label="CTA highlight" hint="The big bold coloured line.">
+              <input type="text" value={s.foot_big_em || ""} onChange={(e) => setField("foot_big_em", e.target.value)} placeholder="next space!" />
+            </Field>
+          </div>
+          <div className="form-section-title" style={{ marginTop: 20 }}>Copyright bar</div>
+          <div className="field-group">
+            <Field label="Left text">
+              <input type="text" value={s.foot_copy_left || ""} onChange={(e) => setField("foot_copy_left", e.target.value)} placeholder="© 2025 — 2026 Project58 Architecture" />
+            </Field>
+            <Field label="Centre text">
+              <input type="text" value={s.foot_copy_mid || ""} onChange={(e) => setField("foot_copy_mid", e.target.value)} placeholder="Architecture · Renovation · Retail" />
+            </Field>
+          </div>
+          <div className="field-group cols-1">
+            <Field label="Right text">
+              <input type="text" value={s.foot_copy_right || ""} onChange={(e) => setField("foot_copy_right", e.target.value)} placeholder="Designed in-house · v1.0" />
+            </Field>
+          </div>
+        </div>
+        <div className="form-section">
+          <div className="form-section-title">Final contact / CTA</div>
+          <div className="field-group">
+            <Field label="Location label">
+              <input type="text" value={contact.location_label || ""} onChange={(e) => setContact("location_label", e.target.value)} placeholder="ATHENS" />
+            </Field>
+            <Field label="Address">
+              <input type="text" value={contact.address || ""} onChange={(e) => setContact("address", e.target.value)} placeholder="Akademias 76 · 106 76" />
+            </Field>
+          </div>
+          <div className="field-group">
+            <Field label="Google Maps URL" hint="Optional. Leave empty to render address as plain text.">
+              <input type="text" value={contact.address_url || ""} onChange={(e) => setContact("address_url", e.target.value)} placeholder="https://maps.google.com/..." />
+            </Field>
+            <Field label="Phone">
+              <input type="text" value={contact.phone || ""} onChange={(e) => setContact("phone", e.target.value)} />
+            </Field>
+          </div>
+          <div className="field-group">
+            <Field label="Phone link" hint="Use tel:+302100005800 or leave empty for plain text.">
+              <input type="text" value={contact.phone_url || ""} onChange={(e) => setContact("phone_url", e.target.value)} />
+            </Field>
+            <Field label="Email">
+              <input type="text" value={contact.email || ""} onChange={(e) => setContact("email", e.target.value)} />
+            </Field>
+          </div>
+          <div className="field-group">
+            <Field label="Email link" hint="Use mailto:name@example.com or leave empty for plain text.">
+              <input type="text" value={contact.email_url || ""} onChange={(e) => setContact("email_url", e.target.value)} />
+            </Field>
+            <Field label="Instagram text">
+              <input type="text" value={contact.instagram_text || ""} onChange={(e) => setContact("instagram_text", e.target.value)} placeholder="Instagram → @project.58" />
+            </Field>
+          </div>
+          <div className="field-group cols-1">
+            <Field label="Instagram URL" hint="Optional external URL. Opens in a new tab.">
+              <input type="text" value={contact.instagram_url || ""} onChange={(e) => setContact("instagram_url", e.target.value)} placeholder="https://instagram.com/project.58" />
+            </Field>
           </div>
         </div>
         <div className="settings-foot">
@@ -426,11 +661,15 @@ const SPAN_OPTIONS = [
   { v: "gal-6",  l: "6 / 12" },
 ];
 
-function ProjectSheet({ project, onSave, onClose }) {
+function ProjectSheet({ project, categories, onSave, onClose }) {
   const [p, setP] = useState(() => project ? JSON.parse(JSON.stringify(project)) : ({
     id: newId("pj"),
+    slug: "",
     code: "P58-" + String(Math.floor(Math.random() * 900) + 100),
     brand: "Protein Garden",
+    category: "retail",
+    order: 0,
+    featured: false,
     name: "",
     location: "Athens · ",
     type: "Fast Casual · Retail",
@@ -460,7 +699,7 @@ function ProjectSheet({ project, onSave, onClose }) {
   const removeGallery = (i) => setP((x) => ({ ...x, gallery: x.gallery.filter((_, gi) => gi !== i) }));
 
   const valid = p.name && p.code;
-  const save = () => valid && onSave(p);
+  const save = () => valid && onSave({ ...p, slug: p.slug || p.id, typology: p.category || p.typology || "retail" });
 
   useEffect(() => {
     const k = (e) => { if (e.key === "Escape") onClose(); };
@@ -497,8 +736,8 @@ function ProjectSheet({ project, onSave, onClose }) {
               <Field label="Code" required hint="Internal reference">
                 <input type="text" value={p.code} onChange={(e) => set("code", e.target.value)} />
               </Field>
-              <Field label="Year">
-                <input type="text" value={p.year} onChange={(e) => set("year", e.target.value)} />
+              <Field label="Slug" hint="URL path after #project/">
+                <input type="text" value={p.slug || p.id} onChange={(e) => set("slug", e.target.value)} placeholder="pg-panormou" />
               </Field>
             </div>
             <div className="field-group">
@@ -511,6 +750,24 @@ function ProjectSheet({ project, onSave, onClose }) {
               </Field>
               <Field label="Type">
                 <input type="text" value={p.type} onChange={(e) => set("type", e.target.value)} />
+              </Field>
+            </div>
+            <div className="field-group cols-3">
+              <Field label="Category">
+                <select value={p.category || p.typology || "retail"} onChange={(e) => set("category", e.target.value)}>
+                  {(categories && categories.length ? categories : DEFAULT_CATEGORIES).map((c) => (
+                    <option key={c.id} value={c.id}>{c.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Year">
+                <input type="text" value={p.year} onChange={(e) => set("year", e.target.value)} />
+              </Field>
+              <Field label="Featured">
+                <label className="checkline">
+                  <input type="checkbox" checked={Boolean(p.featured)} onChange={(e) => set("featured", e.target.checked)} />
+                  <span>Show on home rail</span>
+                </label>
               </Field>
             </div>
             <div className="field-group">
@@ -783,6 +1040,63 @@ function TeamSheet({ member, onSave, onClose }) {
           <div className="right">
             <button className="btn ghost" onClick={onClose}>Cancel</button>
             <button className="btn primary" onClick={() => onSave(t)} disabled={!valid}>Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   CATEGORY SHEET
+   ============================================================ */
+function CategorySheet({ category, onSave, onClose }) {
+  const [c, setC] = useState(() => category ? { ...category } : ({
+    id: "",
+    label: "",
+    description: "",
+  }));
+  const set = (k, v) => setC((x) => ({ ...x, [k]: v }));
+  useEffect(() => {
+    const k = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", k);
+    return () => document.removeEventListener("keydown", k);
+  }, []);
+  const slugFromLabel = (c.label || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const valid = c.label && (c.id || slugFromLabel);
+
+  return (
+    <div className="sheet-wrap" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="sheet-head">
+          <div>
+            <div className="eyebrow">/ {category ? "Editing" : "New"} category</div>
+            <h2>{c.label || "Untitled category"}</h2>
+          </div>
+          <div className="controls">
+            <button className="btn ghost" onClick={onClose}>{Ic.close}</button>
+          </div>
+        </div>
+
+        <div className="sheet-body">
+          <div className="field-group">
+            <Field label="Label" required>
+              <input type="text" value={c.label} onChange={(e) => set("label", e.target.value)} placeholder="Retail" />
+            </Field>
+            <Field label="ID" hint="Used by projects and URLs. Lowercase letters, numbers, and hyphens.">
+              <input type="text" value={c.id || slugFromLabel} onChange={(e) => set("id", e.target.value)} placeholder="retail" />
+            </Field>
+          </div>
+          <Field label="Description">
+            <textarea value={c.description || ""} onChange={(e) => set("description", e.target.value)} placeholder="Short internal description for the dashboard grouping." />
+          </Field>
+        </div>
+
+        <div className="sheet-foot">
+          <div className="left"><span>Saves to localStorage</span></div>
+          <div className="right">
+            <button className="btn ghost" onClick={onClose}>Cancel</button>
+            <button className="btn primary" onClick={() => onSave({ ...c, id: c.id || slugFromLabel })} disabled={!valid}>Save category</button>
           </div>
         </div>
       </div>

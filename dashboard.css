@@ -265,7 +265,7 @@ a { color: inherit; }
 }
 .list-head {
   display: grid;
-  grid-template-columns: 64px 1fr 1fr 0.8fr 90px 40px;
+  grid-template-columns: 64px 1fr 1fr 0.8fr 150px 104px;
   gap: 14px;
   padding: 10px 18px;
   background: var(--paper);
@@ -277,7 +277,7 @@ a { color: inherit; }
 }
 .row {
   display: grid;
-  grid-template-columns: 64px 1fr 1fr 0.8fr 90px 40px;
+  grid-template-columns: 64px 1fr 1fr 0.8fr 150px 104px;
   gap: 14px;
   padding: 12px 18px;
   background: var(--paper);
@@ -332,12 +332,62 @@ a { color: inherit; }
   transition: background 140ms ease, color 140ms ease;
 }
 .row .delete:hover { background: color-mix(in oklab, var(--danger) 14%, transparent); color: var(--danger); }
+.row .delete:disabled { opacity: 0.28; pointer-events: none; }
+.row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+}
 
 .row-news, .row-team {
   grid-template-columns: 100px 1fr 0.6fr 40px;
 }
 .list-head.head-news, .list-head.head-team {
   grid-template-columns: 100px 1fr 0.6fr 40px;
+}
+.list-head.head-categories,
+.row-categories {
+  grid-template-columns: 1fr 1.4fr 90px 104px;
+}
+.category-group { margin-bottom: 28px; }
+.category-group + .category-group { margin-top: 32px; }
+.category-group-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 18px;
+  padding: 18px 4px 10px;
+}
+.category-group-head h2 {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+.category-group-head p {
+  margin: 4px 0 0;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+.category-group-head span {
+  min-width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.empty-row {
+  padding: 20px 18px;
+  background: var(--paper);
+  color: var(--ink-3);
+  font-size: 13px;
 }
 
 /* Empty state */
@@ -453,6 +503,20 @@ a { color: inherit; }
   color: var(--ink-3);
 }
 .field label .req { color: var(--clay); margin-left: 4px; }
+.field .checkline {
+  min-height: 41px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 12px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink-2);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.field .checkline input { accent-color: var(--ink); }
 .field input[type="text"],
 .field input[type="number"],
 .field textarea,

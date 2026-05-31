@@ -608,20 +608,100 @@ NEWS.forEach((n, i) => { if (NEWS_GR[i]) Object.assign(n, NEWS_GR[i]); });
 TEAM.forEach((m, i) => { if (TEAM_GR[i]) Object.assign(m, TEAM_GR[i]); });
 TIMELINE.forEach((r, i) => { if (TIMELINE_GR[i]) Object.assign(r, TIMELINE_GR[i]); });
 
-/* ===== Optional override: read content from localStorage (set by dashboard.html) =====
-   If a dashboard has saved overrides under "p58_data_v1", swap them into the live
-   arrays in place so the rest of the app picks them up without changes. */
-try {
-  const stored = JSON.parse(localStorage.getItem("p58_data_v1") || "null");
-  if (stored && typeof stored === "object") {
-    if (Array.isArray(stored.projects) && stored.projects.length) {
-      PROJECTS.splice(0, PROJECTS.length, ...stored.projects);
+const P58_STORE_KEY = "p58_data_v1";
+const DEFAULT_SITE_SETTINGS = {
+  heroGallery: { interval: 5200 },
+  foot_big: "Let's design your",
+  foot_big_em: "next space!",
+  foot_copy_left: "© 2025 — 2026 Project58 Architecture",
+  foot_copy_mid: "Architecture · Renovation · Retail",
+  foot_copy_right: "Designed in-house · v1.0",
+  contact: {
+    location_label: "ATHENS",
+    address: "Akademias 76 · 106 76",
+    address_url: "",
+    phone: "+30 210 000 5800",
+    phone_url: "tel:+302100005800",
+    email: "g.grigoriadis@project58.gr",
+    email_url: "mailto:g.grigoriadis@project58.gr",
+    instagram_text: "Instagram → @project.58",
+    instagram_url: "",
+  },
+};
+
+function normaliseSiteSettings(site = {}) {
+  const legacyAddress = site.athens_address || "";
+  const firstLineAddress = legacyAddress ? legacyAddress.split("\n").filter(Boolean).slice(0, 2).join(" · ") : "";
+  return {
+    ...DEFAULT_SITE_SETTINGS,
+    ...site,
+    foot_big: site.foot_big || DEFAULT_SITE_SETTINGS.foot_big,
+    foot_big_em: site.foot_big_em || DEFAULT_SITE_SETTINGS.foot_big_em,
+    foot_copy_left: site.foot_copy_left || DEFAULT_SITE_SETTINGS.foot_copy_left,
+    foot_copy_mid: site.foot_copy_mid || DEFAULT_SITE_SETTINGS.foot_copy_mid,
+    foot_copy_right: site.foot_copy_right || DEFAULT_SITE_SETTINGS.foot_copy_right,
+    heroGallery: {
+      interval: Math.max(2000, Number((site.heroGallery || {}).interval) || 5200),
+    },
+    contact: {
+      ...DEFAULT_SITE_SETTINGS.contact,
+      location_label: site.location_label || site.athens_label || site.contact && site.contact.location_label || DEFAULT_SITE_SETTINGS.contact.location_label,
+      address: site.address || firstLineAddress || site.contact && site.contact.address || DEFAULT_SITE_SETTINGS.contact.address,
+      address_url: site.address_url || site.contact && site.contact.address_url || "",
+      phone: site.phone || site.athens_phone || site.contact && site.contact.phone || DEFAULT_SITE_SETTINGS.contact.phone,
+      phone_url: site.phone_url || site.contact && site.contact.phone_url || (site.athens_phone ? `tel:${String(site.athens_phone).replace(/[^\d+]/g, "")}` : DEFAULT_SITE_SETTINGS.contact.phone_url),
+      email: site.email || site.contact && site.contact.email || DEFAULT_SITE_SETTINGS.contact.email,
+      email_url: site.email_url || site.contact && site.contact.email_url || (site.email ? `mailto:${site.email}` : DEFAULT_SITE_SETTINGS.contact.email_url),
+      instagram_text: site.instagram_text || site.instagram || site.contact && site.contact.instagram_text || DEFAULT_SITE_SETTINGS.contact.instagram_text,
+      instagram_url: site.instagram_url || site.contact && site.contact.instagram_url || "",
+    },
+  };
+}
+
+const BUNDLED_CONTENT = {
+  projects: PROJECTS.map((p, order) => ({ ...p, order, featured: order < 6, slug: p.id })),
+  news: NEWS.map((n, order) => ({ ...n, order })),
+  team: TEAM.map((m, order) => ({ ...m, order })),
+  timeline: TIMELINE.map((r, order) => ({ ...r, order })),
+};
+
+function normaliseProject(p, order) {
+  const brandKey = p.brand === "Dinas" || (p.id || "").startsWith("dn-") ? "dn" : "pg";
+  return {
+    slug: p.slug || p.id,
+    category: p.category || p.typology || "retail",
+    order: Number.isFinite(Number(p.order)) ? Number(p.order) : order,
+    featured: p.featured != null ? Boolean(p.featured) : order < 6,
+    ...p,
+    brandKey,
+    gallery: Array.isArray(p.gallery) ? p.gallery : [],
+    body: Array.isArray(p.body) ? p.body : [],
+  };
+}
+
+function sortByOrder(items) {
+  return items.slice().sort((a, b) => {
+    const ao = Number.isFinite(Number(a.order)) ? Number(a.order) : 9999;
+    const bo = Number.isFinite(Number(b.order)) ? Number(b.order) : 9999;
+    return ao - bo;
+  });
+}
+
+function applyP58ContentFromStore() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(P58_STORE_KEY) || "null");
+    const source = stored && typeof stored === "object" ? stored : BUNDLED_CONTENT;
+    if (Array.isArray(source.projects) && source.projects.length) {
+      PROJECTS.splice(0, PROJECTS.length, ...sortByOrder(source.projects.map(normaliseProject)));
     }
-    if (Array.isArray(stored.news) && stored.news.length) {
-      NEWS.splice(0, NEWS.length, ...stored.news);
+    if (Array.isArray(source.news) && source.news.length) {
+      NEWS.splice(0, NEWS.length, ...sortByOrder(source.news.map((n, order) => ({ order, ...n }))));
     }
-    if (Array.isArray(stored.team) && stored.team.length) {
-      TEAM.splice(0, TEAM.length, ...stored.team);
+    if (Array.isArray(source.team) && source.team.length) {
+      TEAM.splice(0, TEAM.length, ...sortByOrder(source.team.map((m, order) => ({ order, ...m }))));
     }
-  }
-} catch (e) { /* ignore malformed overrides */ }
+  } catch (e) { /* ignore malformed overrides */ }
+}
+
+applyP58ContentFromStore();
+Object.assign(window, { P58_STORE_KEY, DEFAULT_SITE_SETTINGS, normaliseSiteSettings, applyP58ContentFromStore });

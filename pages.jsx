@@ -2,10 +2,27 @@
 const { useState: useS, useEffect: useE, useRef: useR, useMemo: useM } = React;
 
 const BRAND_OF = { pg: "Protein Garden", dn: "Dinas" };
-const BRAND_KEY = (p) => p.id.startsWith("pg-") ? "pg" : "dn";
+const BRAND_KEY = (p) => p.brandKey || (p.id.startsWith("pg-") ? "pg" : "dn");
 
 const pgProjects = () => PROJECTS.filter((p) => BRAND_KEY(p) === "pg");
 const dnProjects = () => PROJECTS.filter((p) => BRAND_KEY(p) === "dn");
+
+function useHomeMobile() {
+  const [isMobile, setIsMobile] = useS(() =>
+  typeof window !== "undefined" && window.matchMedia("(max-width: 720px)").matches
+  );
+  useE(() => {
+    const mq = window.matchMedia("(max-width: 720px)");
+    const onChange = (e) => setIsMobile(e.matches);
+    if (mq.addEventListener) mq.addEventListener("change", onChange);
+    else mq.addListener(onChange);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", onChange);
+      else mq.removeListener(onChange);
+    };
+  }, []);
+  return isMobile;
+}
 
 // service translation map — each SERVICE has an `i18n` key linking to dictionary entries
 const SERVICE_I18N_MAP = {
@@ -19,15 +36,19 @@ const SERVICE_I18N_MAP = {
 function HomePage({ go }) {
   const t = window.useT();
   const pick = window.usePick();
+  const isMobile = useHomeMobile();
 
-  const featured = useM(() => [
-  PROJECTS.find((p) => p.id === "pg-panormou"),
-  PROJECTS.find((p) => p.id === "dn-kolonaki"),
-  PROJECTS.find((p) => p.id === "pg-glyfada"),
-  PROJECTS.find((p) => p.id === "dn-dousmani"),
-  PROJECTS.find((p) => p.id === "pg-tsamadou"),
-  PROJECTS.find((p) => p.id === "pg-kolokotroni")].
-  filter(Boolean), []);
+  const featured = useM(() => {
+    const picked = PROJECTS.filter((p) => p.featured);
+    return (picked.length ? picked : PROJECTS).slice(0, 6);
+  }, []);
+
+  const heroIntervalMs = useM(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem("p58_data_v1") || "null");
+      return Math.max(2000, Number(s?.site?.heroGallery?.interval) || 5200);
+    } catch { return 5200; }
+  }, []);
 
   const [i, setI] = useS(0);
   const [paused, setPaused] = useS(false);
@@ -54,9 +75,9 @@ function HomePage({ go }) {
   // hero auto-rotates while the hero pane is the one in view
   useE(() => {
     if (paused || progress > 0.04) return;
-    const id = setTimeout(() => setI((x) => (x + 1) % featured.length), 5200);
+    const id = setTimeout(() => setI((x) => (x + 1) % featured.length), heroIntervalMs);
     return () => clearTimeout(id);
-  }, [i, paused, featured.length, progress]);
+  }, [i, paused, featured.length, progress, heroIntervalMs]);
 
   // eased loop: tween actual scrollLeft toward targetX (timer-based so it runs
   // even when the tab isn't focused; gives momentum/smoothness to wheel + buttons)
@@ -100,44 +121,9 @@ function HomePage({ go }) {
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
-  // mouse / pen drag-to-scroll (touch uses native pan-x momentum scrolling)
+  // (drag-to-scroll removed — cards must be clickable; use wheel/trackpad to scroll)
   useE(() => {
-    const el = trackRef.current;
-    if (!el) return;
-    let down = false,sx = 0,ss = 0,moved = 0;
-    const dn = (e) => {
-      if (e.pointerType === "touch" || e.button !== 0) return;
-      if (animRef.current) {clearInterval(animRef.current);animRef.current = null;}
-      down = true;moved = 0;sx = e.clientX;ss = el.scrollLeft;
-      el.classList.add("dragging");
-      try {el.setPointerCapture(e.pointerId);} catch (_) {}
-    };
-    const mv = (e) => {
-      if (!down) return;
-      const dx = e.clientX - sx;
-      moved = Math.max(moved, Math.abs(dx));
-      el.scrollLeft = ss - dx;
-      targetX.current = el.scrollLeft;
-    };
-    const up = (e) => {
-      if (!down) return;
-      down = false;
-      el.classList.remove("dragging");
-      try {el.releasePointerCapture(e.pointerId);} catch (_) {}
-    };
-    const clk = (e) => {if (moved > 8) {e.preventDefault();e.stopPropagation();}};
-    el.addEventListener("pointerdown", dn);
-    el.addEventListener("pointermove", mv);
-    el.addEventListener("pointerup", up);
-    el.addEventListener("pointercancel", up);
-    el.addEventListener("click", clk, true);
-    return () => {
-      el.removeEventListener("pointerdown", dn);
-      el.removeEventListener("pointermove", mv);
-      el.removeEventListener("pointerup", up);
-      el.removeEventListener("pointercancel", up);
-      el.removeEventListener("click", clk, true);
-    };
+    return () => {};
   }, []);
 
   // keep target synced when native touch scroll moves the track; update progress
@@ -169,29 +155,54 @@ function HomePage({ go }) {
   // stop the loop on unmount
   useE(() => () => {if (animRef.current) clearInterval(animRef.current);}, []);
 
+  // restore horizontal scroll position when returning from a project page
+  useE(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    const saved = sessionStorage.getItem("hzone_scroll");
+    if (saved) {
+      const x = Number(saved);
+      el.scrollLeft = x;
+      targetX.current = x;
+      sessionStorage.removeItem("hzone_scroll");
+    }
+  }, []);
+
   const cur = featured[i];
   if (!cur) return null;
   const catOf = (p) => BRAND_KEY(p) === "pg" ? "Retail" : "Hospitality";
+
+  if (isMobile) {
+    return <MobileHomePage go={go} featured={featured} active={i} setActive={setI} cur={cur} catOf={catOf} />;
+  }
 
   return (
     <div className="hzone" ref={trackRef}>
       {/* ===== ZONE 1 — LANDING / HERO (100vw) ===== */}
       <section
         className="hz-hero"
+        style={{ cursor: "pointer" }}
         onMouseEnter={() => setPaused(true)}
-        onMouseLeave={() => setPaused(false)}>
+        onMouseLeave={() => setPaused(false)}
+        onClick={() => { sessionStorage.setItem("hzone_scroll", trackRef.current ? trackRef.current.scrollLeft : 0); go({ name: "project", id: cur.slug || cur.id, from: { name: "home" } }); }}>
         {featured.map((p, idx) =>
         <div key={p.id} className={`vhome-slide ${idx === i ? "on" : ""}`}>
             <img src={p.hero} alt="" />
           </div>
         )}
         <div className="vhome-veil" aria-hidden="true"></div>
-        <div className="vhome-brand" onClick={() => go({ name: "home" })} role="button" aria-label="Project58 home">
+        <div className="vhome-brand" onClick={(e) => { e.stopPropagation(); go({ name: "home" }); }} role="button" aria-label="Project58 home">
           <img src="assets/logo-white.png" alt="Project58" />
         </div>
         <div className="vhome-loc">{pick(cur, "location")}</div>
-        <div className="vhome-cue"><span>Scroll</span><span className="ln" /></div>
-        <div className="vhome-dots">
+        <div className="vhome-cue">
+          <svg className="mouse-icon" viewBox="0 0 18 28" width="18" height="28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect x="1" y="1" width="16" height="26" rx="8" stroke="white" strokeWidth="1.5" strokeOpacity="0.85"/>
+            <rect className="mouse-wheel" x="8" y="5" width="2" height="5" rx="1" fill="white"/>
+          </svg>
+          <span>SCROLL</span>
+        </div>
+        <div className="vhome-dots" onClick={(e) => e.stopPropagation()}>
           {featured.map((p, idx) =>
           <button
             key={p.id}
@@ -205,23 +216,19 @@ function HomePage({ go }) {
 
       {/* ===== ZONE 2 — HORIZONTAL GALLERY (intro panel + portrait cards) ===== */}
       <section className="hz-intro">
-        <div className="eyebrow">{t("home_strip_eyebrow")}</div>
         <h2 className="vhome-rail-title">Recent Projects</h2>
-        <button className="vhome-more-link" onClick={() => go({ name: "interiors" })}>
-          {t("see_more_projects")}<span className="ar">↗</span>
-        </button>
-        <div className="hz-intro-foot">
-          <span><b>{String(featured.length).padStart(2, "0")}</b> Projects</span>
-          <span>Athens · Piraeus</span>
-        </div>
       </section>
 
       {featured.map((p, idx) =>
       <a
         key={p.id}
         className="vhome-hcard hz-card"
-        href={`#project/${p.id}`}
-        onClick={(e) => {e.preventDefault();go({ name: "project", id: p.id, brand: BRAND_KEY(p) });}}>
+        href={`#project/${p.slug || p.id}`}
+        onClick={(e) => {
+          e.preventDefault();
+          sessionStorage.setItem("hzone_scroll", trackRef.current ? trackRef.current.scrollLeft : 0);
+          go({ name: "project", id: p.slug || p.id, brand: BRAND_KEY(p) });
+        }}>
           <div className="vhome-hpic">
             <img src={p.hero} alt={pick(p, "name")} loading="lazy" draggable="false" />
             <span className="vhome-hpic-num">N°{String(idx + 1).padStart(2, "0")}</span>
@@ -245,14 +252,67 @@ function HomePage({ go }) {
         {window.Footer ? <window.Footer go={go} /> : null}
       </section>
 
-      {/* fixed controls + progress (outside the scrolled flow) */}
-      <div className="hz-ctrl">
-        <button onClick={() => nudge(-1)} aria-label="Previous">←</button>
-        <button onClick={() => nudge(1)} aria-label="Next">→</button>
-      </div>
       <div className="hz-progress"><i style={{ width: `${progress * 100}%` }} /></div>
     </div>);
 
+}
+
+function MobileHomePage({ go, featured, active, setActive, cur, catOf }) {
+  const pick = window.usePick();
+  return (
+    <div className="mhome">
+      <section
+        className="mhome-hero"
+        style={{ cursor: "pointer" }}
+        onClick={() => go({ name: "project", id: cur.slug || cur.id, from: { name: "home" } })}>
+        {featured.map((p, idx) =>
+        <div key={p.id} className={`vhome-slide ${idx === active ? "on" : ""}`}>
+            <img src={p.hero} alt="" />
+          </div>
+        )}
+        <div className="vhome-veil" aria-hidden="true"></div>
+        <div className="vhome-brand" onClick={(e) => { e.stopPropagation(); go({ name: "home" }); }} role="button" aria-label="Project58 home">
+          <img src="assets/logo-white.png" alt="Project58" />
+        </div>
+        <div className="vhome-loc">{pick(cur, "location")}</div>
+        <div className="vhome-dots" onClick={(e) => e.stopPropagation()}>
+          {featured.map((p, idx) =>
+          <button
+            key={p.id}
+            className={`vhome-dot ${idx === active ? "on" : ""}`}
+            onClick={() => setActive(idx)}
+            aria-label={`Project ${idx + 1}`} />
+          )}
+        </div>
+      </section>
+
+      <section className="mhome-intro">
+        <h2>Recent Projects</h2>
+      </section>
+
+      <section className="mhome-list">
+        {featured.map((p, idx) =>
+        <a
+          key={p.id}
+          className="mhome-card"
+          href={`#project/${p.slug || p.id}`}
+          onClick={(e) => {
+            e.preventDefault();
+            go({ name: "project", id: p.slug || p.id, brand: BRAND_KEY(p) }, { fromEl: e.currentTarget.querySelector("img"), src: p.hero });
+          }}>
+            <div className="mhome-pic">
+            <img src={p.hero} alt={pick(p, "name")} loading="lazy" draggable="false" />
+            <span className="vhome-hpic-num">N°{String(idx + 1).padStart(2, "0")}</span>
+            <span className="vhome-hpic-cat">{catOf(p)}</span>
+            </div>
+            <div className="vhome-hcap">
+              <div className="vhome-name">{pick(p, "name")}</div>
+              <div className="vhome-loc-2">{pick(p, "location")}</div>
+            </div>
+            </a>
+        )}
+      </section>
+    </div>);
 }
 
 /* ================== PROJECT RIBBONS — all full-width ================== */
@@ -270,7 +330,9 @@ function Tile({ project, cls, go, idx }) {
   const t = window.useT();
   const pick = window.usePick();
   return (
-    <div className={`bg-tile ${cls || ""}`} onClick={() => go({ name: "project", id: project.id })}>
+    <div
+      className={`bg-tile ${cls || ""}`}
+      onClick={(e) => go({ name: "project", id: project.slug || project.id }, { fromEl: e.currentTarget.querySelector("img"), src: project.hero })}>
       <div className="img-frame">
         <img src={project.hero} alt={pick(project, "name")} loading="lazy" />
       </div>
@@ -392,10 +454,10 @@ function ArchitecturePage({ go }) {
 }
 
 /* ================== PROJECT DETAIL ================== */
-function ProjectPage({ id, go }) {
+function ProjectPage({ id, go, from }) {
   const t = window.useT();
   const pick = window.usePick();
-  const p = PROJECTS.find((x) => x.id === id) || PROJECTS[0];
+  const p = PROJECTS.find((x) => x.id === id || x.slug === id) || PROJECTS[0];
   const idx = PROJECTS.findIndex((x) => x.id === p.id);
   const next = PROJECTS[(idx + 1) % PROJECTS.length];
 
@@ -403,69 +465,84 @@ function ProjectPage({ id, go }) {
 
   useE(() => {window.scrollTo({ top: 0, behavior: "instant" });}, [id]);
 
+  const backRoute = from || { name: "home" };
+  const backLabel = backRoute.name === "interiors" ? "Interiors"
+    : backRoute.name === "architecture" ? "Architecture"
+    : backRoute.name === "agency" ? "Agency"
+    : "Home";
+
   const handleNext = () => {
     setWiping(true);
     setTimeout(() => {
-      go({ name: "project", id: next.id });
+      go({ name: "project", id: next.slug || next.id, from: backRoute });
     }, 360);
   };
 
-  // body sections may be localised: pick(p, "body") returns array of [h, par]; falls back to p.body
   const bodyArr = pick(p, "body") && pick(p, "body").length ? pick(p, "body") : p.body;
+  const asideImg = p.gallery && p.gallery[0];
 
   return (
     <div className="page-enter" key={p.id}>
       {wiping ? <div className="wipe-overlay" /> : null}
 
-      {/* HERO */}
+      {/* HERO — fullscreen image, back button only */}
       <section className="pd-hero">
         <img src={p.hero} alt={pick(p, "name")} />
         <div className="pd-hero-ovr">
           <div className="pd-hero-top">
-            <span>{p.code} <span style={{ margin: "0 10px", color: "var(--clay)" }}>◆</span> {p.brand}</span>
-            <span style={{ textAlign: "right" }}>
-              <b>{pick(p, "location")}</b> &nbsp;·&nbsp; {p.year} &nbsp;·&nbsp; {t(p.status)}
-            </span>
+            <button className="pd-back" onClick={() => go(backRoute)}>← {backLabel}</button>
           </div>
-          <div className="pd-hero-bot">
-            <h1 className="pd-hero-title"><em>{pick(p, "name")}</em></h1>
-            <div className="pd-hero-meta">
-              <span>{t("pd_type")} &nbsp; <b style={{ color: "var(--paper)" }}>{pick(p, "type")}</b></span>
-              <span>{t("size")} &nbsp; <b style={{ color: "var(--paper)" }}>{p.size}</b></span>
-              <span>{t("pd_role")} &nbsp; <b style={{ color: "var(--paper)" }}>{pick(p, "role")}</b></span>
-            </div>
-          </div>
+          <h1 className="pd-hero-title"><em>{pick(p, "name")}</em></h1>
         </div>
       </section>
 
-      {/* META BAR */}
-      <section className="pd-info">
-        <div><div className="k">{t("pd_code")}</div><div className="v">{p.code}</div></div>
-        <div><div className="k">{t("location")}</div><div className="v">{pick(p, "location")}</div></div>
-        <div><div className="k">{t("year")}</div><div className="v">{p.year}</div></div>
-        <div><div className="k">{t("status")}</div><div className="v">{t(p.status)}</div></div>
+      {/* CONTENT — title + two-col body */}
+      <section className="pd-content">
+        <h2 className="pd-project-name">{pick(p, "name")}</h2>
+        <div className="pd-body-row">
+          <div className="pd-body-text">
+            {pick(p, "summary") ? <p className="pd-lede">{pick(p, "summary")}</p> : null}
+            {bodyArr.map(([h, par], i) =>
+            <div key={i} className="pd-body-section">
+                <h3 className="pd-section-h">{t(h) !== h ? t(h) : h}</h3>
+                <p>{par}</p>
+              </div>
+            )}
+          </div>
+          {asideImg ?
+          <div className="pd-body-aside">
+              <img src={asideImg.src} alt={pick(asideImg, "tag")} loading="lazy" />
+            </div> :
+          null}
+        </div>
       </section>
 
-      {/* SHORT NOTES (kept minimal) */}
-      <section className="pd-summary">
-        <div className="lede">{pick(p, "summary")}</div>
-        <div className="pd-notes">
-          {bodyArr.slice(0, 2).map(([h, par], i) =>
-          <React.Fragment key={i}>
-              <h3>§ 0{i + 1} — {t(h) !== h ? t(h) : h}</h3>
-              <p>{par}</p>
-            </React.Fragment>
-          )}
+      {/* METADATA STRIP */}
+      <section className="pd-meta-strip">
+        <div>
+          <div className="pd-meta-label">{t("location")}</div>
+          <div className="pd-meta-value">{pick(p, "location")}</div>
+        </div>
+        <div>
+          <div className="pd-meta-label">{t("year")}</div>
+          <div className="pd-meta-value">{p.year}</div>
+        </div>
+        <div>
+          <div className="pd-meta-label">{t("pd_type")}</div>
+          <div className="pd-meta-value">{pick(p, "type")}</div>
+        </div>
+        <div>
+          <div className="pd-meta-label">{t("pd_role")}</div>
+          <div className="pd-meta-value">{pick(p, "role")}</div>
         </div>
       </section>
 
       {/* GALLERY */}
       <section className="pd-gallery">
-        {p.gallery.map((g, i) =>
+        {(asideImg ? p.gallery.slice(1) : p.gallery).map((g, i) =>
         <div key={i} className={g.span}>
             <figure className="img-frame">
               <img src={g.src} alt={pick(g, "tag")} loading="lazy" />
-              <span className="img-corner">{p.code} / {String(i + 2).padStart(2, "0")}</span>
               <figcaption className="img-cap">
                 <span className="img-tag">{pick(g, "tag")}</span>
               </figcaption>
