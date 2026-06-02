@@ -360,7 +360,7 @@ function Tile({ project, cls, go, idx }) {
     </div>);
 }
 
-/* ================== INTERIORS — all projects in full-width ribbons, optional brand filter ================== */
+/* ================== INTERIORS — card grid with inline brand filter ================== */
 function InteriorsPage({ go, brand }) {
   const t = window.useT();
   const filtered = brand ?
@@ -372,88 +372,68 @@ function InteriorsPage({ go, brand }) {
   t("interiors_eyebrow");
   return (
     <div className="page-enter" key={brand || "all"}>
-      <section className="brand-head">
-        <div>
-          <div className="eyebrow">{eyebrow}</div>
-          <h1><em>{title}</em></h1>
-        </div>
-        <div className="meta">
-          <div><b>{filtered.length}</b> {t("proj_word")}</div>
-          {brand ?
-          <div>{brand === "pg" ? t("pg_rollout") : t("dn_rollout")}</div> :
-          <div>{t("two_operators")} · {pgProjects().length} + {dnProjects().length}</div>}
-        </div>
-      </section>
-      <div className="brand-grid">
+      <div className="proj-list">
         {filtered.map((p, i) =>
-        <Tile key={p.id} project={p} go={go} idx={i + 1} />
+        <ProjListRow key={p.id} project={p} go={go} idx={i + 1} />
         )}
       </div>
     </div>);
 }
 
-/* ================== ARCHITECTURE — placeholder while ground-up work is in development ================== */
-function ArchitecturePage({ go }) {
+function ProjListRow({ project, go, idx }) {
+  const pick = window.usePick();
   const t = window.useT();
+  const bk = BRAND_KEY(project);
+  const monogram = bk === "pg" ? "PG" : "DN";
+  // Format location as "GREECE, ATHENS, NEIGHBORHOOD"
+  const rawLoc = pick(project, "location") || "";
+  const locParts = rawLoc.split(/\s*·\s*/);
+  const locFormatted = ["Greece", ...locParts].join(", ").toUpperCase();
   return (
-    <div className="page-enter">
-      <section className="brand-head">
-        <div>
-          <div className="eyebrow">{t("arch_eyebrow")}</div>
-          <h1><em>{t("arch_h")}</em></h1>
-        </div>
-        <div className="meta">
-          <div>{t("arch_meta_a")}</div>
-          <div>{t("arch_meta_b")}</div>
-        </div>
-      </section>
-
-      <section className="bleed" style={{ padding: "80px var(--gutter)" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "var(--gutter)", alignItems: "start" }}>
-          <div className="eyebrow">{t("arch_note_eyebrow")}</div>
-          <p style={{ fontFamily: "var(--sans)", fontWeight: 500, fontSize: "clamp(28px, 3vw, 48px)", lineHeight: 1.15, letterSpacing: "-0.035em", margin: 0, textWrap: "pretty", maxWidth: "28ch" }}>
-            {t("arch_note_a")} <em style={{ color: "var(--clay)" }}>{t("arch_note_em")}</em> {t("arch_note_b")}
-          </p>
-        </div>
-      </section>
-
-      <section className="bleed">
-        <div className="svc-list">
-          {SERVICES.map((s) => {
-            const map = SERVICE_I18N_MAP[s.n] || {};
-            return (
-              <div className="svc-row" key={s.n}>
-                <div className="n">/{s.n}</div>
-                <div className="t">{map.t ? t(map.t) : s.t}</div>
-                <div className="d">
-                  <div>{map.d ? t(map.d) : s.d}</div>
-                  <ul>{(map.b ? t(map.b) : s.bul).map((b, i) => <li key={i}>{b}</li>)}</ul>
-                </div>
-                <div className="a">↗</div>
-              </div>);
-          })}
-        </div>
-      </section>
-
-      <section className="bleed" style={{ padding: "60px var(--gutter) 96px", borderTop: "1px solid var(--rule-strong)" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--gutter)", alignItems: "end" }}>
-          <div>
-            <div className="eyebrow">{t("work_with_us")}</div>
-            <h3 style={{ fontFamily: "var(--sans)", fontWeight: 500, fontSize: "clamp(36px, 4.5vw, 64px)", letterSpacing: "-0.04em", margin: "12px 0 0", lineHeight: 1.05 }}>
-              {t("arch_cta")} <em style={{ color: "var(--clay)" }}>{t("cta_2026")}</em> {t("arch_cta_tail")}
-            </h3>
-          </div>
-          <div style={{ textAlign: "right" }}>
-            <a className="btn" href="mailto:g.grigoriadis@project58.gr">
-              <span>g.grigoriadis@project58.gr</span><span className="ar">→</span>
-            </a>
-          </div>
-        </div>
-      </section>
+    <div
+      className="proj-list-row"
+      onClick={() => go({ name: "project", id: project.slug || project.id })}>
+      <div className="proj-list-info">
+        {bk === "pg"
+          ? <img className="proj-list-icon proj-list-icon--img" src="assets/proteingarden/Protein Garden New logo_final-03.png" alt="Protein Garden" />
+          : <div className={`proj-list-icon proj-list-icon--${bk}`}>{monogram}</div>
+        }
+        <div className="proj-list-brand-name">{project.brand}</div>
+        <div className="proj-list-loc">{locFormatted}</div>
+        <div className="proj-list-status">{t(project.status)}</div>
+      </div>
+      <div className="proj-list-img">
+        <img src={project.hero} alt={pick(project, "name")} loading="lazy" />
+      </div>
     </div>);
 }
 
-/* ================== PROJECT DETAIL ================== */
+/* ================== ARCHITECTURE / RESIDENTIAL — proj-list layout (mirrors InteriorsPage) ================== */
+function ArchitecturePage({ go }) {
+  const t = window.useT();
+  // Show projects with typology/category of "residential" or "architecture".
+  // All current projects are "retail"; this list will populate once arch projects are added.
+  const filtered = PROJECTS.filter(p => {
+    const cat = (p.typology || p.category || "retail").toLowerCase();
+    return cat === "residential" || cat === "architecture";
+  });
+  return (
+    <div className="page-enter" key="architecture">
+      <div className="proj-list">
+        {filtered.map((p, i) =>
+          <ProjListRow key={p.id} project={p} go={go} idx={i + 1} />
+        )}
+        {filtered.length === 0 && (
+          <div className="proj-list-empty">
+            <p>Residential projects coming soon.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ================== PROJECT DETAIL — BIG-style centered rows ================== */
 function ProjectPage({ id, go, from }) {
   const t = window.useT();
   const pick = window.usePick();
@@ -466,10 +446,10 @@ function ProjectPage({ id, go, from }) {
   useE(() => {window.scrollTo({ top: 0, behavior: "instant" });}, [id]);
 
   const backRoute = from || { name: "home" };
-  const backLabel = backRoute.name === "interiors" ? "Interiors"
-    : backRoute.name === "architecture" ? "Architecture"
-    : backRoute.name === "agency" ? "Agency"
-    : "Home";
+  const backLabel = backRoute.name === "interiors" ? "← Retail"
+    : backRoute.name === "architecture" ? "← Architecture"
+    : backRoute.name === "agency" ? "← Agency"
+    : "← Home";
 
   const handleNext = () => {
     setWiping(true);
@@ -479,93 +459,65 @@ function ProjectPage({ id, go, from }) {
   };
 
   const bodyArr = pick(p, "body") && pick(p, "body").length ? pick(p, "body") : p.body;
-  const asideImg = p.gallery && p.gallery[0];
 
   return (
     <div className="page-enter" key={p.id}>
       {wiping ? <div className="wipe-overlay" /> : null}
 
-      {/* HERO — fullscreen image, back button only */}
-      <section className="pd-hero">
+      {/* Fixed back button — sits just below the pinned nav */}
+      <button className="pd-back-fixed" onClick={() => go(backRoute)}>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M9 2L4 7l5 5" />
+        </svg>
+        {backLabel.replace("← ", "")}
+      </button>
+
+      {/* Fullscreen cover image */}
+      <div className="pd-hero">
         <img src={p.hero} alt={pick(p, "name")} />
         <div className="pd-hero-ovr">
           <div className="pd-hero-top">
-            <button className="pd-back" onClick={() => go(backRoute)}>← {backLabel}</button>
+            <span>{p.code} · {p.brand}</span>
           </div>
-          <h1 className="pd-hero-title"><em>{pick(p, "name")}</em></h1>
+          <div className="pd-hero-bot">
+            <h1 className="pd-hero-title">{pick(p, "name")}</h1>
+          </div>
         </div>
-      </section>
+      </div>
 
-      {/* CONTENT — title + two-col body */}
-      <section className="pd-content">
-        <h2 className="pd-project-name">{pick(p, "name")}</h2>
-        <div className="pd-body-row">
-          <div className="pd-body-text">
-            {pick(p, "summary") ? <p className="pd-lede">{pick(p, "summary")}</p> : null}
-            {bodyArr.map(([h, par], i) =>
-            <div key={i} className="pd-body-section">
-                <h3 className="pd-section-h">{t(h) !== h ? t(h) : h}</h3>
-                <p>{par}</p>
-              </div>
-            )}
-          </div>
-          {asideImg ?
-          <div className="pd-body-aside">
-              <img src={asideImg.src} alt={pick(asideImg, "tag")} loading="lazy" />
-            </div> :
-          null}
+      {/* Info + gallery in a centered container */}
+      <div className="pd-page">
+        <dl className="pd-split-meta">
+          <div><dt>{t("location")}</dt><dd>{pick(p, "location")}</dd></div>
+          <div><dt>{t("year")}</dt><dd>{p.year}</dd></div>
+          <div><dt>{t("size")}</dt><dd>{p.size}</dd></div>
+          <div><dt>{t("pd_type")}</dt><dd>{pick(p, "type")}</dd></div>
+          <div><dt>{t("status")}</dt><dd>{t(p.status)}</dd></div>
+        </dl>
+        {pick(p, "summary") ? <p className="pd-split-summary">{pick(p, "summary")}</p> : null}
+        <div className="pd-split-body">
+          {bodyArr.map(([h, par], i) =>
+          <div key={i} className="pd-split-section">
+              <h3>{t(h) !== h ? t(h) : h}</h3>
+              <p>{par}</p>
+            </div>
+          )}
         </div>
-      </section>
+      </div>
 
-      {/* METADATA STRIP */}
-      <section className="pd-meta-strip">
-        <div>
-          <div className="pd-meta-label">{t("location")}</div>
-          <div className="pd-meta-value">{pick(p, "location")}</div>
+      {/* Gallery rows — full bleed */}
+      {p.gallery.map((g, i) =>
+      <div key={i} className="pd-page-gallery-row">
+          <img src={g.src} alt={pick(g, "tag")} loading="lazy" />
+          {pick(g, "tag") ? <span className="pd-page-tag">{pick(g, "tag")}</span> : null}
         </div>
-        <div>
-          <div className="pd-meta-label">{t("year")}</div>
-          <div className="pd-meta-value">{p.year}</div>
-        </div>
-        <div>
-          <div className="pd-meta-label">{t("pd_type")}</div>
-          <div className="pd-meta-value">{pick(p, "type")}</div>
-        </div>
-        <div>
-          <div className="pd-meta-label">{t("pd_role")}</div>
-          <div className="pd-meta-value">{pick(p, "role")}</div>
-        </div>
-      </section>
+      )}
 
-      {/* GALLERY */}
-      <section className="pd-gallery">
-        {(asideImg ? p.gallery.slice(1) : p.gallery).map((g, i) =>
-        <div key={i} className={g.span}>
-            <figure className="img-frame">
-              <img src={g.src} alt={pick(g, "tag")} loading="lazy" />
-              <figcaption className="img-cap">
-                <span className="img-tag">{pick(g, "tag")}</span>
-              </figcaption>
-            </figure>
-          </div>
-        )}
-      </section>
-
-      {/* NEXT */}
-      <section className="pd-next" onClick={handleNext}>
-        <img src={next.hero} alt={pick(next, "name")} />
-        <div className="pd-next-ovr">
-          <div className="pd-next-info">
-            <span className="label"><span>{t("next_project")}</span><span className="arrow">→</span></span>
-            <span><b>{next.code}</b> &nbsp;·&nbsp; {next.brand}</span>
-          </div>
-          <h2 className="pd-next-title"><em>{pick(next, "name")}</em></h2>
-          <div className="pd-next-info">
-            <span>{pick(next, "location")}</span>
-            <span><b>{next.year}</b> &nbsp;·&nbsp; {next.size}</span>
-          </div>
-        </div>
-      </section>
+      {/* Next project */}
+      <div className="pd-page-next" onClick={handleNext}>
+        <span className="pd-split-next-label">{t("next_project")}</span>
+        <span className="pd-split-next-name">{pick(next, "name")} →</span>
+      </div>
     </div>);
 
 }
@@ -677,6 +629,55 @@ function AgencyPage({ go }) {
           </div>
         </div>
       </section>
+
+      {/* Block footer */}
+      <AgencyFooter />
     </div>);
 }
-Object.assign(window, { HomePage, AllProjectsGrid, Tile, InteriorsPage, ArchitecturePage, AgencyPage, ProjectPage });
+/* ================== AGENCY BLOCK FOOTER ================== */
+function AgencyFooter() {
+  const [contactOpen, setContactOpen] = useS(false);
+  const site = window.normaliseSiteSettings ? window.normaliseSiteSettings(
+    (() => { try { const r = JSON.parse(localStorage.getItem(window.P58_STORE_KEY || "p58_data_v1") || "null"); return r && r.site ? r.site : {}; } catch(e) { return {}; } })()
+  ) : window.DEFAULT_SITE_SETTINGS || {};
+  const contact = site.contact || {};
+
+  return (
+    <footer className="agency-foot">
+      {/* Contact panel — slides in above the footer */}
+      <div className={`agency-foot-contact ${contactOpen ? "open" : ""}`}>
+        <div className="agency-foot-contact-inner">
+          <div className="agency-foot-contact-col">
+            <div className="agency-foot-contact-label">{contact.location_label || "ATHENS"}</div>
+            <div className="agency-foot-contact-item">{contact.address}</div>
+            <a className="agency-foot-contact-item" href={contact.phone_url}>{contact.phone}</a>
+            <a className="agency-foot-contact-item" href={contact.email_url}>{contact.email}</a>
+            {contact.instagram_url
+              ? <a className="agency-foot-contact-item" href={contact.instagram_url} target="_blank" rel="noopener noreferrer">{contact.instagram_text}</a>
+              : <span className="agency-foot-contact-item">{contact.instagram_text}</span>
+            }
+          </div>
+        </div>
+      </div>
+
+      {/* Footer bar */}
+      <div className="agency-foot-bar">
+        <img src="assets/logo-black.svg" alt="Project58" className="agency-foot-logo" />
+        <div className="agency-foot-actions">
+          <button
+            className={`agency-foot-btn ${contactOpen ? "on" : ""}`}
+            onClick={() => setContactOpen(v => !v)}>
+            {contactOpen ? "Close" : "Contact"} {contactOpen ? "×" : "↗"}
+          </button>
+          <button
+            className="agency-foot-btn"
+            onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+            Back to top ↑
+          </button>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+Object.assign(window, { HomePage, AllProjectsGrid, Tile, InteriorsPage, ArchitecturePage, AgencyPage, AgencyFooter, ProjectPage });

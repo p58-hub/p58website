@@ -26,6 +26,7 @@ function useIsMobile() {
 
 function Nav({ route, go }) {
   const t = window.useT();
+  const { lang, setLang } = window.useLang();
   const isRetail = route.name === "interiors" || route.name === "project";
   const isResidential = route.name === "architecture";
   const isAgency = route.name === "agency";
@@ -35,25 +36,50 @@ function Nav({ route, go }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [atTop, setAtTop] = useState(true);
-  const [hideForFooter, setHideForFooter] = useState(false);
   const [projectNavVisible, setProjectNavVisible] = useState(false);
   const menuRef = useRef(null);
+  const lastScrollYRef = useRef(0);
   const isProject = route.name === "project";
 
-  // scroll detection — home: track atTop; project: show nav only while scrolling
+  // scroll detection — home: track atTop; project: show nav only while scrolling;
+  // other vertical pages: hide on scroll down, show on scroll up
   useEffect(() => {
-    if (!isHome && !isProject) { setAtTop(false); return; }
+    const isVertical = !isHome && !isProject;
     if (isProject) {
-      setProjectNavVisible(false);
-      const onScroll = () => setProjectNavVisible(window.scrollY > 60);
+      // Nav always visible on project pages (split layout)
+      setProjectNavVisible(true);
+      return;
+    }
+    if (isHome) {
+      document.body.classList.remove("nav-scroll-hide");
+      const onScroll = () => setAtTop(window.scrollY < 80);
+      setAtTop(window.scrollY < 80);
       window.addEventListener("scroll", onScroll, { passive: true });
       return () => window.removeEventListener("scroll", onScroll);
     }
-    const onScroll = () => setAtTop(window.scrollY < 80);
-    setAtTop(window.scrollY < 80);
+    // interiors + architecture: nav always visible (sticky top)
+    if (route.name === "interiors" || route.name === "architecture") {
+      document.body.classList.remove("nav-scroll-hide");
+      return;
+    }
+    // agency: smart hide on scroll-down, show on scroll-up
+    document.body.classList.remove("nav-scroll-hide");
+    setAtTop(false);
+    lastScrollYRef.current = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      const diff = y - lastScrollYRef.current;
+      if (Math.abs(diff) > 6) {
+        document.body.classList.toggle("nav-scroll-hide", diff > 0 && y > 80);
+        lastScrollYRef.current = y;
+      }
+    };
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [isHome, isProject]);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      document.body.classList.remove("nav-scroll-hide");
+    };
+  }, [isHome, isProject, route.name]);
 
   // Header is always the full, standard nav now (no minimal "home-top" mode).
   const homeTop = false;
@@ -102,44 +128,48 @@ function Nav({ route, go }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Hide the header once the footer scrolls into view (works for both the
-  // vertical pages' <footer.foot> and the home page's horizontal .hz-foot pane).
+  // Hide the header once the footer scrolls into view — direct DOM toggle, no React state.
   useEffect(() => {
+    document.body.classList.remove("at-footer");
     const foots = Array.from(document.querySelectorAll("footer.foot, .hz-foot"));
-    const ratios = new Map();
-    setHideForFooter(false);
     if (!foots.length) return;
+    const ratios = new Map();
     const io = new IntersectionObserver(
       (entries) => {
         entries.forEach((e) => ratios.set(e.target, e.intersectionRatio));
         let max = 0;
         ratios.forEach((v) => {if (v > max) max = v;});
-        setHideForFooter(max > 0.4);
+        document.body.classList.toggle("at-footer", max > 0.4);
       },
       { threshold: [0, 0.2, 0.4, 0.7, 1] }
     );
     foots.forEach((f) => io.observe(f));
-    return () => io.disconnect();
+    return () => {
+      io.disconnect();
+      document.body.classList.remove("at-footer");
+    };
   }, [route.name, route.id, route.brand]);
 
-  // Toggle a body flag so the footer can expand fullscreen + header leaves flow.
-  useEffect(() => {
-    document.body.classList.toggle("at-footer", hideForFooter);
-    return () => document.body.classList.remove("at-footer");
-  }, [hideForFooter]);
-
-  // On project pages the nav is fixed (no layout space) and hidden until scroll.
+  // On project + interiors + architecture pages the nav is sticky/fixed (no layout space).
+  const isInteriors = route.name === "interiors";
+  const isArchitecture = route.name === "architecture";
   useEffect(() => {
     document.body.classList.toggle("project-page", isProject);
-    return () => document.body.classList.remove("project-page");
-  }, [isProject]);
+    document.body.classList.toggle("interiors-page", isInteriors);
+    document.body.classList.toggle("architecture-page", isArchitecture);
+    return () => {
+      document.body.classList.remove("project-page");
+      document.body.classList.remove("interiors-page");
+      document.body.classList.remove("architecture-page");
+    };
+  }, [isProject, isInteriors, isArchitecture]);
 
   const projectForRoute = route.name === "project" ? PROJECTS.find((p) => p.id === route.id || p.slug === route.id) : null;
   const currentBrand = route.brand || (projectForRoute ? (projectForRoute.brandKey || (projectForRoute.brand === "Dinas" ? "dn" : "pg")) : null);
 
   return (
     <React.Fragment>
-      <nav className={`nav ${homeTop ? "home-top" : ""} ${isHome && isMobile && atTop ? "mobile-home-top" : ""} ${hideForFooter || (isProject && !projectNavVisible) ? "nav-hidden" : ""}`} aria-label="Primary">
+      <nav className={`nav ${homeTop ? "home-top" : ""} ${isHome && isMobile && atTop ? "mobile-home-top" : ""} ${isProject && !projectNavVisible ? "nav-hidden" : ""}`} aria-label="Primary">
         <div className="nav-logo" onClick={() => go({ name: "home" })} role="button" aria-label="Project58 home">
           <img src="assets/logo-black.svg" alt="Project58" style={{ objectFit: "contain" }} />
         </div>
@@ -158,7 +188,6 @@ function Nav({ route, go }) {
         </div>
 
         <div className="nav-right">
-          <window.LangToggle />
           <button className="nav-icon" aria-label="Search" onClick={() => setSearchOpen(true)}>
             <SearchIcon />
             <span className="kbd">⌘K</span>
@@ -186,10 +215,56 @@ function Nav({ route, go }) {
                 onClick={() => {setMenuOpen(false);window.location.href = "mailto:g.grigoriadis@project58.gr";}}>
                   <span>{t("contact")}</span><span className="ar">↗</span>
                 </button>
+                <button
+                className={`nav-menu-item ${lang === "en" ? "on" : ""}`}
+                role="menuitem"
+                onClick={() => setLang("en")}>
+                  <span>EN</span>
+                </button>
+                <button
+                className={`nav-menu-item ${lang === "gr" ? "on" : ""}`}
+                role="menuitem"
+                onClick={() => setLang("gr")}>
+                  <span>GR</span>
+                </button>
               </div> :
             null}
           </div>
         </div>
+
+        {/* Filter row — lives inside nav so both share one backdrop-filter */}
+        {isInteriors ? (() => {
+          const allProjects = window.PROJECTS || [];
+          const activeBrand = route.brand;
+          const count = activeBrand
+            ? allProjects.filter(p => (p.brandKey || (p.brand === "Dinas" ? "dn" : "pg")) === activeBrand).length
+            : allProjects.length;
+          return (
+            <div className="nav-filter-row">
+              <div className="interiors-filter">
+                <button className={`filter-btn ${!activeBrand ? "on" : ""}`} onClick={() => go({ name: "interiors" })}>{t("all")}</button>
+                <button className={`filter-btn ${activeBrand === "pg" ? "on" : ""}`} onClick={() => go({ name: "interiors", brand: "pg" })}>Protein Garden</button>
+                <button className={`filter-btn ${activeBrand === "dn" ? "on" : ""}`} onClick={() => go({ name: "interiors", brand: "dn" })}>Dinas</button>
+              </div>
+              <div className="meta"><b>{count}</b> {t("proj_word")}</div>
+            </div>
+          );
+        })() : null}
+        {isArchitecture ? (() => {
+          const archProjects = (window.PROJECTS || []).filter(p => {
+            const cat = (p.typology || p.category || "retail").toLowerCase();
+            return cat === "residential" || cat === "architecture";
+          });
+          const count = archProjects.length;
+          return (
+            <div className="nav-filter-row">
+              <div className="interiors-filter">
+                <button className="filter-btn on" onClick={() => go({ name: "architecture" })}>{t("all")}</button>
+              </div>
+              <div className="meta"><b>{count}</b> {t("proj_word")}</div>
+            </div>
+          );
+        })() : null}
       </nav>
 
       {/* mobile fullscreen drawer */}
@@ -237,26 +312,7 @@ function Nav({ route, go }) {
         </div> :
       null}
 
-      {/* RETAIL sub-nav — brand strip (interiors page only, not individual project) */}
-      {isRetail && !isProject ?
-      <div className="subnav" aria-label="Retail brands">
-          <button
-          className={`sub-chip ${!currentBrand ? "on" : ""}`}
-          onClick={() => go({ name: "interiors" })}>
-            {t("all")}
-          </button>
-          <button
-          className={`sub-chip ${currentBrand === "pg" ? "on" : ""}`}
-          onClick={() => go({ name: "interiors", brand: "pg" })}>
-            Protein Garden
-          </button>
-          <button
-          className={`sub-chip ${currentBrand === "dn" ? "on" : ""}`}
-          onClick={() => go({ name: "interiors", brand: "dn" })}>
-            Dinas
-          </button>
-        </div> :
-      null}
+      {/* brand filter moved into InteriorsPage, below the title */}
 
       {searchOpen ? <SearchOverlay go={go} onClose={() => setSearchOpen(false)} /> : null}
     </React.Fragment>);

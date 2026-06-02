@@ -141,7 +141,7 @@ function App() {
     <React.Fragment>
       <Nav route={route} go={go} />
       <main key={route.name + (route.id || "") + (route.brand || "") + ":" + contentVersion} data-screen-label={pageLabel(route)}>{page}</main>
-      <Footer go={go} />
+      {route.name !== "project" && route.name !== "interiors" && route.name !== "architecture" && <Footer go={go} />}
       {zoom ? (
         <div className={`zoom-flight ${zoom.on ? "on" : ""}`} aria-hidden="true">
           <img
