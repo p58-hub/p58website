@@ -398,9 +398,11 @@ function ProjListRow({ project, go, idx }) {
           ? <img className="proj-list-icon proj-list-icon--img" src="assets/proteingarden/Protein Garden New logo_final-03.png" alt="Protein Garden" />
           : <div className={`proj-list-icon proj-list-icon--${bk}`}>{monogram}</div>
         }
-        <div className="proj-list-brand-name">{project.brand}</div>
-        <div className="proj-list-loc">{locFormatted}</div>
-        <div className="proj-list-status">{t(project.status)}</div>
+        <div className="proj-list-text">
+          <div className="proj-list-brand-name">{project.brand}</div>
+          <div className="proj-list-loc">{locFormatted}</div>
+          <div className="proj-list-status">{t(project.status)}</div>
+        </div>
       </div>
       <div className="proj-list-img">
         <img src={project.hero} alt={pick(project, "name")} loading="lazy" />

@@ -704,6 +704,12 @@ body.interiors-page .brand-head {
   text-align: right;
   padding-top: 4px;
 }
+.proj-list-text {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: flex-end;
+}
 
 /* brand monogram icon */
 .proj-list-icon {
@@ -770,11 +776,71 @@ body.interiors-page .brand-head {
   transition: transform 700ms cubic-bezier(.2,.7,.2,1);
 }
 
-@media (max-width: 600px) {
+@media (max-width: 720px) {
+  .proj-list {
+    padding: 0 var(--gutter) 64px;
+  }
   .proj-list-row {
     grid-template-columns: 1fr;
-    gap: 16px;
-    padding: 20px 0;
+    gap: 12px;
+    padding: 12px 0 26px;
+    position: relative;
+    overflow: visible;
+  }
+  .proj-list-info {
+    position: static;
+    order: 2;
+    max-width: none;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: flex-start;
+    gap: 12px;
+    padding-top: 0;
+    text-align: left;
+    pointer-events: auto;
+  }
+  .proj-list-text {
+    gap: 5px;
+    align-items: flex-start;
+    min-width: 0;
+    text-shadow: none;
+  }
+  .proj-list-icon {
+    width: 34px;
+    height: 34px;
+    font-size: 7px;
+    background: var(--ink);
+    color: var(--paper);
+    box-shadow: none;
+  }
+  .proj-list-icon--img {
+    width: 38px;
+    height: 38px;
+    background: transparent;
+    box-shadow: none;
+    filter: none;
+  }
+  .proj-list-brand-name {
+    font-size: 10.5px;
+    line-height: 1.15;
+    color: var(--clay);
+  }
+  .proj-list-loc {
+    font-size: 9.5px;
+    line-height: 1.35;
+    letter-spacing: 0.08em;
+    color: var(--ink-2);
+  }
+  .proj-list-status {
+    font-size: 9px;
+    line-height: 1.2;
+    color: var(--ink-3);
+  }
+  .proj-list-img {
+    order: 1;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    position: relative;
   }
   .proj-list-arrow { display: none; }
 }
@@ -2156,12 +2222,24 @@ main h3 em {
   /* hide desktop center nav + search keycap; show hamburger only */
   /* clear the device notch / magic island (sticky header sits in-flow now) */
   .nav {
+    position: sticky;
     padding: 12px var(--gutter);
     padding-top: max(12px, calc(env(safe-area-inset-top) + 12px));
     grid-template-columns: 1fr auto;
   }
   .nav-center { display: none; }
-  .nav-logo img { height: 20px; }
+  .nav-logo {
+    position: absolute;
+    left: 50%;
+    top: max(20px, calc(env(safe-area-inset-top) + 20px));
+    justify-self: center;
+    transform: translateX(-50%);
+  }
+  .nav-logo img { height: 30px; }
+  .nav-right {
+    grid-column: 2;
+    justify-self: end;
+  }
   .nav-icon .kbd { display: none; }
   .nav-icon { padding: 8px; }
 
