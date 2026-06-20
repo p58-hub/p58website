@@ -658,8 +658,17 @@ function normaliseSiteSettings(site = {}) {
   };
 }
 
+function projectSlugFromFields(project) {
+  const words = String([project.name, project.location].filter(Boolean).join(" "))
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .match(/[a-z0-9]+/g) || [];
+  return Array.from(new Set(words)).join("-") || project.id;
+}
+
 const BUNDLED_CONTENT = {
-  projects: PROJECTS.map((p, order) => ({ ...p, order, featured: order < 6, slug: p.id })),
+  projects: PROJECTS.map((p, order) => ({ ...p, order, featured: order < 6, slug: projectSlugFromFields(p) })),
   news: NEWS.map((n, order) => ({ ...n, order })),
   team: TEAM.map((m, order) => ({ ...m, order })),
   timeline: TIMELINE.map((r, order) => ({ ...r, order })),
@@ -667,8 +676,9 @@ const BUNDLED_CONTENT = {
 
 function normaliseProject(p, order) {
   const brandKey = p.brand === "Dinas" || (p.id || "").startsWith("dn-") ? "dn" : "pg";
+  const slug = !p.slug || p.slug === p.id ? projectSlugFromFields(p) : p.slug;
   return {
-    slug: p.slug || p.id,
+    slug,
     category: p.category || p.typology || "retail",
     order: Number.isFinite(Number(p.order)) ? Number(p.order) : order,
     featured: p.featured != null ? Boolean(p.featured) : order < 6,
@@ -704,4 +714,4 @@ function applyP58ContentFromStore() {
 }
 
 applyP58ContentFromStore();
-Object.assign(window, { P58_STORE_KEY, DEFAULT_SITE_SETTINGS, normaliseSiteSettings, applyP58ContentFromStore });
+Object.assign(window, { P58_STORE_KEY, DEFAULT_SITE_SETTINGS, normaliseSiteSettings, projectSlugFromFields, applyP58ContentFromStore });

@@ -47,6 +47,13 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 const __TWEAKS_STYLE = `
+  .twk-open{position:fixed;right:16px;bottom:18px;z-index:2147483646;
+    appearance:none;border:1px solid rgba(20,19,15,.12);border-radius:999px;
+    padding:8px 13px;background:rgba(255,255,255,.82);color:#29261b;
+    -webkit-backdrop-filter:blur(18px) saturate(150%);backdrop-filter:blur(18px) saturate(150%);
+    box-shadow:0 6px 24px rgba(0,0,0,.12);cursor:pointer;
+    font:600 11px/1 ui-sans-serif,system-ui,-apple-system,sans-serif}
+  .twk-open:hover{background:#fff;transform:translateY(-1px)}
   .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
     max-height:calc(100vh - 32px);display:flex;flex-direction:column;
     transform:scale(var(--dc-inv-zoom,1));transform-origin:bottom right;
@@ -286,7 +293,12 @@ function TweaksPanel({ title = 'Tweaks', noDeckControls = false, children }) {
     window.addEventListener('mouseup', up);
   };
 
-  if (!open) return null;
+  if (!open) return (
+    <>
+      <style>{__TWEAKS_STYLE}</style>
+      <button type="button" className="twk-open" onClick={() => setOpen(true)}>{title}</button>
+    </>
+  );
   return (
     <>
       <style>{__TWEAKS_STYLE}</style>

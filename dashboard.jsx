@@ -63,7 +63,11 @@ const load = () => {
   try {
     const stored = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
     if (stored && stored.projects && stored.news && stored.team) {
-      return { ...stored, categories: normaliseCategories(stored.categories), site: normaliseSite(stored.site || DEFAULT_SITE) };
+      const projects = stored.projects.map((p) => ({
+        ...p,
+        slug: !p.slug || p.slug === p.id ? descriptiveProjectSlug(p) : p.slug,
+      }));
+      return { ...stored, projects, categories: normaliseCategories(stored.categories), site: normaliseSite(stored.site || DEFAULT_SITE) };
     }
   } catch (e) { /* fallthrough */ }
   return seed();
@@ -75,6 +79,13 @@ const persist = (data) => {
 };
 
 const newId = (prefix) => prefix + "-" + Math.random().toString(36).slice(2, 8);
+const slugify = (value) => String(value || "")
+  .toLowerCase()
+  .normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/[^a-z0-9]+/g, "-")
+  .replace(/^-+|-+$/g, "");
+const descriptiveProjectSlug = window.projectSlugFromFields || ((project) => slugify([project.name, project.location].filter(Boolean).join(" ")));
 
 /* ---------- Icons ---------- */
 const Ic = {
@@ -409,7 +420,7 @@ function ProjectsList({ data, categories, onEdit, onDelete, onMove, onNew }) {
                   </div>
                   <div className="meta">{p.location}</div>
                   <div className="meta">{p.year} · {p.status}</div>
-                  <div className="meta">{p.code}{p.featured ? " · Featured" : ""}<span className="sub">{categoryLabel(categories, p.category || p.typology || "retail")} · /{p.slug || p.id}</span></div>
+                  <div className="meta">{p.code}{p.featured ? " · Featured" : ""}<span className="sub">{categoryLabel(categories, p.category || p.typology || "retail")} · /projects/{p.slug || p.id}</span></div>
                   <div className="row-actions">
                     <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(p.id, -1); }} title="Move up" disabled={globalIndex === 0}>↑</button>
                     <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(p.id, 1); }} title="Move down" disabled={globalIndex === data.length - 1}>↓</button>
@@ -676,30 +687,29 @@ function ProjectSheet({ project, categories, onSave, onClose }) {
     typology: "retail",
     year: String(new Date().getFullYear()),
     status: "In design",
+    status_gr: "",
     size: "",
-    client: "",
-    role: "Architecture",
+    size_gr: "",
+    contractor: "",
+    contractor_gr: "",
+    engineer: "",
+    engineer_gr: "",
+    lead_architect: "",
+    lead_architect_gr: "",
+    design_team: "",
+    design_team_gr: "",
     summary: "",
-    body: [["Brief", ""]],
     hero: "",
     gallery: [],
   }));
   const set = (k, v) => setP((x) => ({ ...x, [k]: v }));
-  const setBody = (i, j, v) => setP((x) => ({ ...x, body: x.body.map((b, bi) => bi === i ? (j === 0 ? [v, b[1]] : [b[0], v]) : b) }));
-  const addBody = () => setP((x) => ({ ...x, body: [...x.body, ["", ""]], body_gr: [...(x.body_gr || []), ["", ""]] }));
-  const removeBody = (i) => setP((x) => ({ ...x, body: x.body.filter((_, bi) => bi !== i), body_gr: (x.body_gr || []).filter((_, bi) => bi !== i) }));
-  const setBodyGr = (i, j, v) => setP((x) => {
-    const arr = (x.body_gr || []).slice();
-    while (arr.length < x.body.length) arr.push(["", ""]);
-    arr[i] = j === 0 ? [v, arr[i][1] || ""] : [arr[i][0] || "", v];
-    return { ...x, body_gr: arr };
-  });
   const setGallery = (i, key, v) => setP((x) => ({ ...x, gallery: x.gallery.map((g, gi) => gi === i ? { ...g, [key]: v } : g) }));
   const addGallery = () => setP((x) => ({ ...x, gallery: [...x.gallery, { src: "", tag: "", span: "gal-6" }] }));
   const removeGallery = (i) => setP((x) => ({ ...x, gallery: x.gallery.filter((_, gi) => gi !== i) }));
 
+  const suggestedSlug = descriptiveProjectSlug(p);
   const valid = p.name && p.code;
-  const save = () => valid && onSave({ ...p, slug: p.slug || p.id, typology: p.category || p.typology || "retail" });
+  const save = () => valid && onSave({ ...p, slug: p.slug || suggestedSlug || p.id, typology: p.category || p.typology || "retail" });
 
   useEffect(() => {
     const k = (e) => { if (e.key === "Escape") onClose(); };
@@ -736,20 +746,16 @@ function ProjectSheet({ project, categories, onSave, onClose }) {
               <Field label="Code" required hint="Internal reference">
                 <input type="text" value={p.code} onChange={(e) => set("code", e.target.value)} />
               </Field>
-              <Field label="Slug" hint="URL path after #project/">
-                <input type="text" value={p.slug || p.id} onChange={(e) => set("slug", e.target.value)} placeholder="pg-panormou" />
+              <Field label="Descriptive URL slug" hint={`Public URL: /projects/${p.slug || suggestedSlug || "project-name-location"}`}>
+                <input type="text" value={p.slug || ""} onChange={(e) => set("slug", slugify(e.target.value))} placeholder={suggestedSlug || "luxury-villa-mykonos"} />
               </Field>
             </div>
             <div className="field-group">
-              <Field label="Brand">
-                <select value={p.brand} onChange={(e) => set("brand", e.target.value)}>
-                  <option>Protein Garden</option>
-                  <option>Dinas</option>
-                  <option>Other</option>
-                </select>
+              <Field label="Brand (EN)" hint="Shown over the project hero">
+                <input type="text" value={p.brand} onChange={(e) => set("brand", e.target.value)} placeholder="e.g. Protein Garden" />
               </Field>
-              <Field label="Type">
-                <input type="text" value={p.type} onChange={(e) => set("type", e.target.value)} />
+              <Field label="Brand (GR)" hint="Greek translation — falls back to EN">
+                <input type="text" value={p.brand_gr || ""} onChange={(e) => set("brand_gr", e.target.value)} />
               </Field>
             </div>
             <div className="field-group cols-3">
@@ -770,6 +776,10 @@ function ProjectSheet({ project, categories, onSave, onClose }) {
                 </label>
               </Field>
             </div>
+          </div>
+
+          <div className="form-section">
+            <div className="form-section-title">Project page details</div>
             <div className="field-group">
               <Field label="Location (EN)">
                 <input type="text" value={p.location} onChange={(e) => set("location", e.target.value)} />
@@ -778,60 +788,77 @@ function ProjectSheet({ project, categories, onSave, onClose }) {
                 <input type="text" value={p.location_gr || ""} onChange={(e) => set("location_gr", e.target.value)} placeholder="π.χ. Αθήνα · Πανόρμου" />
               </Field>
             </div>
-            <div className="field-group cols-3">
-              <Field label="Status">
-                <select value={p.status} onChange={(e) => set("status", e.target.value)}>
-                  {STATUS_OPTIONS.map((s) => <option key={s}>{s}</option>)}
-                </select>
+            <div className="field-group">
+              <Field label="Status (EN)">
+                <input list="project-status-options" type="text" value={p.status} onChange={(e) => set("status", e.target.value)} />
+                <datalist id="project-status-options">
+                  {STATUS_OPTIONS.map((s) => <option key={s} value={s} />)}
+                </datalist>
               </Field>
-              <Field label="Size">
+              <Field label="Status (GR)" hint="Greek translation — falls back to EN">
+                <input type="text" value={p.status_gr || ""} onChange={(e) => set("status_gr", e.target.value)} />
+              </Field>
+            </div>
+            <div className="field-group">
+              <Field label="Size (EN)">
                 <input type="text" value={p.size} onChange={(e) => set("size", e.target.value)} placeholder="e.g. 142 m²" />
               </Field>
-              <Field label="Role">
-                <input type="text" value={p.role} onChange={(e) => set("role", e.target.value)} />
+              <Field label="Size (GR)" hint="Greek translation — falls back to EN">
+                <input type="text" value={p.size_gr || ""} onChange={(e) => set("size_gr", e.target.value)} />
+              </Field>
+            </div>
+            <div className="field-group">
+              <Field label="Type (EN)">
+                <input type="text" value={p.type} onChange={(e) => set("type", e.target.value)} />
+              </Field>
+              <Field label="Type (GR)" hint="Greek translation — falls back to EN">
+                <input type="text" value={p.type_gr || ""} onChange={(e) => set("type_gr", e.target.value)} />
+              </Field>
+            </div>
+            <div className="field-group">
+              <Field label="Contractor (EN)">
+                <input type="text" value={p.contractor || ""} onChange={(e) => set("contractor", e.target.value)} />
+              </Field>
+              <Field label="Contractor (GR)" hint="Greek translation — falls back to EN">
+                <input type="text" value={p.contractor_gr || ""} onChange={(e) => set("contractor_gr", e.target.value)} />
+              </Field>
+            </div>
+            <div className="field-group">
+              <Field label="Engineer (EN)">
+                <input type="text" value={p.engineer || ""} onChange={(e) => set("engineer", e.target.value)} />
+              </Field>
+              <Field label="Engineer / Μηχανολόγος (GR)" hint="Greek translation — falls back to EN">
+                <input type="text" value={p.engineer_gr || ""} onChange={(e) => set("engineer_gr", e.target.value)} />
+              </Field>
+            </div>
+            <div className="field-group">
+              <Field label="Lead Architect (EN)">
+                <input type="text" value={p.lead_architect || ""} onChange={(e) => set("lead_architect", e.target.value)} />
+              </Field>
+              <Field label="Lead Architect (GR)" hint="Greek translation — falls back to EN">
+                <input type="text" value={p.lead_architect_gr || ""} onChange={(e) => set("lead_architect_gr", e.target.value)} />
+              </Field>
+            </div>
+            <div className="field-group">
+              <Field label="Design Team (EN)">
+                <input type="text" value={p.design_team || ""} onChange={(e) => set("design_team", e.target.value)} />
+              </Field>
+              <Field label="Design Team (GR)" hint="Greek translation — falls back to EN">
+                <input type="text" value={p.design_team_gr || ""} onChange={(e) => set("design_team_gr", e.target.value)} />
               </Field>
             </div>
           </div>
 
           <div className="form-section">
-            <div className="form-section-title">Summary &amp; body</div>
+            <div className="form-section-title">Short description</div>
             <div className="field-group">
-              <Field label="Summary (EN)" hint="Shown on tiles & detail lede">
+              <Field label="Description (EN)">
                 <textarea value={p.summary} onChange={(e) => set("summary", e.target.value)} />
               </Field>
-              <Field label="Summary (GR)" hint="Greek translation — optional">
+              <Field label="Description (GR)" hint="Greek translation — falls back to EN">
                 <textarea value={p.summary_gr || ""} onChange={(e) => set("summary_gr", e.target.value)} placeholder="Ελληνική μετάφραση" />
               </Field>
             </div>
-            <div className="form-section-title" style={{ marginTop: 20 }}>
-              <span>Body sections</span>
-              <button className="add" onClick={addBody}>{Ic.plus} Add section</button>
-            </div>
-            {p.body.map((b, i) => {
-              const gr = (p.body_gr && p.body_gr[i]) || ["", ""];
-              return (
-                <div className="body-block" key={i}>
-                  <div>
-                    <div className="field-group">
-                      <Field label={`Heading ${i + 1} (EN)`}>
-                        <input type="text" value={b[0]} onChange={(e) => setBody(i, 0, e.target.value)} placeholder="e.g. Brief / Move / Material" />
-                      </Field>
-                      <Field label={`Heading ${i + 1} (GR)`}>
-                        <input type="text" value={gr[0]} onChange={(e) => setBodyGr(i, 0, e.target.value)} />
-                      </Field>
-                    </div>
-                    <div className="field-group">
-                      <Field label="Paragraph (EN)">
-                        <textarea value={b[1]} onChange={(e) => setBody(i, 1, e.target.value)} />
-                      </Field>
-                      <Field label="Paragraph (GR)">
-                        <textarea value={gr[1]} onChange={(e) => setBodyGr(i, 1, e.target.value)} />
-                      </Field>
-                    </div>
-                  </div>
-                  <button className="remove" onClick={() => removeBody(i)} title="Remove">{Ic.trash}</button>
-                </div>);
-            })}
           </div>
 
           <div className="form-section">

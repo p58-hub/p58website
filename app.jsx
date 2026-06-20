@@ -1,10 +1,5 @@
-// ===== app.jsx — root: routing + tweaks =====
+// ===== app.jsx — root routing =====
 const { useState: aUseState, useEffect: aUseEffect, useRef: aUseRef } = React;
-
-const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
-  "accent": "clay",
-  "paper": "bone"
-}/*EDITMODE-END*/;
 
 // legacy hash aliases — protein-garden / dinas / studio / news still navigate
 const ALIAS = {
@@ -15,8 +10,7 @@ const ALIAS = {
 };
 const ROUTES = ["home", "projects", "architecture", "interiors", "agency"];
 
-function routeFromHash() {
-  const h = (location.hash || "#home").replace("#", "");
+function routeFromLegacyHash(h) {
   const [name, id] = h.split("/");
   if (name === "project" && id) return { name: "project", id };
   const resolved = ALIAS[name] || name;
@@ -31,31 +25,68 @@ function routeFromHash() {
   return { name: "home" };
 }
 
-function hashFromRoute(r) {
+function routeFromLocation() {
+  const legacyHash = (location.hash || "").replace(/^#/, "");
+  if (legacyHash) return routeFromLegacyHash(legacyHash);
+
+  const parts = location.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+  const params = new URLSearchParams(location.search);
+  if (parts[0] === "projects" && parts[1]) return { name: "project", id: parts[1] };
+  if (parts[0] === "projects") {
+    const type = params.get("type");
+    const brand = params.get("brand");
+    return { name: "projects", ...(type ? { type } : {}), ...(brand ? { brand } : {}) };
+  }
+  if (parts[0] === "interiors") {
+    const brand = params.get("brand");
+    return { name: "interiors", ...(brand ? { brand } : {}) };
+  }
+  if (ROUTES.includes(parts[0])) return { name: parts[0] };
+  return { name: "home" };
+}
+
+function pathFromRoute(r) {
   const name = ALIAS[r.name] || r.name;
-  if (name === "project") return `project/${r.id}`;
-  if (name === "interiors" && r.brand) return `interiors:${r.brand}`;
-  if (name === "projects" && r.type) return `projects:${r.type}${r.brand ? `:${r.brand}` : ""}`;
-  return name;
+  if (name === "home") return "/";
+  if (name === "project") return `/projects/${encodeURIComponent(r.id)}`;
+  const params = new URLSearchParams();
+  if (r.type) params.set("type", r.type);
+  if (r.brand) params.set("brand", r.brand);
+  const query = params.toString();
+  return `/${name}${query ? `?${query}` : ""}`;
 }
 
 function routeKey(r) {
-  return hashFromRoute(r || routeFromHash());
+  return pathFromRoute(r || routeFromLocation());
 }
 
 function App() {
-  const [route, setRoute] = aUseState(() => routeFromHash());
+  const [route, setRoute] = aUseState(() => routeFromLocation());
   const routeRef = aUseRef(route);
   const scrollMemory = aUseRef(new Map());
   const restoreRef = aUseRef(null);
   const [zoom, setZoom] = aUseState(null);
   const [contentVersion, setContentVersion] = aUseState(0);
-  const [t, setTweak] = (window.useTweaks || (() => [TWEAK_DEFAULTS, () => {}]))(TWEAK_DEFAULTS);
+  const [introVisible, setIntroVisible] = aUseState(true);
+
+  aUseEffect(() => {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const timer = setTimeout(() => {
+      setIntroVisible(false);
+      document.body.style.overflow = previousOverflow;
+    }, reducedMotion ? 250 : 1500);
+    return () => {
+      clearTimeout(timer);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
 
   aUseEffect(() => {
     if ("scrollRestoration" in history) history.scrollRestoration = "manual";
     const sync = () => {
-      const next = routeFromHash();
+      const next = routeFromLocation();
       restoreRef.current = next;
       setRoute(next);
     };
@@ -91,8 +122,8 @@ function App() {
       };
     }
     const next = { ...r, name, ...(from ? { from } : {}) };
-    const nextHash = hashFromRoute(next);
-    const currentHash = hashFromRoute(routeRef.current);
+    const nextPath = pathFromRoute(next);
+    const currentPath = pathFromRoute(routeRef.current);
 
     if (name === "project" && opts.fromEl) {
       const rect = opts.fromEl.getBoundingClientRect();
@@ -102,8 +133,8 @@ function App() {
       setTimeout(() => setZoom(null), 760);
     }
 
-    if (nextHash !== currentHash || location.hash.replace("#", "") !== nextHash) {
-      history.pushState({ route: nextHash }, "", `#${nextHash}`);
+    if (nextPath !== currentPath || `${location.pathname}${location.search}${location.hash}` !== nextPath) {
+      history.pushState({ route: nextPath }, "", nextPath);
     }
     restoreRef.current = null;
     setRoute(next);
@@ -135,9 +166,31 @@ function App() {
   }, []);
 
   aUseEffect(() => {
-    document.documentElement.dataset.accent = t.accent || "clay";
-    document.documentElement.dataset.paper = t.paper || "bone";
-  }, [t.accent, t.paper]);
+    const project = route.name === "project"
+      ? PROJECTS.find((p) => p.id === route.id || p.slug === route.id)
+      : null;
+    const title = project ? `${project.name} — Project58` : "Project58 — Architecture";
+    const description = project && project.summary
+      ? project.summary
+      : "Project58 is an architecture studio working across retail, residential, renovation and hospitality projects.";
+    document.title = title;
+
+    let meta = document.querySelector('meta[name="description"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.name = "description";
+      document.head.appendChild(meta);
+    }
+    meta.content = description;
+
+    let canonical = document.querySelector('link[rel="canonical"]');
+    if (!canonical) {
+      canonical = document.createElement("link");
+      canonical.rel = "canonical";
+      document.head.appendChild(canonical);
+    }
+    canonical.href = `${location.origin}${pathFromRoute(route)}`;
+  }, [route.name, route.id, route.brand, route.type, contentVersion]);
 
   let page = null;
   if (route.name === "home")         page = <HomePage go={go} />;
@@ -145,10 +198,20 @@ function App() {
   if (route.name === "architecture") page = <ArchitecturePage go={go} />;
   if (route.name === "interiors")    page = <InteriorsPage go={go} brand={route.brand} />;
   if (route.name === "agency")       page = <AgencyPage go={go} />;
-  if (route.name === "project")      page = <ProjectPage id={route.id} go={go} from={route.from} />;
+  if (route.name === "project")      page = <ProjectPage id={route.id} go={go} from={route.from} transitionDirection={route.transitionDirection} />;
 
   return (
     <React.Fragment>
+      {introVisible ? (
+        <div className="site-intro" aria-label="Project58" role="status">
+          <div className="site-intro-mark">
+            <img src="assets/logo-black.svg" alt="Project58" />
+            <span className="site-intro-subtitle" aria-label="architects">
+              {"architects".split("").map((letter, index) => <i key={index} aria-hidden="true">{letter}</i>)}
+            </span>
+          </div>
+        </div>
+      ) : null}
       <Nav route={route} go={go} />
       <main key={route.name + (route.id || "") + (route.brand || "") + (route.type || "") + ":" + contentVersion} data-screen-label={pageLabel(route)}>{page}</main>
       {route.name !== "project" && route.name !== "projects" && route.name !== "interiors" && route.name !== "architecture" && <Footer go={go} />}
@@ -165,41 +228,6 @@ function App() {
             }}
           />
         </div>
-      ) : null}
-      {window.TweaksPanel ? (
-        <window.TweaksPanel title="Tweaks" defaultOpen={false}>
-          <window.TweakSection title="Palette">
-            <window.TweakRadio
-              label="Accent"
-              value={t.accent}
-              onChange={(v) => setTweak("accent", v)}
-              options={[
-                { value: "clay",   label: "Clay" },
-                { value: "moss",   label: "Moss" },
-                { value: "ink",    label: "Ink" },
-                { value: "cobalt", label: "Cobalt" },
-              ]}
-            />
-            <window.TweakRadio
-              label="Paper"
-              value={t.paper}
-              onChange={(v) => setTweak("paper", v)}
-              options={[
-                { value: "bone",  label: "Bone" },
-                { value: "mist",  label: "Mist" },
-                { value: "cream", label: "Cream" },
-                { value: "dark",  label: "Dark" },
-              ]}
-            />
-          </window.TweakSection>
-          <window.TweakSection title="Jump to">
-            <window.TweakButton onClick={() => go({ name: "home" })}>Home</window.TweakButton>
-            <window.TweakButton onClick={() => go({ name: "architecture" })}>Architecture</window.TweakButton>
-            <window.TweakButton onClick={() => go({ name: "interiors" })}>Interiors</window.TweakButton>
-            <window.TweakButton onClick={() => go({ name: "agency" })}>Agency</window.TweakButton>
-            <window.TweakButton onClick={() => go({ name: "project", id: "pg-panormou" })}>Project detail</window.TweakButton>
-          </window.TweakSection>
-        </window.TweaksPanel>
       ) : null}
     </React.Fragment>
   );

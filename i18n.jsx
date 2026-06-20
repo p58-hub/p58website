@@ -185,8 +185,13 @@ const DICT = {
 
     // project detail
     pd_code: "Project",
+    pd_details: "Details",
+    pd_description: "Description",
     pd_type: "Type",
-    pd_role: "Role",
+    pd_contractor: "Contractor",
+    pd_engineer: "Engineer",
+    pd_lead_architect: "Lead Architect",
+    pd_design_team: "Design Team",
     next_project: "Next project",
     view: "View",
 
@@ -326,8 +331,13 @@ const DICT = {
 
     // project detail
     pd_code: "Έργο",
+    pd_details: "Στοιχεία",
+    pd_description: "Περιγραφή",
     pd_type: "Τύπος",
-    pd_role: "Ρόλος",
+    pd_contractor: "Εργολάβος",
+    pd_engineer: "Μηχανολόγος",
+    pd_lead_architect: "Επικεφαλής Αρχιτέκτονας",
+    pd_design_team: "Ομάδα Μελέτης",
     next_project: "Επόμενο έργο",
     view: "Δες",
 

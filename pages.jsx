@@ -7,6 +7,31 @@ const BRAND_KEY = (p) => p.brandKey || (p.id.startsWith("pg-") ? "pg" : "dn");
 const pgProjects = () => PROJECTS.filter((p) => BRAND_KEY(p) === "pg");
 const dnProjects = () => PROJECTS.filter((p) => BRAND_KEY(p) === "dn");
 
+const PROJECT_PROGRESS_STOPS = [
+  [0, "#3a2c22"],
+  [28, "#8f5324"],
+  [50, "#ffb08e"],
+  [72, "#8f5324"],
+  [100, "#3a2c22"],
+];
+const PROJECT_PROGRESS_GRADIENT = "linear-gradient(90deg, #3a2c22 0%, #8f5324 28%, #ffb08e 50%, #8f5324 72%, #3a2c22 100%)";
+
+function progressColorAt(value) {
+  const hexToRgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  for (let i = 1; i < PROJECT_PROGRESS_STOPS.length; i += 1) {
+    const [endAt, endHex] = PROJECT_PROGRESS_STOPS[i];
+    if (value <= endAt) {
+      const [startAt, startHex] = PROJECT_PROGRESS_STOPS[i - 1];
+      const amount = (value - startAt) / Math.max(1, endAt - startAt);
+      const start = hexToRgb(startHex);
+      const end = hexToRgb(endHex);
+      const rgb = start.map((channel, index) => Math.round(channel + (end[index] - channel) * amount));
+      return `rgb(${rgb.join(", ")})`;
+    }
+  }
+  return PROJECT_PROGRESS_STOPS[PROJECT_PROGRESS_STOPS.length - 1][1];
+}
+
 function useHomeMobile() {
   const [isMobile, setIsMobile] = useS(() =>
   typeof window !== "undefined" && window.matchMedia("(max-width: 720px)").matches
@@ -223,7 +248,7 @@ function HomePage({ go }) {
       <a
         key={p.id}
         className="vhome-hcard hz-card"
-        href={`#project/${p.slug || p.id}`}
+        href={`/projects/${p.slug || p.id}`}
         onClick={(e) => {
           e.preventDefault();
           sessionStorage.setItem("hzone_scroll", trackRef.current ? trackRef.current.scrollLeft : 0);
@@ -296,7 +321,7 @@ function MobileHomePage({ go, featured, active, setActive, cur, catOf }) {
         <a
           key={p.id}
           className="mhome-card"
-          href={`#project/${p.slug || p.id}`}
+          href={`/projects/${p.slug || p.id}`}
           onClick={(e) => {
             e.preventDefault();
             go({ name: "project", id: p.slug || p.id, brand: BRAND_KEY(p) }, { fromEl: e.currentTarget.querySelector("img"), src: p.hero });
@@ -315,7 +340,7 @@ function MobileHomePage({ go, featured, active, setActive, cur, catOf }) {
       </section>
       <div className="mhome-all-projects">
         <a
-          href="#projects"
+          href="/projects"
           onClick={(e) => {
             e.preventDefault();
             go({ name: "projects" });
@@ -340,6 +365,8 @@ function AllProjectsGrid({ limit, go, compact = false, projects }) {
 function Tile({ project, cls, go, idx }) {
   const t = window.useT();
   const pick = window.usePick();
+  const pickedStatus = pick(project, "status");
+  const statusLabel = t(pickedStatus) !== pickedStatus ? t(pickedStatus) : pickedStatus;
   return (
     <div
       className={`bg-tile ${cls || ""}`}
@@ -349,7 +376,7 @@ function Tile({ project, cls, go, idx }) {
       </div>
       <div className="ovr">
         <div className="ovr-top">
-          <span>N°{String(idx).padStart(2, "0")} · {project.code} · {project.brand}</span>
+          <span>N°{String(idx).padStart(2, "0")} · {project.code} · {pick(project, "brand")}</span>
           <span>{project.year}</span>
         </div>
         <div className="ovr-bot">
@@ -358,9 +385,9 @@ function Tile({ project, cls, go, idx }) {
             <div className="ovr-tag" style={{ marginTop: 14 }}>
               <span>{pick(project, "location")}</span>
               <span>·</span>
-              <span>{project.size}</span>
+              <span>{pick(project, "size")}</span>
               <span>·</span>
-              <span>{t(project.status)}</span>
+              <span>{statusLabel}</span>
             </div>
           </div>
           <div className="ovr-tag" style={{ alignSelf: "end" }}>
@@ -431,6 +458,8 @@ function ProjListRow({ project, go, idx }) {
   const rawLoc = pick(project, "location") || "";
   const locParts = rawLoc.split(/\s*·\s*/);
   const locFormatted = ["Greece", ...locParts].join(", ").toUpperCase();
+  const pickedStatus = pick(project, "status");
+  const statusLabel = t(pickedStatus) !== pickedStatus ? t(pickedStatus) : pickedStatus;
   return (
     <div
       className="proj-list-row"
@@ -441,9 +470,9 @@ function ProjListRow({ project, go, idx }) {
           : <div className={`proj-list-icon proj-list-icon--${bk}`}>{monogram}</div>
         }
         <div className="proj-list-text">
-          <div className="proj-list-brand-name">{project.brand}</div>
+          <div className="proj-list-brand-name">{pick(project, "brand")}</div>
           <div className="proj-list-loc">{locFormatted}</div>
-          <div className="proj-list-status">{t(project.status)}</div>
+          <div className="proj-list-status">{statusLabel}</div>
         </div>
       </div>
       <div className="proj-list-img">
@@ -478,16 +507,41 @@ function ArchitecturePage({ go }) {
 }
 
 /* ================== PROJECT DETAIL — BIG-style centered rows ================== */
-function ProjectPage({ id, go, from }) {
+function ProjectPage({ id, go, from, transitionDirection }) {
   const t = window.useT();
   const pick = window.usePick();
   const p = PROJECTS.find((x) => x.id === id || x.slug === id) || PROJECTS[0];
   const idx = PROJECTS.findIndex((x) => x.id === p.id);
+  const prev = PROJECTS[(idx - 1 + PROJECTS.length) % PROJECTS.length];
   const next = PROJECTS[(idx + 1) % PROJECTS.length];
 
-  const [wiping, setWiping] = useS(false);
+  const [transitioning, setTransitioning] = useS(null);
+  const [scrollProgress, setScrollProgress] = useS(0);
+  const swipeStartRef = useR(null);
 
   useE(() => {window.scrollTo({ top: 0, behavior: "instant" });}, [id]);
+  useE(() => {
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const max = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
+      setScrollProgress(Math.min(100, Math.max(0, window.scrollY / max * 100)));
+    };
+    const update = () => {
+      if (!frame) frame = requestAnimationFrame(measure);
+    };
+    const resizeObserver = typeof ResizeObserver !== "undefined" ? new ResizeObserver(update) : null;
+    if (resizeObserver) resizeObserver.observe(document.body);
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    update();
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      if (resizeObserver) resizeObserver.disconnect();
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [id]);
 
   const backRoute = from || { name: "home" };
   const backLabel = backRoute.name === "projects" ? "← Projects"
@@ -496,18 +550,59 @@ function ProjectPage({ id, go, from }) {
     : backRoute.name === "agency" ? "← Agency"
     : "← Home";
 
-  const handleNext = () => {
-    setWiping(true);
+  const navigateProject = (target, direction) => {
+    if (transitioning) return;
+    setTransitioning({ direction, target });
     setTimeout(() => {
-      go({ name: "project", id: next.slug || next.id, from: backRoute });
-    }, 360);
+      go({ name: "project", id: target.slug || target.id, from: backRoute, transitionDirection: "none" });
+    }, 520);
   };
 
-  const bodyArr = pick(p, "body") && pick(p, "body").length ? pick(p, "body") : p.body;
+  const handleHeroTouchStart = (event) => {
+    const touch = event.touches[0];
+    swipeStartRef.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+  };
+  const handleHeroTouchEnd = (event) => {
+    const start = swipeStartRef.current;
+    const touch = event.changedTouches[0];
+    swipeStartRef.current = null;
+    if (!start || !touch || transitioning) return;
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    if (Math.abs(deltaX) < 56 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.2) return;
+    if (deltaX < 0) navigateProject(next, "next");
+    else navigateProject(prev, "prev");
+  };
+
+  const pickedStatus = pick(p, "status");
+  const statusLabel = t(pickedStatus) !== pickedStatus ? t(pickedStatus) : pickedStatus;
+  const projectMeta = [
+    ["location", pick(p, "location")],
+    ["status", statusLabel],
+    ["size", pick(p, "size")],
+    ["pd_type", pick(p, "type")],
+    ["pd_lead_architect", pick(p, "lead_architect")],
+    ["pd_design_team", pick(p, "design_team")],
+    ["pd_contractor", pick(p, "contractor")],
+    ["pd_engineer", pick(p, "engineer")],
+  ];
 
   return (
-    <div className="page-enter" key={p.id}>
-      {wiping ? <div className="wipe-overlay" /> : null}
+    <div
+      className={`project-page-view ${transitioning ? `project-exit-${transitioning.direction}` : transitionDirection ? `project-enter-${transitionDirection}` : "project-enter-initial"}`}
+      key={p.id}>
+      {transitioning ? ReactDOM.createPortal(
+        <div className="project-push-transition" aria-hidden="true">
+          <div className={`project-push-track project-push-track--${transitioning.direction}`}>
+            {(transitioning.direction === "next" ? [p, transitioning.target] : [transitioning.target, p]).map((project, index) => (
+              <div className="project-push-panel" key={`${project.id}-${index}`}>
+                <img src={project.hero} alt="" />
+              </div>
+            ))}
+          </div>
+        </div>,
+        document.body
+      ) : null}
 
       {/* Fixed back button — sits just below the pinned nav */}
       <button className="pd-back-fixed" onClick={() => go(backRoute)}>
@@ -518,36 +613,42 @@ function ProjectPage({ id, go, from }) {
       </button>
 
       {/* Fullscreen cover image */}
-      <div className="pd-hero">
+      <div className="pd-hero" onTouchStart={handleHeroTouchStart} onTouchEnd={handleHeroTouchEnd}>
         <img src={p.hero} alt={pick(p, "name")} />
-        <div className="pd-hero-ovr">
-          <div className="pd-hero-top">
-            <span>{p.code} · {p.brand}</span>
-          </div>
-          <div className="pd-hero-bot">
-            <h1 className="pd-hero-title">{pick(p, "name")}</h1>
-          </div>
-        </div>
+        <button
+          className="pd-hero-nav pd-hero-nav--prev"
+          aria-label={`Previous project: ${pick(prev, "name")}`}
+          onClick={() => navigateProject(prev, "prev")}>
+          <span className="pd-hero-nav-preview" aria-hidden="true"><img src={prev.hero} alt="" /></span>
+          <span className="pd-hero-nav-arrow" aria-hidden="true">←</span>
+        </button>
+        <button
+          className="pd-hero-nav pd-hero-nav--next"
+          aria-label={`Next project: ${pick(next, "name")}`}
+          onClick={() => navigateProject(next, "next")}>
+          <span className="pd-hero-nav-preview" aria-hidden="true"><img src={next.hero} alt="" /></span>
+          <span className="pd-hero-nav-arrow" aria-hidden="true">→</span>
+        </button>
       </div>
 
       {/* Info + gallery in a centered container */}
       <div className="pd-page">
-        <dl className="pd-split-meta">
-          <div><dt>{t("location")}</dt><dd>{pick(p, "location")}</dd></div>
-          <div><dt>{t("year")}</dt><dd>{p.year}</dd></div>
-          <div><dt>{t("size")}</dt><dd>{p.size}</dd></div>
-          <div><dt>{t("pd_type")}</dt><dd>{pick(p, "type")}</dd></div>
-          <div><dt>{t("status")}</dt><dd>{t(p.status)}</dd></div>
-        </dl>
-        {pick(p, "summary") ? <p className="pd-split-summary">{pick(p, "summary")}</p> : null}
-        <div className="pd-split-body">
-          {bodyArr.map(([h, par], i) =>
-          <div key={i} className="pd-split-section">
-              <h3>{t(h) !== h ? t(h) : h}</h3>
-              <p>{par}</p>
+        <h1 className="pd-page-title-outside">{pick(p, "name")}</h1>
+        <h2 className="pd-section-title">{t("pd_details")}</h2>
+        <dl className="pd-meta-grid">
+          {projectMeta.map(([label, value]) => (
+            <div className="pd-meta-card" key={label}>
+              <dt>{t(label)}</dt>
+              <dd>{value || "—"}</dd>
             </div>
-          )}
-        </div>
+          ))}
+        </dl>
+        {pick(p, "summary") ? (
+          <section className="pd-description">
+            <h2 className="pd-section-title">{t("pd_description")}</h2>
+            <p className="pd-split-summary">{pick(p, "summary")}</p>
+          </section>
+        ) : null}
       </div>
 
       {/* Gallery rows — full bleed */}
@@ -558,11 +659,25 @@ function ProjectPage({ id, go, from }) {
         </div>
       )}
 
-      {/* Next project */}
-      <div className="pd-page-next" onClick={handleNext}>
-        <span className="pd-split-next-label">{t("next_project")}</span>
-        <span className="pd-split-next-name">{pick(next, "name")} →</span>
-      </div>
+      {ReactDOM.createPortal(
+        <div
+          className={`pd-scroll-progress ${transitioning ? "is-transitioning" : ""}`}
+          role="progressbar"
+          aria-label="Page progress"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow={Math.round(scrollProgress)}>
+          <span className="pd-scroll-progress-track" aria-hidden="true">
+            <span
+              className="pd-scroll-progress-fill"
+              style={{
+                transform: `scaleX(${scrollProgress / 100})`,
+                background: scrollProgress >= 99.5 ? PROJECT_PROGRESS_GRADIENT : progressColorAt(scrollProgress),
+              }} />
+          </span>
+        </div>,
+        document.body
+      )}
     </div>);
 
 }

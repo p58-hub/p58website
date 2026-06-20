@@ -117,18 +117,6 @@ function Nav({ route, go }) {
     }
   }, [menuOpen, isMobile]);
 
-  // open search on ⌘K / Ctrl+K — feels macOS-native
-  useEffect(() => {
-    const onKey = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        setSearchOpen(true);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
   // Hide the header once the footer scrolls into view — direct DOM toggle, no React state.
   useEffect(() => {
     document.body.classList.remove("at-footer");
@@ -192,7 +180,6 @@ function Nav({ route, go }) {
         <div className="nav-right">
           <button className="nav-icon" aria-label="Search" onClick={() => setSearchOpen(true)}>
             <SearchIcon />
-            <span className="kbd">⌘K</span>
           </button>
 
           <div className="nav-menu-wrap" ref={menuRef}>
