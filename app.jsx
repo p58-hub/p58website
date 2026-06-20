@@ -142,7 +142,17 @@ function App() {
     restoreRef.current = null;
     setRoute(next);
     if (name !== "project") {
-      requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "instant" }));
+      if (opts.scrollTo) {
+        const sel = opts.scrollTo;
+        const tryScroll = (n) => {
+          const el = document.querySelector(sel);
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+          else if (n > 0) requestAnimationFrame(() => tryScroll(n - 1));
+        };
+        requestAnimationFrame(() => tryScroll(30));
+      } else {
+        requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "instant" }));
+      }
     }
   };
 

@@ -685,7 +685,7 @@ function ProjectPage({ id, go, from, transitionDirection }) {
 /* ================== PEOPLE — three dashboard-managed profiles ================== */
 function AgencyPage() {
   const pick = window.usePick();
-  const people = TEAM.slice(0, 3);
+  const people = TEAM;
   const [selectedPerson, setSelectedPerson] = useS(null);
   const site = window.normaliseSiteSettings ? window.normaliseSiteSettings(
     (() => { try { const stored = JSON.parse(localStorage.getItem(window.P58_STORE_KEY || "p58_data_v1") || "null"); return stored && stored.site ? stored.site : {}; } catch (e) { return {}; } })()

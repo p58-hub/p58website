@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-<link rel="stylesheet" href="styles.css?v=118" />
+<link rel="stylesheet" href="styles.css?v=121" />
 </head>
 <body>
 <div id="root"></div>
@@ -20,9 +20,28 @@
 <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
 <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 
+<!-- EmailJS — sends project-inquiry notifications to your inbox (no backend needed). -->
+<script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+<script>
+  /* ===========================================================================
+     PROJECT-INQUIRY EMAIL — paste your 3 EmailJS values here to turn on emails.
+     1. Create a free account at https://www.emailjs.com
+     2. Add an email service connected to your Gmail (g.grigoriadis@project58.gr)
+     3. Create an email template; copy the Service ID, Template ID, Public Key.
+     Until these are filled in, inquiries are still saved in the dashboard —
+     they just won't auto-email yet.
+     =========================================================================== */
+  window.P58_EMAILJS = {
+    publicKey:  "",   // e.g. "AbC123..."
+    serviceId:  "",   // e.g. "service_xxx"
+    templateId: "",   // e.g. "template_xxx"
+    toEmail:    "g.grigoriadis@project58.gr",
+  };
+</script>
+
 <script type="text/babel" src="data.jsx?v=119"></script>
 <script type="text/babel" src="i18n.jsx?v=109"></script>
-<script type="text/babel" src="chrome.jsx?v=108"></script>
+<script type="text/babel" src="chrome.jsx?v=109"></script>
 <script type="text/babel" src="pages.jsx?v=118"></script>
 <script type="text/babel" src="app.jsx?v=110"></script>
 </body>

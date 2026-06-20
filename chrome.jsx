@@ -234,7 +234,7 @@ function Nav({ route, go }) {
                 role="menuitem"
                 onMouseEnter={() => setMenuPreviewKey("contact")}
                 onFocus={() => setMenuPreviewKey("contact")}
-                onClick={() => {setMenuOpen(false);window.location.href = "mailto:g.grigoriadis@project58.gr";}}>
+                onClick={() => {setMenuOpen(false);go({ name: "home" }, { scrollTo: "footer.foot" });}}>
                   <span>{t("contact")}</span><span className="ar">↗</span>
                 </button>
                 <button
@@ -352,7 +352,7 @@ function Nav({ route, go }) {
           </button>
           <button
           className="mobile-drawer-link"
-          onClick={() => {setMenuOpen(false);window.location.href = "mailto:g.grigoriadis@project58.gr";}}>
+          onClick={() => {setMenuOpen(false);go({ name: "home" }, { scrollTo: "footer.foot" });}}>
             <span>{t("contact")}</span><span className="ar">↗</span>
           </button>
           <div className="mobile-drawer-footer">
@@ -576,12 +576,16 @@ function Footer({ go }) {
   const t = window.useT();
   const site = useSiteSettings();
   const contact = site.contact || {};
+  const [inquiryOpen, setInquiryOpen] = useState(false);
   return (
     <footer className="foot">
       <div className="foot-top foot-top-2col" style={{ padding: "0px", textAlign: "left" }}>
         <div className="foot-big">
           <img src="assets/logo-black.svg" alt="Project58" className="foot-logo" style={{ height: 28, marginBottom: 24, display: "block", filter: "invert(1)" }} />
           {site.foot_big || t("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }}>{site.foot_big_em || t("foot_big_em")}</em>
+          <div className="foot-cta">
+            <button className="foot-start-btn" onClick={() => setInquiryOpen(true)}>Start a project<span className="ar">→</span></button>
+          </div>
         </div>
         <div className="foot-col">
           <h4>{contact.location_label}</h4>
@@ -596,8 +600,171 @@ function Footer({ go }) {
         <span className="center">{site.foot_copy_mid || t("foot_copy_mid")}</span>
         <span className="right">{site.foot_copy_right || t("foot_copy_right")}</span>
       </div>
+      <InquiryForm open={inquiryOpen} onClose={() => setInquiryOpen(false)} site={site} />
     </footer>);
 
 }
 
-Object.assign(window, { Nav, Footer });
+/* ===== Project inquiry form ===== */
+const INQUIRY_STORE_KEY = "p58_inquiries_v1";
+
+function saveInquiry(inquiry) {
+  try {
+    const list = JSON.parse(localStorage.getItem(INQUIRY_STORE_KEY) || "[]");
+    list.unshift(inquiry);
+    localStorage.setItem(INQUIRY_STORE_KEY, JSON.stringify(list));
+    return true;
+  } catch (e) { return false; }
+}
+
+async function notifyInquiry(inquiry) {
+  const cfg = window.P58_EMAILJS || {};
+  if (window.emailjs && cfg.publicKey && cfg.serviceId && cfg.templateId) {
+    try {
+      await window.emailjs.send(cfg.serviceId, cfg.templateId, {
+        to_email: cfg.toEmail || "g.grigoriadis@project58.gr",
+        from_name: inquiry.name,
+        reply_to: inquiry.email,
+        subject: `New project inquiry — ${inquiry.type || "General"}`,
+        project_type: inquiry.type,
+        location: inquiry.location,
+        size: inquiry.size,
+        timeline: inquiry.timeline,
+        budget: inquiry.budget,
+        message: inquiry.message,
+        name: inquiry.name,
+        email: inquiry.email,
+        phone: inquiry.phone,
+        company: inquiry.company,
+        submitted_at: new Date(inquiry.createdAt).toLocaleString(),
+      }, { publicKey: cfg.publicKey });
+      return "sent";
+    } catch (e) { console.warn("EmailJS send failed:", e); return "error"; }
+  }
+  return "skipped";
+}
+
+const INQUIRY_TYPES = ["Retail", "Hospitality", "Residential", "Workplace", "Renovation", "Other"];
+const INQUIRY_TIMELINES = ["As soon as possible", "Within 1–3 months", "Within 3–6 months", "Flexible / exploring"];
+const INQUIRY_BUDGETS = ["Not sure yet", "Under €50k", "€50k–€150k", "€150k–€400k", "€400k+"];
+
+function InquiryForm({ open, onClose, site }) {
+  const phone = (site && site.contact && site.contact.phone) || "";
+  const phoneUrl = (site && site.contact && site.contact.phone_url) || (phone ? `tel:${phone.replace(/[^\d+]/g, "")}` : "");
+  const [step, setStep] = useState(0);
+  const [done, setDone] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [f, setF] = useState({ type: "", location: "", size: "", timeline: "", budget: "", message: "", name: "", email: "", phone: "", company: "" });
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => { document.body.style.overflow = prev; document.removeEventListener("keydown", onKey); };
+  }, [open]);
+
+  useEffect(() => { if (open) { setStep(0); setDone(false); setSending(false); } }, [open]);
+
+  if (!open) return null;
+
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim());
+  const steps = [
+    { title: "What are you planning?", valid: !!f.type },
+    { title: "About the space", valid: true },
+    { title: "A few details", valid: true },
+    { title: "How can we reach you?", valid: f.name.trim() && emailValid },
+  ];
+  const last = steps.length - 1;
+  const canNext = steps[step].valid;
+
+  const submit = async () => {
+    if (sending) return;
+    setSending(true);
+    const inquiry = { id: "inq-" + Date.now().toString(36), createdAt: Date.now(), status: "new", ...f };
+    saveInquiry(inquiry);
+    await notifyInquiry(inquiry);
+    setSending(false);
+    setDone(true);
+  };
+
+  const body = done ? (
+    <div className="inquiry-done">
+      <div className="inquiry-done-mark">✓</div>
+      <h2>Thank you — we’ve got your details.</h2>
+      <p>We’ll review your project and get back to you by email within two business days.</p>
+      {phone ? (
+        <p className="inquiry-call">Prefer to talk now? Call us at <a href={phoneUrl}>{phone}</a>.</p>
+      ) : null}
+      <button className="inquiry-btn primary" onClick={onClose}>Close</button>
+    </div>
+  ) : (
+    <React.Fragment>
+      <div className="inquiry-progress">
+        {steps.map((s, i) => <span key={i} className={`inquiry-dot ${i === step ? "on" : ""} ${i < step ? "done" : ""}`} />)}
+      </div>
+      <div className="inquiry-step-kind">Step {step + 1} of {steps.length}</div>
+      <h2 className="inquiry-title">{steps[step].title}</h2>
+
+      {step === 0 && (
+        <div className="inquiry-types">
+          {INQUIRY_TYPES.map((tp) => (
+            <button key={tp} className={`inquiry-type ${f.type === tp ? "on" : ""}`} onClick={() => { set("type", tp); }}>{tp}</button>
+          ))}
+        </div>
+      )}
+      {step === 1 && (
+        <div className="inquiry-fields">
+          <label>Location<input type="text" value={f.location} onChange={(e) => set("location", e.target.value)} placeholder="City / neighbourhood" /></label>
+          <label>Approximate size<input type="text" value={f.size} onChange={(e) => set("size", e.target.value)} placeholder="e.g. 120 m²" /></label>
+          <label>Timeline
+            <select value={f.timeline} onChange={(e) => set("timeline", e.target.value)}>
+              <option value="">Select…</option>
+              {INQUIRY_TIMELINES.map((tl) => <option key={tl} value={tl}>{tl}</option>)}
+            </select>
+          </label>
+        </div>
+      )}
+      {step === 2 && (
+        <div className="inquiry-fields">
+          <label>Budget range
+            <select value={f.budget} onChange={(e) => set("budget", e.target.value)}>
+              <option value="">Select…</option>
+              {INQUIRY_BUDGETS.map((b) => <option key={b} value={b}>{b}</option>)}
+            </select>
+          </label>
+          <label>Tell us about the project<textarea rows="4" value={f.message} onChange={(e) => set("message", e.target.value)} placeholder="What you have in mind, the space, goals…" /></label>
+        </div>
+      )}
+      {step === 3 && (
+        <div className="inquiry-fields">
+          <label>Name<input type="text" value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="Your name" /></label>
+          <label>Email<input type="email" value={f.email} onChange={(e) => set("email", e.target.value)} placeholder="you@email.com" /></label>
+          <label>Phone<input type="tel" value={f.phone} onChange={(e) => set("phone", e.target.value)} placeholder="Optional" /></label>
+          <label>Company<input type="text" value={f.company} onChange={(e) => set("company", e.target.value)} placeholder="Optional" /></label>
+        </div>
+      )}
+
+      <div className="inquiry-nav">
+        {step > 0 ? <button className="inquiry-btn ghost" onClick={() => setStep(step - 1)}>Back</button> : <span />}
+        {step < last
+          ? <button className="inquiry-btn primary" onClick={() => canNext && setStep(step + 1)} disabled={!canNext}>Continue</button>
+          : <button className="inquiry-btn primary" onClick={submit} disabled={!canNext || sending}>{sending ? "Sending…" : "Send inquiry"}</button>}
+      </div>
+    </React.Fragment>
+  );
+
+  return ReactDOM.createPortal(
+    <div className="inquiry-overlay" role="dialog" aria-modal="true" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="inquiry-card" onMouseDown={(e) => e.stopPropagation()}>
+        <button className="inquiry-close" aria-label="Close" onClick={onClose}>×</button>
+        {body}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+Object.assign(window, { Nav, Footer, InquiryForm });

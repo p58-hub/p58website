@@ -1,0 +1,9 @@
+PROJECT58 — TODO
+================
+
+[ ] Create dashboard accounts
+    - Add authentication / login for the dashboard so it isn't open to everyone.
+
+[ ] Projects: add a toggle to hide the projects and display all the categories
+    - In the Projects view, a switch that collapses the project rows and
+      shows just the list of categories instead.
