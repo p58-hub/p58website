@@ -29,6 +29,7 @@ function Nav({ route, go }) {
   const { lang, setLang } = window.useLang();
   const isRetail = route.name === "interiors" || route.name === "project";
   const isResidential = route.name === "architecture";
+  const isProjects = route.name === "projects";
   const isAgency = route.name === "agency";
   const isHome = route.name === "home";
 
@@ -57,8 +58,8 @@ function Nav({ route, go }) {
       window.addEventListener("scroll", onScroll, { passive: true });
       return () => window.removeEventListener("scroll", onScroll);
     }
-    // interiors + architecture: nav always visible (sticky top)
-    if (route.name === "interiors" || route.name === "architecture") {
+    // project indexes: nav always visible (sticky top)
+    if (route.name === "projects" || route.name === "interiors" || route.name === "architecture") {
       document.body.classList.remove("nav-scroll-hide");
       return;
     }
@@ -153,16 +154,17 @@ function Nav({ route, go }) {
   // On project + interiors + architecture pages the nav is sticky/fixed (no layout space).
   const isInteriors = route.name === "interiors";
   const isArchitecture = route.name === "architecture";
+  const isPortfolioIndex = isInteriors || isProjects;
   useEffect(() => {
     document.body.classList.toggle("project-page", isProject);
-    document.body.classList.toggle("interiors-page", isInteriors);
+    document.body.classList.toggle("interiors-page", isPortfolioIndex);
     document.body.classList.toggle("architecture-page", isArchitecture);
     return () => {
       document.body.classList.remove("project-page");
       document.body.classList.remove("interiors-page");
       document.body.classList.remove("architecture-page");
     };
-  }, [isProject, isInteriors, isArchitecture]);
+  }, [isProject, isPortfolioIndex, isArchitecture]);
 
   const projectForRoute = route.name === "project" ? PROJECTS.find((p) => p.id === route.id || p.slug === route.id) : null;
   const currentBrand = route.brand || (projectForRoute ? (projectForRoute.brandKey || (projectForRoute.brand === "Dinas" ? "dn" : "pg")) : null);
@@ -265,6 +267,39 @@ function Nav({ route, go }) {
             </div>
           );
         })() : null}
+        {isProjects ? (() => {
+          const activeType = route.type;
+          const activeBrand = activeType === "retail" && (route.brand === "pg" || route.brand === "dn") ? route.brand : null;
+          const projects = window.PROJECTS || [];
+          const visible = projects.filter((p) => {
+            if (!activeType) return true;
+            const category = (p.category || p.typology || "retail").toLowerCase();
+            const matchesType = activeType === "residential"
+              ? category === "residential" || category === "architecture"
+              : category === "retail";
+            if (!matchesType || !activeBrand) return matchesType;
+            return (p.brandKey || (p.brand === "Dinas" ? "dn" : "pg")) === activeBrand;
+          });
+          return (
+            <div className="nav-filter-row">
+              <div className="project-filter-groups">
+                <div className="interiors-filter">
+                  <button className={`filter-btn ${!activeType ? "on" : ""}`} onClick={() => go({ name: "projects" })}>{t("all")}</button>
+                  <button className={`filter-btn ${activeType === "retail" ? "on" : ""}`} onClick={() => go({ name: "projects", type: "retail" })}>{t("retail")}</button>
+                  <button className={`filter-btn ${activeType === "residential" ? "on" : ""}`} onClick={() => go({ name: "projects", type: "residential" })}>{t("residential")}</button>
+                </div>
+                {activeType === "retail" ? (
+                  <div className="interiors-filter brand-filter">
+                    <button className={`filter-btn ${!activeBrand ? "on" : ""}`} onClick={() => go({ name: "projects", type: "retail" })}>{t("all_brands")}</button>
+                    <button className={`filter-btn ${activeBrand === "pg" ? "on" : ""}`} onClick={() => go({ name: "projects", type: "retail", brand: "pg" })}>Protein Garden</button>
+                    <button className={`filter-btn ${activeBrand === "dn" ? "on" : ""}`} onClick={() => go({ name: "projects", type: "retail", brand: "dn" })}>Dinas</button>
+                  </div>
+                ) : null}
+              </div>
+              <div className="meta"><b>{visible.length}</b> {t("proj_word")}</div>
+            </div>
+          );
+        })() : null}
       </nav>
 
       {/* mobile fullscreen drawer */}
@@ -283,14 +318,9 @@ function Nav({ route, go }) {
             <span>{t("home")}</span><span className="ar">→</span>
           </button>
           <button
-          className={`mobile-drawer-link ${isRetail ? "on" : ""}`}
-          onClick={() => {setMenuOpen(false);go({ name: "interiors" });}}>
-            <span>{t("retail")}</span><span className="ar">→</span>
-          </button>
-          <button
-          className={`mobile-drawer-link ${isResidential ? "on" : ""}`}
-          onClick={() => {setMenuOpen(false);go({ name: "architecture" });}}>
-            <span>{t("residential")}</span><span className="ar">→</span>
+          className={`mobile-drawer-link ${isProjects || isRetail || isResidential ? "on" : ""}`}
+          onClick={() => {setMenuOpen(false);go({ name: "projects" });}}>
+            <span>{t("projects")}</span><span className="ar">→</span>
           </button>
           <button
           className={`mobile-drawer-link ${isAgency ? "on" : ""}`}
@@ -330,19 +360,30 @@ function SearchOverlay({ go, onClose }) {
   useEffect(() => {inputRef.current && inputRef.current.focus();}, []);
 
   const all = React.useMemo(() => {
-    const projects = (window.PROJECTS || []).map((p) => ({
+    const sourceProjects = window.PROJECTS || [];
+    const newestFirst = (a, b) =>
+      (Number(b.year) || 0) - (Number(a.year) || 0) ||
+      String(b.code || "").localeCompare(String(a.code || ""), undefined, { numeric: true });
+    const projects = sourceProjects.slice().sort(newestFirst).map((p) => ({
       kind: "project",
       label: pick(p, "name"),
       sub: `${p.brand} · ${pick(p, "location")} · ${p.year}`,
       code: p.code,
       onPick: () => go({ name: "project", id: p.slug || p.id })
     }));
-    const brands = [
-    { kind: "brand", label: "Protein Garden", sub: `${PROJECTS.filter((p) => (p.brandKey || (p.brand === "Dinas" ? "dn" : "pg")) === "pg").length} rooms · 2023–2026`, onPick: () => go({ name: "interiors", brand: "pg" }) },
-    { kind: "brand", label: "Dinas", sub: `${PROJECTS.filter((p) => (p.brandKey || (p.brand === "Dinas" ? "dn" : "pg")) === "dn").length} rooms · 2025–2026`, onPick: () => go({ name: "interiors", brand: "dn" }) }];
+    const countType = (type) => sourceProjects.filter((p) => {
+      const category = (p.category || p.typology || "retail").toLowerCase();
+      return type === "residential"
+        ? category === "residential" || category === "architecture"
+        : category === "retail";
+    }).length;
+    const types = [
+      { kind: "type", label: t("retail"), sub: `${countType("retail")} ${t("proj_word")}`, onPick: () => go({ name: "projects", type: "retail" }) },
+      { kind: "type", label: t("residential"), sub: `${countType("residential")} ${t("proj_word")}`, onPick: () => go({ name: "projects", type: "residential" }) }
+    ];
 
-    return [...brands, ...projects];
-  }, [pick]);
+    return [...types, ...projects];
+  }, [pick, t]);
 
   const filtered = React.useMemo(() => {
     if (!q.trim()) return all.slice(0, 8);
@@ -368,8 +409,8 @@ function SearchOverlay({ go, onClose }) {
   const groups = filtered.reduce((acc, r) => {
     (acc[r.kind] = acc[r.kind] || []).push(r);return acc;
   }, {});
-  const groupOrder = ["brand", "project"];
-  const groupTitles = { brand: t("retail_brands"), project: t("projects") };
+  const groupOrder = ["type", "project"];
+  const groupTitles = { type: t("project_types"), project: t("projects") };
 
   // build flat index → group/row mapping for highlight
   let flatIdx = -1;

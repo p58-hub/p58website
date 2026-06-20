@@ -13,7 +13,7 @@ const ALIAS = {
   "studio": "agency",
   "news": "agency",
 };
-const ROUTES = ["home", "architecture", "interiors", "agency"];
+const ROUTES = ["home", "projects", "architecture", "interiors", "agency"];
 
 function routeFromHash() {
   const h = (location.hash || "#home").replace("#", "");
@@ -23,6 +23,10 @@ function routeFromHash() {
   if (resolved && resolved.startsWith("interiors:")) {
     return { name: "interiors", brand: resolved.split(":")[1] };
   }
+  if (resolved && resolved.startsWith("projects:")) {
+    const [, type, brand] = resolved.split(":");
+    return { name: "projects", type, ...(brand ? { brand } : {}) };
+  }
   if (ROUTES.includes(resolved)) return { name: resolved };
   return { name: "home" };
 }
@@ -31,6 +35,7 @@ function hashFromRoute(r) {
   const name = ALIAS[r.name] || r.name;
   if (name === "project") return `project/${r.id}`;
   if (name === "interiors" && r.brand) return `interiors:${r.brand}`;
+  if (name === "projects" && r.type) return `projects:${r.type}${r.brand ? `:${r.brand}` : ""}`;
   return name;
 }
 
@@ -79,7 +84,11 @@ function App() {
     let from = r.from;
     if (name === "project" && !from && routeRef.current.name !== "project") {
       const cur = routeRef.current;
-      from = { name: cur.name, ...(cur.brand ? { brand: cur.brand } : {}) };
+      from = {
+        name: cur.name,
+        ...(cur.brand ? { brand: cur.brand } : {}),
+        ...(cur.type ? { type: cur.type } : {}),
+      };
     }
     const next = { ...r, name, ...(from ? { from } : {}) };
     const nextHash = hashFromRoute(next);
@@ -132,6 +141,7 @@ function App() {
 
   let page = null;
   if (route.name === "home")         page = <HomePage go={go} />;
+  if (route.name === "projects")     page = <ProjectsPage go={go} type={route.type} brand={route.brand} />;
   if (route.name === "architecture") page = <ArchitecturePage go={go} />;
   if (route.name === "interiors")    page = <InteriorsPage go={go} brand={route.brand} />;
   if (route.name === "agency")       page = <AgencyPage go={go} />;
@@ -140,8 +150,8 @@ function App() {
   return (
     <React.Fragment>
       <Nav route={route} go={go} />
-      <main key={route.name + (route.id || "") + (route.brand || "") + ":" + contentVersion} data-screen-label={pageLabel(route)}>{page}</main>
-      {route.name !== "project" && route.name !== "interiors" && route.name !== "architecture" && <Footer go={go} />}
+      <main key={route.name + (route.id || "") + (route.brand || "") + (route.type || "") + ":" + contentVersion} data-screen-label={pageLabel(route)}>{page}</main>
+      {route.name !== "project" && route.name !== "projects" && route.name !== "interiors" && route.name !== "architecture" && <Footer go={go} />}
       {zoom ? (
         <div className={`zoom-flight ${zoom.on ? "on" : ""}`} aria-hidden="true">
           <img
@@ -197,6 +207,7 @@ function App() {
 
 function pageLabel(r) {
   if (r.name === "home")         return "01 Home";
+  if (r.name === "projects")     return "02 Projects";
   if (r.name === "architecture") return "02 Architecture";
   if (r.name === "interiors")    return "03 Interiors";
   if (r.name === "agency")       return "04 Agency";

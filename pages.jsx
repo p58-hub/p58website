@@ -259,6 +259,7 @@ function HomePage({ go }) {
 
 function MobileHomePage({ go, featured, active, setActive, cur, catOf }) {
   const pick = window.usePick();
+  const t = window.useT();
   return (
     <div className="mhome">
       <section
@@ -312,6 +313,16 @@ function MobileHomePage({ go, featured, active, setActive, cur, catOf }) {
             </a>
         )}
       </section>
+      <div className="mhome-all-projects">
+        <a
+          href="#projects"
+          onClick={(e) => {
+            e.preventDefault();
+            go({ name: "projects" });
+          }}>
+          <span>{t("see_all_projects")}</span><span aria-hidden="true">→</span>
+        </a>
+      </div>
     </div>);
 }
 
@@ -378,6 +389,37 @@ function InteriorsPage({ go, brand }) {
         )}
       </div>
     </div>);
+}
+
+/* ================== PROJECTS — unified list with type filter ================== */
+function ProjectsPage({ go, type, brand }) {
+  const normalisedType = type === "retail" || type === "residential" ? type : null;
+  const normalisedBrand = normalisedType === "retail" && (brand === "pg" || brand === "dn") ? brand : null;
+  const filtered = PROJECTS.filter((p) => {
+    if (!normalisedType) return true;
+    const category = (p.category || p.typology || "retail").toLowerCase();
+    if (normalisedType === "residential") {
+      return category === "residential" || category === "architecture";
+    }
+    if (category !== "retail") return false;
+    return !normalisedBrand || BRAND_KEY(p) === normalisedBrand;
+  }).sort((a, b) =>
+    (Number(b.year) || 0) - (Number(a.year) || 0) ||
+    String(b.code || "").localeCompare(String(a.code || ""), undefined, { numeric: true })
+  );
+
+  return (
+    <div className="page-enter" key={`${normalisedType || "all"}:${normalisedBrand || "all"}`}>
+      <div className="proj-list">
+        {filtered.map((p, i) =>
+          <ProjListRow key={p.id} project={p} go={go} idx={i + 1} />
+        )}
+        {filtered.length === 0 && (
+          <div className="proj-list-empty">No projects in this category yet.</div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function ProjListRow({ project, go, idx }) {
@@ -448,7 +490,8 @@ function ProjectPage({ id, go, from }) {
   useE(() => {window.scrollTo({ top: 0, behavior: "instant" });}, [id]);
 
   const backRoute = from || { name: "home" };
-  const backLabel = backRoute.name === "interiors" ? "← Retail"
+  const backLabel = backRoute.name === "projects" ? "← Projects"
+    : backRoute.name === "interiors" ? "← Retail"
     : backRoute.name === "architecture" ? "← Architecture"
     : backRoute.name === "agency" ? "← Agency"
     : "← Home";
@@ -682,4 +725,4 @@ function AgencyFooter() {
   );
 }
 
-Object.assign(window, { HomePage, AllProjectsGrid, Tile, InteriorsPage, ArchitecturePage, AgencyPage, AgencyFooter, ProjectPage });
+Object.assign(window, { HomePage, AllProjectsGrid, Tile, ProjectsPage, InteriorsPage, ArchitecturePage, AgencyPage, AgencyFooter, ProjectPage });

@@ -94,8 +94,10 @@ const DICT = {
     open_kbd: "open",
     close_kbd: "close",
     retail_brands: "Retail brands",
+    project_types: "Project types",
     projects: "Projects",
     all: "All",
+    all_brands: "All brands",
 
     // mobile drawer
     menu_eyebrow: "Project58 · Menu",
@@ -105,6 +107,7 @@ const DICT = {
     home_strip_eyebrow: "/01 — Interiors · Multi-site retail across Athens & Piraeus",
     home_strip_h: "Selected work.",
     see_more_projects: "See more projects",
+    see_all_projects: "See all projects",
     all_rooms_cta: "All projects",
     view_project: "View project",
     home_note_eyebrow: "/02 — Note",
@@ -233,8 +236,10 @@ const DICT = {
     open_kbd: "άνοιγμα",
     close_kbd: "κλείσιμο",
     retail_brands: "Brands λιανικής",
+    project_types: "Τύποι έργων",
     projects: "Έργα",
     all: "Όλα",
+    all_brands: "Όλα τα brands",
 
     // mobile drawer
     menu_eyebrow: "Project58 · Μενού",
@@ -244,6 +249,7 @@ const DICT = {
     home_strip_eyebrow: "/01 — Εσωτερικοί χώροι · Λιανική σε πολλαπλά σημεία στην Αθήνα και τον Πειραιά",
     home_strip_h: "Επιλεγμένα έργα.",
     see_more_projects: "Δείτε περισσότερα έργα",
+    see_all_projects: "Δείτε όλα τα έργα",
     all_rooms_cta: "Όλα τα έργα",
     view_project: "Δες το έργο",
     home_note_eyebrow: "/02 — Σημείωση",

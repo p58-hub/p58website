@@ -112,6 +112,32 @@ body.architecture-page main { padding-top: 0; }
   gap: 32px;
   padding: 6px 0 12px;
 }
+.project-filter-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.brand-filter .filter-btn {
+  position: relative;
+  padding-left: 4px;
+  padding-right: 4px;
+  border-color: transparent;
+}
+.brand-filter .filter-btn:hover:not(.on),
+.brand-filter .filter-btn.on {
+  background: transparent;
+  color: var(--ink);
+  border-color: transparent;
+}
+.brand-filter .filter-btn.on::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 1px;
+  height: 1px;
+  background: currentColor;
+}
 body.at-footer[data-route="home"] main {
   height: 100vh;
   height: 100dvh;
@@ -2242,6 +2268,26 @@ main h3 em {
   }
   .nav-icon .kbd { display: none; }
   .nav-icon { padding: 8px; }
+  .nav-filter-row {
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 10px;
+  }
+  .nav-filter-row .interiors-filter {
+    flex-wrap: nowrap;
+    gap: 6px;
+    min-width: 0;
+  }
+  .nav-filter-row .filter-btn {
+    padding: 7px 9px;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    white-space: nowrap;
+  }
+  .nav-filter-row .meta {
+    flex: 0 0 auto;
+    font-size: 9px;
+  }
 
   /* mobile chrome stays compact while preserving navigation. */
   .nav-right .lang-toggle { display: none !important; }
@@ -2255,7 +2301,6 @@ main h3 em {
   }
   .nav.mobile-home-top .nav-logo img { filter: invert(1); }
   .nav.mobile-home-top .nav-icon { color: #fff; }
-  .nav.mobile-home-top .nav-menu-wrap { display: none !important; }
 
   /* subnav: horizontally scrollable strip — sits under the taller topbar */
   .subnav {
@@ -3281,6 +3326,26 @@ body[data-route="home"].hz-at-hero .nav {
     width: 100% !important;
   }
   .vhome-hcap { padding-top: 13px; }
+  .mhome-all-projects {
+    padding: 8px var(--gutter) 56px;
+  }
+  .mhome-all-projects a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 20px 0;
+    border-top: 1px solid var(--rule-strong);
+    border-bottom: 1px solid var(--rule-strong);
+    font-family: var(--sans);
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .mhome-all-projects a span:last-child {
+    font-size: 18px;
+    color: var(--ink-3);
+  }
   .hz-end {
     width: 100%;
     height: auto;
