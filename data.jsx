@@ -374,9 +374,9 @@ const NEWS = [
 ];
 
 const TEAM = [
-  { name: "Nikos Andreadis", role: "Founding Partner", note: "Dipl. Arch. AUTh · RIBA Part 3" },
-  { name: "Eleni Karali", role: "Partner, Retail", note: "Dipl. Arch. NTUA · 14 years practice" },
-  { name: "Dimitris Vlachos", role: "Senior Architect", note: "M.Arch. ETH Zürich" },
+  { name: "Georgios Grigoriadis", role: "Founder", note: "Founder of Project58, leading the studio’s architectural direction and project delivery.", portrait: "assets/people/georgios-grigoriadis.jpg" },
+  { name: "Naveen Kumar", role: "Architect", note: "Architect working across concept design, development, and detailed coordination.", portrait: "assets/people/naveen-kumar.png" },
+  { name: "Evagelos Kastavenakis", role: "Architect", note: "Architect focused on spatial development, material research, and project execution.", portrait: "assets/people/evagelos-kastavenakis.png" },
   { name: "Maria Pappa", role: "Architect", note: "Dipl. Arch. AUTh" },
   { name: "Sofia Ioannou", role: "Project Architect", note: "Dipl. Arch. TU Delft" },
   { name: "Andreas Lekkas", role: "Architect · Model-maker", note: "M.Arch. KU Leuven" },
@@ -581,9 +581,9 @@ const NEWS_GR = [
 ];
 
 const TEAM_GR = [
-  { role_gr: "Ιδρυτής Εταίρος", note_gr: "Δίπλ. Αρχ. ΑΠΘ · RIBA Part 3" },
-  { role_gr: "Εταίρος, Λιανική", note_gr: "Δίπλ. Αρχ. ΕΜΠ · 14 χρόνια άσκησης" },
-  { role_gr: "Senior Αρχιτέκτων", note_gr: "M.Arch. ETH Ζυρίχης" },
+  { role_gr: "Ιδρυτής", note_gr: "Ιδρυτής του Project58, με ευθύνη για την αρχιτεκτονική κατεύθυνση και την υλοποίηση των έργων του γραφείου." },
+  { role_gr: "Αρχιτέκτονας", note_gr: "Αρχιτέκτονας με αντικείμενο τον σχεδιασμό, την ανάπτυξη και τον λεπτομερή συντονισμό των έργων." },
+  { role_gr: "Αρχιτέκτονας", note_gr: "Αρχιτέκτονας με έμφαση στη χωρική ανάπτυξη, την έρευνα υλικών και την υλοποίηση έργων." },
   { role_gr: "Αρχιτέκτων", note_gr: "Δίπλ. Αρχ. ΑΠΘ" },
   { role_gr: "Αρχιτέκτων Έργου", note_gr: "Δίπλ. Αρχ. TU Delft" },
   { role_gr: "Αρχιτέκτων · Μακετίστας", note_gr: "M.Arch. KU Leuven" },
@@ -611,6 +611,17 @@ TIMELINE.forEach((r, i) => { if (TIMELINE_GR[i]) Object.assign(r, TIMELINE_GR[i]
 const P58_STORE_KEY = "p58_data_v1";
 const DEFAULT_SITE_SETTINGS = {
   heroGallery: { interval: 5200 },
+  menuImages: {
+    home: "assets/projects/pg-panormou/01.png",
+    projects: "assets/projects/pg-skoufa/01.png",
+    agency: "assets/projects/dn-kolonaki/01.png",
+    contact: "assets/projects/dn-dousmani/01.png",
+  },
+  people: {
+    title: "People",
+    title_gr: "Άνθρωποι",
+    hero: "assets/people/people-hero-v2.png",
+  },
   foot_big: "Let's design your",
   foot_big_em: "next space!",
   foot_copy_left: "© 2025 — 2026 Project58 Architecture",
@@ -642,6 +653,17 @@ function normaliseSiteSettings(site = {}) {
     foot_copy_right: site.foot_copy_right || DEFAULT_SITE_SETTINGS.foot_copy_right,
     heroGallery: {
       interval: Math.max(2000, Number((site.heroGallery || {}).interval) || 5200),
+    },
+    menuImages: {
+      ...DEFAULT_SITE_SETTINGS.menuImages,
+      ...(site.menuImages || {}),
+    },
+    people: {
+      ...DEFAULT_SITE_SETTINGS.people,
+      ...(site.people || {}),
+      hero: !site.people || !site.people.hero || site.people.hero === "assets/people/people-hero.png"
+        ? DEFAULT_SITE_SETTINGS.people.hero
+        : site.people.hero,
     },
     contact: {
       ...DEFAULT_SITE_SETTINGS.contact,
@@ -708,7 +730,19 @@ function applyP58ContentFromStore() {
       NEWS.splice(0, NEWS.length, ...sortByOrder(source.news.map((n, order) => ({ order, ...n }))));
     }
     if (Array.isArray(source.team) && source.team.length) {
-      TEAM.splice(0, TEAM.length, ...sortByOrder(source.team.map((m, order) => ({ order, ...m }))));
+      const team = sortByOrder(source.team.map((m, order) => ({ order, ...m })));
+      if (team[0] && team[0].name === "Nikos Andreadis") {
+        team[0] = { ...team[0], name: "Georgios Grigoriadis", role: "Founder", role_gr: "Ιδρυτής", note: "Founder of Project58, leading the studio’s architectural direction and project delivery.", note_gr: "Ιδρυτής του Project58, με ευθύνη για την αρχιτεκτονική κατεύθυνση και την υλοποίηση των έργων του γραφείου.", portrait: "assets/people/georgios-grigoriadis.jpg" };
+      } else if (team[0] && team[0].name === "Georgios Grigoriadis" && !team[0].portrait) {
+        team[0] = { ...team[0], portrait: "assets/people/georgios-grigoriadis.jpg" };
+      }
+      if (team[1] && team[1].name === "Eleni Karali") {
+        team[1] = { ...team[1], name: "Naveen Kumar", role: "Architect", role_gr: "Αρχιτέκτονας", note: "Architect working across concept design, development, and detailed coordination.", note_gr: "Αρχιτέκτονας με αντικείμενο τον σχεδιασμό, την ανάπτυξη και τον λεπτομερή συντονισμό των έργων.", portrait: "assets/people/naveen-kumar.png" };
+      }
+      if (team[2] && team[2].name === "Dimitris Vlachos") {
+        team[2] = { ...team[2], name: "Evagelos Kastavenakis", role: "Architect", role_gr: "Αρχιτέκτονας", note: "Architect focused on spatial development, material research, and project execution.", note_gr: "Αρχιτέκτονας με έμφαση στη χωρική ανάπτυξη, την έρευνα υλικών και την υλοποίηση έργων.", portrait: "assets/people/evagelos-kastavenakis.png" };
+      }
+      TEAM.splice(0, TEAM.length, ...team);
     }
   } catch (e) { /* ignore malformed overrides */ }
 }

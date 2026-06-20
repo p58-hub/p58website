@@ -7,6 +7,7 @@ const ALIAS = {
   "dinas": "interiors",
   "studio": "agency",
   "news": "agency",
+  "people": "agency",
 };
 const ROUTES = ["home", "projects", "architecture", "interiors", "agency"];
 
@@ -41,6 +42,7 @@ function routeFromLocation() {
     const brand = params.get("brand");
     return { name: "interiors", ...(brand ? { brand } : {}) };
   }
+  if (parts[0] === "people") return { name: "agency" };
   if (ROUTES.includes(parts[0])) return { name: parts[0] };
   return { name: "home" };
 }
@@ -49,6 +51,7 @@ function pathFromRoute(r) {
   const name = ALIAS[r.name] || r.name;
   if (name === "home") return "/";
   if (name === "project") return `/projects/${encodeURIComponent(r.id)}`;
+  if (name === "agency") return "/people";
   const params = new URLSearchParams();
   if (r.type) params.set("type", r.type);
   if (r.brand) params.set("brand", r.brand);
@@ -214,7 +217,7 @@ function App() {
       ) : null}
       <Nav route={route} go={go} />
       <main key={route.name + (route.id || "") + (route.brand || "") + (route.type || "") + ":" + contentVersion} data-screen-label={pageLabel(route)}>{page}</main>
-      {route.name !== "project" && route.name !== "projects" && route.name !== "interiors" && route.name !== "architecture" && <Footer go={go} />}
+      {route.name !== "project" && route.name !== "projects" && route.name !== "interiors" && route.name !== "architecture" && route.name !== "agency" && <Footer go={go} />}
       {zoom ? (
         <div className={`zoom-flight ${zoom.on ? "on" : ""}`} aria-hidden="true">
           <img
@@ -238,7 +241,7 @@ function pageLabel(r) {
   if (r.name === "projects")     return "02 Projects";
   if (r.name === "architecture") return "02 Architecture";
   if (r.name === "interiors")    return "03 Interiors";
-  if (r.name === "agency")       return "04 Agency";
+  if (r.name === "agency")       return "04 People";
   if (r.name === "project")      return "05 Project Detail · " + (r.id || "");
   return r.name;
 }

@@ -84,7 +84,7 @@ const DICT = {
     // nav
     retail: "Retail",
     residential: "Residential",
-    agency: "Agency",
+    agency: "People",
     contact: "Contact",
     home: "Home",
     menu: "Menu",
@@ -231,7 +231,7 @@ const DICT = {
     // nav
     retail: "Λιανική",
     residential: "Κατοικίες",
-    agency: "Γραφείο",
+    agency: "Άνθρωποι",
     contact: "Επικοινωνία",
     home: "Αρχική",
     menu: "Μενού",

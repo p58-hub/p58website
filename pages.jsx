@@ -547,7 +547,7 @@ function ProjectPage({ id, go, from, transitionDirection }) {
   const backLabel = backRoute.name === "projects" ? "← Projects"
     : backRoute.name === "interiors" ? "← Retail"
     : backRoute.name === "architecture" ? "← Architecture"
-    : backRoute.name === "agency" ? "← Agency"
+    : backRoute.name === "agency" ? "← People"
     : "← Home";
 
   const navigateProject = (target, direction) => {
@@ -682,8 +682,78 @@ function ProjectPage({ id, go, from, transitionDirection }) {
 
 }
 
-/* ================== AGENCY — studio + team + news combined ================== */
-function AgencyPage({ go }) {
+/* ================== PEOPLE — three dashboard-managed profiles ================== */
+function AgencyPage() {
+  const pick = window.usePick();
+  const people = TEAM.slice(0, 3);
+  const [selectedPerson, setSelectedPerson] = useS(null);
+  const site = window.normaliseSiteSettings ? window.normaliseSiteSettings(
+    (() => { try { const stored = JSON.parse(localStorage.getItem(window.P58_STORE_KEY || "p58_data_v1") || "null"); return stored && stored.site ? stored.site : {}; } catch (e) { return {}; } })()
+  ) : window.DEFAULT_SITE_SETTINGS || {};
+  const peopleSettings = site.people || { title: "People", title_gr: "Άνθρωποι", hero: "assets/people/people-hero-v2.png" };
+  useE(() => {
+    if (!selectedPerson) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const onKey = (event) => { if (event.key === "Escape") setSelectedPerson(null); };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [selectedPerson]);
+  return (
+    <div className="people-mosaic-page page-enter">
+      <h1 className="people-mosaic-title">{pick(peopleSettings, "title")}</h1>
+      <div className="people-mosaic-grid">
+        {people.map((person, index) => {
+          const initials = String(person.name || "")
+            .split(/\s+/)
+            .filter(Boolean)
+            .slice(0, 2)
+            .map((part) => part[0])
+            .join("");
+          const image = person.portrait || peopleSettings.hero;
+          return (
+            <article
+              className={`people-mosaic-card people-mosaic-card--${index + 1}`}
+              key={person._id || person.name || index}
+              role="button"
+              tabIndex="0"
+              aria-label={`View profile: ${person.name}`}
+              onClick={() => setSelectedPerson(person)}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedPerson(person); }}>
+              {image ? <img src={image} alt={person.name} /> : <span className="people-mosaic-initials">{initials}</span>}
+              <div className="people-mosaic-caption">
+                <p>{pick(person, "role")}</p>
+                <h2>{person.name}</h2>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+      {selectedPerson ? ReactDOM.createPortal(
+        <div className="people-profile-modal" role="dialog" aria-modal="true" aria-labelledby="people-profile-name" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedPerson(null); }}>
+          <div className="people-profile-modal-card">
+            <button className="people-profile-modal-close" aria-label="Close profile" onClick={() => setSelectedPerson(null)}>×</button>
+            <div className="people-profile-modal-image">
+              {selectedPerson.portrait ? <img src={selectedPerson.portrait} alt="" /> : null}
+            </div>
+            <div className="people-profile-modal-copy">
+              <p>{pick(selectedPerson, "role")}</p>
+              <h2 id="people-profile-name">{selectedPerson.name}</h2>
+              <div>{pick(selectedPerson, "note") || "—"}</div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      ) : null}
+    </div>
+  );
+}
+
+/* Legacy studio page retained outside the active route. */
+function LegacyAgencyPage({ go }) {
   const t = window.useT();
   const pick = window.usePick();
   const portraitHero = PROJECTS.find((p) => p.id === "dn-kolonaki").hero;

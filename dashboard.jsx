@@ -67,7 +67,19 @@ const load = () => {
         ...p,
         slug: !p.slug || p.slug === p.id ? descriptiveProjectSlug(p) : p.slug,
       }));
-      return { ...stored, projects, categories: normaliseCategories(stored.categories), site: normaliseSite(stored.site || DEFAULT_SITE) };
+      const team = stored.team.map((member, order) => ({ ...member, order: member.order != null ? member.order : order }));
+      if (team[0] && team[0].name === "Nikos Andreadis") {
+        team[0] = { ...team[0], name: "Georgios Grigoriadis", role: "Founder", role_gr: "Ιδρυτής", note: "Founder of Project58, leading the studio’s architectural direction and project delivery.", note_gr: "Ιδρυτής του Project58, με ευθύνη για την αρχιτεκτονική κατεύθυνση και την υλοποίηση των έργων του γραφείου.", portrait: "assets/people/georgios-grigoriadis.jpg" };
+      } else if (team[0] && team[0].name === "Georgios Grigoriadis" && !team[0].portrait) {
+        team[0] = { ...team[0], portrait: "assets/people/georgios-grigoriadis.jpg" };
+      }
+      if (team[1] && team[1].name === "Eleni Karali") {
+        team[1] = { ...team[1], name: "Naveen Kumar", role: "Architect", role_gr: "Αρχιτέκτονας", note: "Architect working across concept design, development, and detailed coordination.", note_gr: "Αρχιτέκτονας με αντικείμενο τον σχεδιασμό, την ανάπτυξη και τον λεπτομερή συντονισμό των έργων.", portrait: "assets/people/naveen-kumar.png" };
+      }
+      if (team[2] && team[2].name === "Dimitris Vlachos") {
+        team[2] = { ...team[2], name: "Evagelos Kastavenakis", role: "Architect", role_gr: "Αρχιτέκτονας", note: "Architect focused on spatial development, material research, and project execution.", note_gr: "Αρχιτέκτονας με έμφαση στη χωρική ανάπτυξη, την έρευνα υλικών και την υλοποίηση έργων.", portrait: "assets/people/evagelos-kastavenakis.png" };
+      }
+      return { ...stored, projects, team, categories: normaliseCategories(stored.categories), site: normaliseSite(stored.site || DEFAULT_SITE) };
     }
   } catch (e) { /* fallthrough */ }
   return seed();
@@ -571,12 +583,41 @@ function SiteSettings({ site, onSave }) {
   const [s, setS] = useState(site);
   const contact = s.contact || DEFAULT_SITE.contact;
   const setContact = (k, v) => setS((x) => ({ ...x, contact: { ...(x.contact || DEFAULT_SITE.contact), [k]: v } }));
+  const setMenuImage = (k, v) => setS((x) => ({ ...x, menuImages: { ...(x.menuImages || DEFAULT_SITE.menuImages), [k]: v } }));
+  const setPeopleField = (k, v) => setS((x) => ({ ...x, people: { ...(x.people || DEFAULT_SITE.people), [k]: v } }));
   const setField = (k, v) => setS((x) => ({ ...x, [k]: v }));
   const dirty = JSON.stringify(s) !== JSON.stringify(site);
   return (
     <>
       <SectionHead eyebrow="/ Footer addresses · contact details" title="Site settings" />
       <div className="settings-card">
+        <div className="form-section">
+          <div className="form-section-title">People mosaic</div>
+          <div className="field-group cols-1">
+            <Field label="Fallback group image" hint="Used for team cards that do not have their own portrait yet.">
+              <ImageInput value={(s.people || DEFAULT_SITE.people).hero || ""} onChange={(v) => setPeopleField("hero", v)} placeholder="People mosaic fallback image" />
+            </Field>
+          </div>
+        </div>
+        <div className="form-section">
+          <div className="form-section-title">Desktop menu hover images</div>
+          <div className="field-group">
+            <Field label="Home image">
+              <ImageInput value={(s.menuImages || DEFAULT_SITE.menuImages).home || ""} onChange={(v) => setMenuImage("home", v)} placeholder="Home menu image" />
+            </Field>
+            <Field label="Projects image">
+              <ImageInput value={(s.menuImages || DEFAULT_SITE.menuImages).projects || ""} onChange={(v) => setMenuImage("projects", v)} placeholder="Projects menu image" />
+            </Field>
+          </div>
+          <div className="field-group">
+            <Field label="People image">
+              <ImageInput value={(s.menuImages || DEFAULT_SITE.menuImages).agency || ""} onChange={(v) => setMenuImage("agency", v)} placeholder="People menu image" />
+            </Field>
+            <Field label="Contact image">
+              <ImageInput value={(s.menuImages || DEFAULT_SITE.menuImages).contact || ""} onChange={(v) => setMenuImage("contact", v)} placeholder="Contact menu image" />
+            </Field>
+          </div>
+        </div>
         <div className="form-section">
           <div className="form-section-title">Footer CTA text</div>
           <div className="field-group">

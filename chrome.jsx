@@ -26,7 +26,9 @@ function useIsMobile() {
 
 function Nav({ route, go }) {
   const t = window.useT();
+  const pick = window.usePick();
   const { lang, setLang } = window.useLang();
+  const site = useSiteSettings();
   const isRetail = route.name === "interiors" || route.name === "project";
   const isResidential = route.name === "architecture";
   const isProjects = route.name === "projects";
@@ -38,6 +40,7 @@ function Nav({ route, go }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [atTop, setAtTop] = useState(true);
   const [projectNavVisible, setProjectNavVisible] = useState(false);
+  const [menuPreviewKey, setMenuPreviewKey] = useState("home");
   const menuRef = useRef(null);
   const lastScrollYRef = useRef(0);
   const isProject = route.name === "project";
@@ -100,6 +103,11 @@ function Nav({ route, go }) {
     };
   }, [menuOpen, isMobile]);
 
+  useEffect(() => {
+    if (!menuOpen) return;
+    setMenuPreviewKey(isAgency ? "agency" : (isProjects || isRetail || isResidential) ? "projects" : "home");
+  }, [menuOpen, isAgency, isProjects, isRetail, isResidential]);
+
   // close drawer with esc on mobile too
   useEffect(() => {
     if (!menuOpen) return;
@@ -108,14 +116,14 @@ function Nav({ route, go }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
-  // lock body scroll while mobile drawer is open
+  // lock body scroll while either menu is open
   useEffect(() => {
-    if (menuOpen && isMobile) {
+    if (menuOpen) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = "hidden";
       return () => {document.body.style.overflow = prev;};
     }
-  }, [menuOpen, isMobile]);
+  }, [menuOpen]);
 
   // Hide the header once the footer scrolls into view — direct DOM toggle, no React state.
   useEffect(() => {
@@ -156,6 +164,10 @@ function Nav({ route, go }) {
 
   const projectForRoute = route.name === "project" ? PROJECTS.find((p) => p.id === route.id || p.slug === route.id) : null;
   const currentBrand = route.brand || (projectForRoute ? (projectForRoute.brandKey || (projectForRoute.brand === "Dinas" ? "dn" : "pg")) : null);
+  const menuProject = projectForRoute || PROJECTS.find((p) => p.featured) || PROJECTS[0];
+  const menuImages = site.menuImages || {};
+  const menuImageSrc = menuImages[menuPreviewKey] || (menuProject && menuProject.hero) || "";
+  const menuPreviewLabel = menuPreviewKey === "projects" ? t("projects") : menuPreviewKey === "agency" ? t("agency") : menuPreviewKey === "contact" ? t("contact") : t("home");
 
   return (
     <React.Fragment>
@@ -192,30 +204,54 @@ function Nav({ route, go }) {
             </button>
             {menuOpen && !isMobile ?
             <div className="nav-menu-pop" role="menu">
+              <div className="nav-menu-links">
+                <button
+                className={`nav-menu-item ${isHome ? "on" : ""}`}
+                role="menuitem"
+                onMouseEnter={() => setMenuPreviewKey("home")}
+                onFocus={() => setMenuPreviewKey("home")}
+                onClick={() => {setMenuOpen(false);go({ name: "home" });}}>
+                  <span>{t("home")}</span><span className="ar">→</span>
+                </button>
+                <button
+                className={`nav-menu-item ${isProjects || isRetail || isResidential ? "on" : ""}`}
+                role="menuitem"
+                onMouseEnter={() => setMenuPreviewKey("projects")}
+                onFocus={() => setMenuPreviewKey("projects")}
+                onClick={() => {setMenuOpen(false);go({ name: "projects" });}}>
+                  <span>{t("projects")}</span><span className="ar">→</span>
+                </button>
                 <button
                 className={`nav-menu-item ${isAgency ? "on" : ""}`}
                 role="menuitem"
+                onMouseEnter={() => setMenuPreviewKey("agency")}
+                onFocus={() => setMenuPreviewKey("agency")}
                 onClick={() => {setMenuOpen(false);go({ name: "agency" });}}>
                   <span>{t("agency")}</span><span className="ar">↗</span>
                 </button>
                 <button
                 className="nav-menu-item"
                 role="menuitem"
+                onMouseEnter={() => setMenuPreviewKey("contact")}
+                onFocus={() => setMenuPreviewKey("contact")}
                 onClick={() => {setMenuOpen(false);window.location.href = "mailto:g.grigoriadis@project58.gr";}}>
                   <span>{t("contact")}</span><span className="ar">↗</span>
                 </button>
                 <button
-                className={`nav-menu-item ${lang === "en" ? "on" : ""}`}
-                role="menuitem"
-                onClick={() => setLang("en")}>
-                  <span>EN</span>
+                  className="nav-menu-language"
+                  aria-label={`Switch language to ${lang === "en" ? "Greek" : "English"}`}
+                  onClick={() => setLang(lang === "en" ? "gr" : "en")}>
+                  <span className={lang === "en" ? "on" : ""}>EN</span>
+                  <i>/</i>
+                  <span className={lang === "gr" ? "on" : ""}>GR</span>
                 </button>
-                <button
-                className={`nav-menu-item ${lang === "gr" ? "on" : ""}`}
-                role="menuitem"
-                onClick={() => setLang("gr")}>
-                  <span>GR</span>
-                </button>
+              </div>
+              {menuImageSrc ? (
+                <div className="nav-menu-visual">
+                  <img key={`${menuPreviewKey}-${menuImageSrc}`} src={menuImageSrc} alt="" />
+                  <span>{menuPreviewLabel}</span>
+                </div>
+              ) : null}
               </div> :
             null}
           </div>
