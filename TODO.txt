@@ -7,3 +7,5 @@ PROJECT58 — TODO
 [ ] Projects: add a toggle to hide the projects and display all the categories
     - In the Projects view, a switch that collapses the project rows and
       shows just the list of categories instead.
+
+- In the people page, we can have a part where we will have exterior collaborator. and we need to add in the description somewhere
