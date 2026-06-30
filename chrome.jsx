@@ -33,6 +33,7 @@ function Nav({ route, go }) {
   const isResidential = route.name === "architecture";
   const isProjects = route.name === "projects";
   const isAgency = route.name === "agency";
+  const isContact = route.name === "contact";
   const isHome = route.name === "home";
 
   const isMobile = useIsMobile();
@@ -155,12 +156,20 @@ function Nav({ route, go }) {
     document.body.classList.toggle("project-page", isProject);
     document.body.classList.toggle("interiors-page", isPortfolioIndex);
     document.body.classList.toggle("architecture-page", isArchitecture);
+    document.body.classList.toggle("contact-page-active", isContact);
     return () => {
       document.body.classList.remove("project-page");
       document.body.classList.remove("interiors-page");
       document.body.classList.remove("architecture-page");
+      document.body.classList.remove("contact-page-active");
     };
-  }, [isProject, isPortfolioIndex, isArchitecture]);
+  }, [isProject, isPortfolioIndex, isArchitecture, isContact]);
+
+  const showTabBar = isMobile && !isProject && !menuOpen && !searchOpen;
+  useEffect(() => {
+    document.body.classList.toggle("mobile-tabbar-page", showTabBar);
+    return () => document.body.classList.remove("mobile-tabbar-page");
+  }, [showTabBar]);
 
   const projectForRoute = route.name === "project" ? PROJECTS.find((p) => p.id === route.id || p.slug === route.id) : null;
   const currentBrand = route.brand || (projectForRoute ? (projectForRoute.brandKey || (projectForRoute.brand === "Dinas" ? "dn" : "pg")) : null);
@@ -230,11 +239,11 @@ function Nav({ route, go }) {
                   <span>{t("agency")}</span><span className="ar">↗</span>
                 </button>
                 <button
-                className="nav-menu-item"
+                className={`nav-menu-item ${isContact ? "on" : ""}`}
                 role="menuitem"
                 onMouseEnter={() => setMenuPreviewKey("contact")}
                 onFocus={() => setMenuPreviewKey("contact")}
-                onClick={() => {setMenuOpen(false);go({ name: "home" }, { scrollTo: "footer.foot" });}}>
+                onClick={() => {setMenuOpen(false);go({ name: "contact" });}}>
                   <span>{t("contact")}</span><span className="ar">↗</span>
                 </button>
                 <button
@@ -351,8 +360,8 @@ function Nav({ route, go }) {
             <span>{t("agency")}</span><span className="ar">→</span>
           </button>
           <button
-          className="mobile-drawer-link"
-          onClick={() => {setMenuOpen(false);go({ name: "home" }, { scrollTo: "footer.foot" });}}>
+          className={`mobile-drawer-link ${isContact ? "on" : ""}`}
+          onClick={() => {setMenuOpen(false);go({ name: "contact" });}}>
             <span>{t("contact")}</span><span className="ar">↗</span>
           </button>
           <div className="mobile-drawer-footer">
@@ -368,6 +377,8 @@ function Nav({ route, go }) {
       {/* brand filter moved into InteriorsPage, below the title */}
 
       {searchOpen ? <SearchOverlay go={go} onClose={() => setSearchOpen(false)} /> : null}
+
+      {showTabBar ? <MobileTabBar route={route} go={go} /> : null}
     </React.Fragment>);
 
 }
@@ -515,6 +526,72 @@ function SandwichIcon({ open }) {
     </svg>);
 
 }
+function TabHomeIcon({ on }) {
+  return on ? (
+    <svg width="25" height="25" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1" strokeLinejoin="round">
+      <path d="M11.2 2.3a1.2 1.2 0 0 1 1.6 0l8 7.2c.4.36.2 1-.3 1-.5 0-.5.4-.5.9V20a1 1 0 0 1-1 1h-4.5a.5.5 0 0 1-.5-.5V15a1.5 1.5 0 0 0-1.5-1.5h-1A1.5 1.5 0 0 0 10 15v5.5a.5.5 0 0 1-.5.5H5a1 1 0 0 1-1-1v-8.6c0-.5 0-.9-.5-.9-.5 0-.7-.64-.3-1z" />
+    </svg>
+  ) : (
+    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 11.3 12 4l8 7.3" />
+      <path d="M5.5 9.8V20h13V9.8" />
+      <path d="M10 20v-5.5h4V20" />
+    </svg>
+  );
+}
+function TabProjectsIcon({ on }) {
+  return on ? (
+    <svg width="25" height="25" viewBox="0 0 24 24" fill="currentColor">
+      <rect x="3" y="3" width="7.5" height="7.5" rx="1.6" />
+      <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6" />
+      <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6" />
+      <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6" />
+    </svg>
+  ) : (
+    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinejoin="round">
+      <rect x="3" y="3" width="7.5" height="7.5" rx="1.6" />
+      <rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6" />
+      <rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6" />
+      <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6" />
+    </svg>
+  );
+}
+function TabPeopleIcon({ on }) {
+  return on ? (
+    <svg width="25" height="25" viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="12" cy="7.8" r="3.8" />
+      <path d="M4.2 20.5c.9-4 3.9-6.2 7.8-6.2s6.9 2.2 7.8 6.2c.1.5-.3.9-.8.9H5c-.5 0-.9-.4-.8-.9z" />
+    </svg>
+  ) : (
+    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="7.8" r="3.8" />
+      <path d="M4.5 20.3c.8-3.9 3.8-6 7.5-6s6.7 2.1 7.5 6" />
+    </svg>
+  );
+}
+
+function MobileTabBar({ route, go }) {
+  const t = window.useT();
+  const isHome = route.name === "home";
+  const isProjects = route.name === "projects" || route.name === "interiors" || route.name === "architecture";
+  const isAgency = route.name === "agency";
+  return (
+    <nav className="mobile-tab-bar" aria-label="Mobile primary">
+      <button className={`mobile-tab ${isHome ? "on" : ""}`} aria-label={t("home")} aria-current={isHome ? "page" : undefined} onClick={() => go({ name: "home" })}>
+        <TabHomeIcon on={isHome} />
+        <span>{t("home")}</span>
+      </button>
+      <button className={`mobile-tab ${isProjects ? "on" : ""}`} aria-label={t("projects")} aria-current={isProjects ? "page" : undefined} onClick={() => go({ name: "projects" })}>
+        <TabProjectsIcon on={isProjects} />
+        <span>{t("projects")}</span>
+      </button>
+      <button className={`mobile-tab ${isAgency ? "on" : ""}`} aria-label={t("agency")} aria-current={isAgency ? "page" : undefined} onClick={() => go({ name: "agency" })}>
+        <TabPeopleIcon on={isAgency} />
+        <span>{t("agency")}</span>
+      </button>
+    </nav>);
+}
+
 function KindIcon({ kind }) {
   if (kind === "project") return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4">
@@ -576,7 +653,6 @@ function Footer({ go }) {
   const t = window.useT();
   const site = useSiteSettings();
   const contact = site.contact || {};
-  const [inquiryOpen, setInquiryOpen] = useState(false);
   return (
     <footer className="foot">
       <div className="foot-top foot-top-2col" style={{ padding: "0px", textAlign: "left" }}>
@@ -584,7 +660,7 @@ function Footer({ go }) {
           <img src="assets/logo-black.svg" alt="Project58" className="foot-logo" style={{ height: 28, marginBottom: 24, display: "block", filter: "invert(1)" }} />
           {site.foot_big || t("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }}>{site.foot_big_em || t("foot_big_em")}</em>
           <div className="foot-cta">
-            <button className="foot-start-btn" onClick={() => setInquiryOpen(true)}>Start a project<span className="ar">→</span></button>
+            <button className="foot-start-btn" onClick={() => go({ name: "start" })}>Start a project<span className="ar">→</span></button>
           </div>
         </div>
         <div className="foot-col">
@@ -600,8 +676,39 @@ function Footer({ go }) {
         <span className="center">{site.foot_copy_mid || t("foot_copy_mid")}</span>
         <span className="right">{site.foot_copy_right || t("foot_copy_right")}</span>
       </div>
-      <InquiryForm open={inquiryOpen} onClose={() => setInquiryOpen(false)} site={site} />
     </footer>);
+
+}
+
+/* ===== Contact page — same content/design as the footer, as its own destination ===== */
+function ContactPage({ go }) {
+  const t = window.useT();
+  const site = useSiteSettings();
+  const contact = site.contact || {};
+  return (
+    <div className="contact-page page-enter">
+      <div className="foot-top foot-top-2col" style={{ padding: "0px", textAlign: "left" }}>
+        <div className="foot-big">
+          <img src="assets/logo-black.svg" alt="Project58" className="foot-logo" style={{ height: 28, marginBottom: 24, display: "block", filter: "invert(1)" }} />
+          {site.foot_big || t("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }}>{site.foot_big_em || t("foot_big_em")}</em>
+          <div className="foot-cta">
+            <button className="foot-start-btn" onClick={() => go({ name: "start" })}>Start a project<span className="ar">→</span></button>
+          </div>
+        </div>
+        <div className="foot-col">
+          <h4>{contact.location_label}</h4>
+          <p><ContactItem href={contact.address_url}>{contact.address}</ContactItem></p>
+          <p style={{ marginTop: 8 }}><ContactItem href={contact.phone_url}>{contact.phone}</ContactItem></p>
+          <p style={{ marginTop: 4 }}><ContactItem href={contact.email_url}>{contact.email}</ContactItem></p>
+          <p style={{ marginTop: 14 }}><ContactItem href={contact.instagram_url}>{contact.instagram_text}</ContactItem></p>
+        </div>
+      </div>
+      <div className="foot-bot">
+        <span>{site.foot_copy_left || t("foot_copy_left")}</span>
+        <span className="center">{site.foot_copy_mid || t("foot_copy_mid")}</span>
+        <span className="right">{site.foot_copy_right || t("foot_copy_right")}</span>
+      </div>
+    </div>);
 
 }
 
@@ -648,7 +755,8 @@ const INQUIRY_TYPES = ["Retail", "Hospitality", "Residential", "Workplace", "Ren
 const INQUIRY_TIMELINES = ["As soon as possible", "Within 1–3 months", "Within 3–6 months", "Flexible / exploring"];
 const INQUIRY_BUDGETS = ["Not sure yet", "Under €50k", "€50k–€150k", "€150k–€400k", "€400k+"];
 
-function InquiryForm({ open, onClose, site }) {
+function StartProjectPage({ go }) {
+  const site = useSiteSettings();
   const phone = (site && site.contact && site.contact.phone) || "";
   const phoneUrl = (site && site.contact && site.contact.phone_url) || (phone ? `tel:${phone.replace(/[^\d+]/g, "")}` : "");
   const [step, setStep] = useState(0);
@@ -656,19 +764,7 @@ function InquiryForm({ open, onClose, site }) {
   const [sending, setSending] = useState(false);
   const [f, setF] = useState({ type: "", location: "", size: "", timeline: "", budget: "", message: "", name: "", email: "", phone: "", company: "" });
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKey = (e) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", onKey);
-    return () => { document.body.style.overflow = prev; document.removeEventListener("keydown", onKey); };
-  }, [open]);
-
-  useEffect(() => { if (open) { setStep(0); setDone(false); setSending(false); } }, [open]);
-
-  if (!open) return null;
+  const onClose = () => go({ name: "home" });
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim());
   const steps = [
@@ -756,15 +852,14 @@ function InquiryForm({ open, onClose, site }) {
     </React.Fragment>
   );
 
-  return ReactDOM.createPortal(
-    <div className="inquiry-overlay" role="dialog" aria-modal="true" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="inquiry-card" onMouseDown={(e) => e.stopPropagation()}>
-        <button className="inquiry-close" aria-label="Close" onClick={onClose}>×</button>
+  return (
+    <div className="start-page page-enter">
+      <div className="inquiry-card">
+        <button className="inquiry-close" aria-label="Back to home" onClick={onClose}>×</button>
         {body}
       </div>
-    </div>,
-    document.body
+    </div>
   );
 }
 
-Object.assign(window, { Nav, Footer, InquiryForm });
+Object.assign(window, { Nav, Footer, StartProjectPage, ContactPage });

@@ -8,7 +8,9 @@
     { "source": "/architecture", "destination": "/index" },
     { "source": "/interiors", "destination": "/index" },
     { "source": "/people", "destination": "/index" },
-    { "source": "/agency", "destination": "/index" }
+    { "source": "/agency", "destination": "/index" },
+    { "source": "/start-a-project", "destination": "/index" },
+    { "source": "/contact", "destination": "/index" }
   ],
   "headers": [
     {

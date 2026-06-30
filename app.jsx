@@ -9,7 +9,7 @@ const ALIAS = {
   "news": "agency",
   "people": "agency",
 };
-const ROUTES = ["home", "projects", "architecture", "interiors", "agency"];
+const ROUTES = ["home", "projects", "architecture", "interiors", "agency", "start", "contact"];
 
 function routeFromLegacyHash(h) {
   const [name, id] = h.split("/");
@@ -43,6 +43,7 @@ function routeFromLocation() {
     return { name: "interiors", ...(brand ? { brand } : {}) };
   }
   if (parts[0] === "people") return { name: "agency" };
+  if (parts[0] === "start-a-project") return { name: "start" };
   if (ROUTES.includes(parts[0])) return { name: parts[0] };
   return { name: "home" };
 }
@@ -52,6 +53,7 @@ function pathFromRoute(r) {
   if (name === "home") return "/";
   if (name === "project") return `/projects/${encodeURIComponent(r.id)}`;
   if (name === "agency") return "/people";
+  if (name === "start") return "/start-a-project";
   const params = new URLSearchParams();
   if (r.type) params.set("type", r.type);
   if (r.brand) params.set("brand", r.brand);
@@ -211,6 +213,8 @@ function App() {
   if (route.name === "architecture") page = <ArchitecturePage go={go} />;
   if (route.name === "interiors")    page = <InteriorsPage go={go} brand={route.brand} />;
   if (route.name === "agency")       page = <AgencyPage go={go} />;
+  if (route.name === "start")        page = <StartProjectPage go={go} />;
+  if (route.name === "contact")      page = <ContactPage go={go} />;
   if (route.name === "project")      page = <ProjectPage id={route.id} go={go} from={route.from} transitionDirection={route.transitionDirection} />;
 
   return (
@@ -227,7 +231,7 @@ function App() {
       ) : null}
       <Nav route={route} go={go} />
       <main key={route.name + (route.id || "") + (route.brand || "") + (route.type || "") + ":" + contentVersion} data-screen-label={pageLabel(route)}>{page}</main>
-      {route.name !== "project" && route.name !== "projects" && route.name !== "interiors" && route.name !== "architecture" && route.name !== "agency" && <Footer go={go} />}
+      {route.name !== "project" && route.name !== "projects" && route.name !== "interiors" && route.name !== "architecture" && route.name !== "agency" && route.name !== "start" && route.name !== "contact" && <Footer go={go} />}
       {zoom ? (
         <div className={`zoom-flight ${zoom.on ? "on" : ""}`} aria-hidden="true">
           <img
@@ -252,7 +256,9 @@ function pageLabel(r) {
   if (r.name === "architecture") return "02 Architecture";
   if (r.name === "interiors")    return "03 Interiors";
   if (r.name === "agency")       return "04 People";
-  if (r.name === "project")      return "05 Project Detail · " + (r.id || "");
+  if (r.name === "start")        return "05 Start a Project";
+  if (r.name === "contact")      return "06 Contact";
+  if (r.name === "project")      return "07 Project Detail · " + (r.id || "");
   return r.name;
 }
 

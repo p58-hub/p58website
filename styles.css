@@ -2643,6 +2643,15 @@ footer.foot {
 
 .foot-logo { height: 24px; opacity: 0.9; }
 
+/* ============ contact page (same look as the footer, as its own destination) ============ */
+.contact-page {
+  background: var(--ink);
+  color: var(--paper);
+  min-height: 100vh;
+  padding: clamp(120px, 16vh, 180px) var(--gutter) 32px;
+}
+.contact-page .foot-top-2col { padding-bottom: 56px; }
+
 /* ============ misc ============ */
 .scroll-hint {
   position: absolute;
@@ -2803,6 +2812,54 @@ main h3 em {
 
   main { padding-top: 0; }
   body:has(.subnav) main { padding-top: 62px; }
+
+  /* ===== Mobile bottom tab bar — floating island ===== */
+  body.mobile-tabbar-page { padding-bottom: calc(env(safe-area-inset-bottom) + 96px); }
+  .mobile-tab-bar {
+    position: fixed;
+    left: 50%;
+    bottom: max(16px, calc(env(safe-area-inset-bottom) + 10px));
+    transform: translateX(-50%);
+    z-index: 65;
+    display: flex;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.92);
+    -webkit-backdrop-filter: blur(18px);
+    backdrop-filter: blur(18px);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 26px;
+    padding: 8px 10px;
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+  [data-paper="dark"] .mobile-tab-bar,
+  body.contact-page-active .mobile-tab-bar {
+    background: rgba(20, 20, 18, 0.82);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  body.contact-page-active .mobile-tab { color: rgba(255, 255, 255, 0.55); }
+  body.contact-page-active .mobile-tab.on { color: var(--paper); }
+  .mobile-tab {
+    width: 60px;
+    height: 54px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    border-radius: 18px;
+    color: var(--ink-2, #444);
+    cursor: pointer;
+    transition: transform 140ms ease, color 140ms ease, background 140ms ease;
+  }
+  .mobile-tab span {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .mobile-tab.on { color: var(--ink); background: var(--paper-2); transform: scale(1.04); }
+  body.contact-page-active .mobile-tab.on { background: rgba(255, 255, 255, 0.12); }
+  .mobile-tab:active { transform: scale(0.92); }
 
   /* ===== Mobile fullscreen menu drawer ===== */
   .mobile-drawer {
@@ -3887,28 +3944,21 @@ body[data-route="home"].hz-at-hero .nav {
 .foot-start-btn:hover { background: var(--clay); color: var(--paper); transform: translateY(-1px); }
 .foot-start-btn:hover .ar { transform: translateX(5px); }
 
-/* ===== Inquiry form modal ===== */
-.inquiry-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
+/* ===== Start a project page ===== */
+.start-page {
+  min-height: 100vh;
   display: grid;
   place-items: center;
-  padding: 20px;
-  background: rgba(10, 10, 8, 0.62);
-  backdrop-filter: blur(8px);
-  animation: people-modal-fade 220ms ease both;
+  padding: clamp(96px, 12vh, 140px) var(--gutter) 80px;
 }
 .inquiry-card {
   position: relative;
   width: min(560px, 100%);
-  max-height: calc(100dvh - 40px);
-  overflow-y: auto;
   background: var(--paper);
   color: var(--ink);
   border-radius: 22px;
   padding: clamp(28px, 4vw, 44px);
-  animation: people-modal-card-in 320ms cubic-bezier(.2,.7,.2,1) both;
+  border: 1px solid var(--rule-strong, #0000001f);
 }
 .inquiry-close {
   position: absolute;
