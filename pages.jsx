@@ -65,7 +65,22 @@ function HomePage({ go }) {
 
   const featured = useM(() => {
     const picked = PROJECTS.filter((p) => p.featured);
-    return (picked.length ? picked : PROJECTS).slice(0, 6);
+    const list = (picked.length ? picked : PROJECTS).slice();
+
+    // The dashboard's Hero gallery section can pin an explicit order. Anything
+    // it doesn't mention keeps its own position, after the ones it does.
+    let order = [];
+    try {
+      const s = JSON.parse(localStorage.getItem("p58_data_v1") || "null");
+      if (Array.isArray(s?.site?.heroGallery?.order)) order = s.site.heroGallery.order;
+    } catch { /* fall back to the projects' own order */ }
+
+    if (order.length) {
+      const rank = new Map(order.map((id, idx) => [id, idx]));
+      const at = (p) => (rank.has(p.id) ? rank.get(p.id) : Number.MAX_SAFE_INTEGER);
+      list.sort((a, b) => at(a) - at(b));
+    }
+    return list.slice(0, 6);
   }, []);
 
   const heroIntervalMs = useM(() => {
@@ -399,17 +414,19 @@ function Tile({ project, cls, go, idx }) {
 }
 
 /* ================== INTERIORS — card grid with inline brand filter ================== */
-function InteriorsPage({ go, brand }) {
+function InteriorsPage({ go, brand, sort }) {
   const t = window.useT();
-  const filtered = brand ?
+  const pick = window.usePick();
+  const order = window.PROJECT_SORTS[sort] ? sort : window.PROJECT_SORT_DEFAULT;
+  const filtered = (brand ?
   PROJECTS.filter((p) => BRAND_KEY(p) === brand) :
-  PROJECTS;
+  PROJECTS.slice()).sort(window.PROJECT_SORTS[order].compare(pick));
   const title = brand ? BRAND_OF[brand] : t("interiors_h");
   const eyebrow = brand ?
   `${t("interiors_brand_eyebrow_a")} ${BRAND_OF[brand]} · ${filtered.length}${t("interiors_brand_eyebrow_b")}` :
   t("interiors_eyebrow");
   return (
-    <div className="page-enter" key={brand || "all"}>
+    <div className="page-enter" key={`${brand || "all"}:${order}`}>
       <div className="proj-list">
         {filtered.map((p, i) =>
         <ProjListRow key={p.id} project={p} go={go} idx={i + 1} />
@@ -451,8 +468,10 @@ function ProjectsPage({ go, type, brand, sort }) {
 function ProjListRow({ project, go, idx }) {
   const pick = window.usePick();
   const t = window.useT();
+  const site = useSiteSettings();
   const bk = BRAND_KEY(project);
   const monogram = bk === "pg" ? "PG" : "DN";
+  const iconSrc = window.projectIconFor(project, site);
   // Format location as "GREECE, ATHENS, NEIGHBORHOOD"
   const rawLoc = pick(project, "location") || "";
   const locParts = rawLoc.split(/\s*·\s*/);
@@ -464,8 +483,8 @@ function ProjListRow({ project, go, idx }) {
       className="proj-list-row"
       onClick={() => go({ name: "project", id: project.slug || project.id })}>
       <div className="proj-list-info">
-        {bk === "pg"
-          ? <img className="proj-list-icon proj-list-icon--img" src="assets/proteingarden/Protein Garden New logo_final-03.png" alt="Protein Garden" />
+        {iconSrc
+          ? <img className="proj-list-icon proj-list-icon--img" src={iconSrc} alt={pick(project, "brand")} />
           : <div className={`proj-list-icon proj-list-icon--${bk}`}>{monogram}</div>
         }
         <div className="proj-list-text">
@@ -481,16 +500,18 @@ function ProjListRow({ project, go, idx }) {
 }
 
 /* ================== ARCHITECTURE / RESIDENTIAL — proj-list layout (mirrors InteriorsPage) ================== */
-function ArchitecturePage({ go }) {
+function ArchitecturePage({ go, sort }) {
   const t = window.useT();
+  const pick = window.usePick();
+  const order = window.PROJECT_SORTS[sort] ? sort : window.PROJECT_SORT_DEFAULT;
   // Show projects with typology/category of "residential" or "architecture".
   // All current projects are "retail"; this list will populate once arch projects are added.
   const filtered = PROJECTS.filter(p => {
     const cat = (p.typology || p.category || "retail").toLowerCase();
     return cat === "residential" || cat === "architecture";
-  });
+  }).sort(window.PROJECT_SORTS[order].compare(pick));
   return (
-    <div className="page-enter" key="architecture">
+    <div className="page-enter" key={`architecture:${order}`}>
       <div className="proj-list">
         {filtered.map((p, i) =>
           <ProjListRow key={p.id} project={p} go={go} idx={i + 1} />
@@ -542,12 +563,12 @@ function ProjectPage({ id, go, from, transitionDirection }) {
     };
   }, [id]);
 
-  const backRoute = from || { name: "home" };
-  const backLabel = backRoute.name === "projects" ? "← Projects"
-    : backRoute.name === "interiors" ? "← Retail"
+  const backRoute = from || { name: "projects" };
+  const backLabel = backRoute.name === "interiors" ? "← Retail"
     : backRoute.name === "architecture" ? "← Architecture"
     : backRoute.name === "agency" ? "← People"
-    : "← Home";
+    : backRoute.name === "home" ? "← Home"
+    : "← Projects";
 
   const navigateProject = (target, direction) => {
     if (transitioning) return;

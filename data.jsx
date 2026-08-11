@@ -610,12 +610,19 @@ TIMELINE.forEach((r, i) => { if (TIMELINE_GR[i]) Object.assign(r, TIMELINE_GR[i]
 
 const P58_STORE_KEY = "p58_data_v1";
 const DEFAULT_SITE_SETTINGS = {
-  heroGallery: { interval: 5200 },
+  heroGallery: { interval: 5200, order: [] },
   menuImages: {
     home: "assets/projects/pg-panormou/01.png",
     projects: "assets/projects/pg-skoufa/01.png",
     agency: "assets/projects/dn-kolonaki/01.png",
     contact: "assets/projects/dn-dousmani/01.png",
+  },
+  // Badge shown beside each project in the indexes. A project inherits its
+  // brand's logo unless it carries its own `icon`; an empty brand logo falls
+  // back to the lettered monogram.
+  brandLogos: {
+    pg: "assets/proteingarden/Protein Garden New logo_final-03.png",
+    dn: "",
   },
   people: {
     title: "People",
@@ -653,10 +660,20 @@ function normaliseSiteSettings(site = {}) {
     foot_copy_right: site.foot_copy_right || DEFAULT_SITE_SETTINGS.foot_copy_right,
     heroGallery: {
       interval: Math.max(2000, Number((site.heroGallery || {}).interval) || 5200),
+      // Display order for the home gallery, by project id. Kept separate from
+      // the projects' own order so arranging the gallery doesn't reshuffle the
+      // Projects list. Ids missing from here fall in after the ones listed.
+      order: Array.isArray((site.heroGallery || {}).order)
+        ? (site.heroGallery || {}).order.filter((id) => typeof id === "string")
+        : [],
     },
     menuImages: {
       ...DEFAULT_SITE_SETTINGS.menuImages,
       ...(site.menuImages || {}),
+    },
+    brandLogos: {
+      ...DEFAULT_SITE_SETTINGS.brandLogos,
+      ...(site.brandLogos || {}),
     },
     people: {
       ...DEFAULT_SITE_SETTINGS.people,
@@ -747,6 +764,15 @@ function applyP58ContentFromStore() {
   } catch (e) { /* ignore malformed overrides */ }
 }
 
+/* The badge a project shows in the indexes: its own override when set,
+   otherwise whatever logo the brand carries. Empty means "use the monogram". */
+function projectIconFor(project, site) {
+  if (!project) return "";
+  if (project.icon) return project.icon;
+  const key = project.brandKey || ((project.id || "").startsWith("dn-") || project.brand === "Dinas" ? "dn" : "pg");
+  return ((site && site.brandLogos) || DEFAULT_SITE_SETTINGS.brandLogos)[key] || "";
+}
+
 /* Sort orders offered on the projects index. `compare` is handed the language-aware
    pick() so the region ordering follows the names actually shown on screen.
    Completion granularity is the project year — the data carries no finer date. */
@@ -776,4 +802,4 @@ const PROJECT_SORTS = {
 };
 
 applyP58ContentFromStore();
-Object.assign(window, { P58_STORE_KEY, DEFAULT_SITE_SETTINGS, normaliseSiteSettings, projectSlugFromFields, applyP58ContentFromStore, PROJECT_SORTS, PROJECT_SORT_DEFAULT });
+Object.assign(window, { P58_STORE_KEY, DEFAULT_SITE_SETTINGS, normaliseSiteSettings, projectSlugFromFields, applyP58ContentFromStore, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor });

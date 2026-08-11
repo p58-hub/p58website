@@ -46,11 +46,15 @@ function routeFromLocation() {
   }
   if (parts[0] === "interiors") {
     const brand = params.get("brand");
-    return { name: "interiors", ...(brand ? { brand } : {}) };
+    const sort = params.get("sort");
+    return { name: "interiors", ...(brand ? { brand } : {}), ...(sort ? { sort } : {}) };
   }
   if (parts[0] === "people") return { name: "agency" };
   if (parts[0] === "start-a-project") return { name: "start" };
-  if (ROUTES.includes(parts[0])) return { name: parts[0] };
+  if (ROUTES.includes(parts[0])) {
+    const sort = params.get("sort");
+    return { name: parts[0], ...(sort ? { sort } : {}) };
+  }
   return { name: "home" };
 }
 
@@ -394,8 +398,8 @@ function App() {
   let page = null;
   if (route.name === "home")         page = <HomePage go={go} />;
   if (route.name === "projects")     page = <ProjectsPage go={go} type={route.type} brand={route.brand} sort={route.sort} />;
-  if (route.name === "architecture") page = <ArchitecturePage go={go} />;
-  if (route.name === "interiors")    page = <InteriorsPage go={go} brand={route.brand} />;
+  if (route.name === "architecture") page = <ArchitecturePage go={go} sort={route.sort} />;
+  if (route.name === "interiors")    page = <InteriorsPage go={go} brand={route.brand} sort={route.sort} />;
   if (route.name === "agency")       page = <AgencyPage go={go} />;
   if (route.name === "start")        page = <StartProjectPage go={go} />;
   if (route.name === "contact")      page = <ContactPage go={go} />;

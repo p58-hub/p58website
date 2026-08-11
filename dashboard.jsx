@@ -11,6 +11,7 @@ const { useState, useEffect, useMemo, useRef, Fragment } = React;
 
 const STORE_KEY = "p58_data_v1";
 const INQUIRY_STORE_KEY = "p58_inquiries_v1";
+const GALLERY_VIEW_KEY = "p58_gallery_view";
 
 /* ---------- Seed data (defaults from data.jsx) ---------- */
 const DEFAULT_SITE = window.DEFAULT_SITE_SETTINGS || {
@@ -132,7 +133,120 @@ const Ic = {
   external: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 2H2v10h10V9"/><path d="M8 2h4v4M12 2L7 7"/></svg>,
   reset: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M2 7a5 5 0 1 0 1.5-3.5"/><path d="M2 2v3h3"/></svg>,
   close: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><line x1="3" y1="3" x2="11" y2="11"/><line x1="11" y1="3" x2="3" y2="11"/></svg>,
+  grip: <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><circle cx="5" cy="3" r="1.15"/><circle cx="9" cy="3" r="1.15"/><circle cx="5" cy="7" r="1.15"/><circle cx="9" cy="7" r="1.15"/><circle cx="5" cy="11" r="1.15"/><circle cx="9" cy="11" r="1.15"/></svg>,
+  grid: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="1.75" y="1.75" width="4" height="4" rx="1"/><rect x="8.25" y="1.75" width="4" height="4" rx="1"/><rect x="1.75" y="8.25" width="4" height="4" rx="1"/><rect x="8.25" y="8.25" width="4" height="4" rx="1"/></svg>,
+  rows: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"><line x1="2" y1="3.5" x2="12" y2="3.5"/><line x1="2" y1="7" x2="12" y2="7"/><line x1="2" y1="10.5" x2="12" y2="10.5"/></svg>,
 };
+
+/* ============================================================
+   MEDIA LIBRARY — client for /api/media
+   ------------------------------------------------------------
+   Images live in Vercel Blob, not localStorage. The library keeps
+   the assignment (which project an image belongs to) server-side,
+   so "backlog" is just projectId === null.
+   ============================================================ */
+
+/* Uploads are downscaled in the browser first. A phone photo is
+   easily 6MB, a Vercel function body caps at 4.5MB, and the site
+   never displays anything wider than ~2400px anyway. */
+const MEDIA_MAX_DIM = 2400;
+const MEDIA_QUALITY = 0.85;
+
+function downscaleImage(file) {
+  return new Promise((resolve, reject) => {
+    // Vector stays vector — rasterising an SVG would only make it worse.
+    if (file.type === "image/svg+xml") {
+      const reader = new FileReader();
+      reader.onload = () => resolve({ dataUrl: reader.result, width: null, height: null });
+      reader.onerror = () => reject(new Error("Couldn't read " + file.name));
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const longest = Math.max(img.naturalWidth, img.naturalHeight) || 1;
+      const scale = Math.min(1, MEDIA_MAX_DIM / longest);
+      const w = Math.max(1, Math.round(img.naturalWidth * scale));
+      const h = Math.max(1, Math.round(img.naturalHeight * scale));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+
+      // PNG keeps its transparency; everything else is far smaller as JPEG.
+      const type = file.type === "image/png" ? "image/png" : "image/jpeg";
+      resolve({ dataUrl: canvas.toDataURL(type, MEDIA_QUALITY), width: w, height: h });
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error("Couldn't read " + file.name + " as an image."));
+    };
+    img.src = objectUrl;
+  });
+}
+
+async function mediaFetch(url, options) {
+  const res = await fetch(url, {
+    credentials: "same-origin",
+    cache: "no-store",
+    ...(options || {}),
+  });
+
+  let body = null;
+  try {
+    body = await res.json();
+  } catch (e) {
+    /* the local static server answers with HTML, not JSON */
+  }
+
+  // Every one of these routes answers with JSON. Anything else means we
+  // never reached the function — the local static server rewrites unknown
+  // paths to index.html and answers 200 with HTML, which would otherwise
+  // read as a perfectly empty library rather than a missing backend.
+  if (!res.ok || body === null) {
+    const err = new Error((body && body.message) || "That didn't work. Try again.");
+    err.status = res.status;
+    err.code = (body && body.error) || "no_backend";
+
+    if (body === null) {
+      err.code = window.P58Auth.isLocalDev() ? "local_dev" : "no_backend";
+      err.message = window.P58Auth.isLocalDev()
+        ? "The media library needs the Vercel backend, which the local preview server doesn't run. Use `vercel dev` or the deployed site."
+        : "The server didn't answer with JSON. The deployment may still be building.";
+    }
+    throw err;
+  }
+  return body;
+}
+
+const mediaApi = {
+  list: () => mediaFetch("/api/media"),
+  upload: (payload) =>
+    mediaFetch("/api/media", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  update: (payload) =>
+    mediaFetch("/api/media", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
+  remove: (id) => mediaFetch("/api/media?id=" + encodeURIComponent(id), { method: "DELETE" }),
+};
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes)) return "—";
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + " KB";
+  return (bytes / 1024 / 1024).toFixed(1) + " MB";
+}
 
 /* ============================================================
    ROOT APP
@@ -308,6 +422,32 @@ function App({ session }) {
     setToast("Hero gallery saved");
   };
 
+  /* The gallery is driven by each project's `featured` flag, so this is the
+     same switch as "Show on home rail" in the project editor — just reachable
+     from the one screen that shows the whole selection at once. */
+  const onToggleFeatured = (id, on) => {
+    const current = normaliseSite(data.site || DEFAULT_SITE);
+    const existing = current.heroGallery.order || [];
+    const order = on
+      ? (existing.includes(id) ? existing : existing.concat(id))
+      : existing.filter((x) => x !== id);
+
+    update({
+      ...data,
+      projects: data.projects.map((p) => (p.id === id ? { ...p, featured: on } : p)),
+      site: normaliseSite({ ...current, heroGallery: { ...current.heroGallery, order } }),
+    });
+    setToast(on ? "Added to the gallery" : "Removed from the gallery");
+  };
+
+  const onReorderHeroGallery = (order) => {
+    const current = normaliseSite(data.site || DEFAULT_SITE);
+    update({
+      ...data,
+      site: normaliseSite({ ...current, heroGallery: { ...current.heroGallery, order } }),
+    });
+  };
+
   // If a section is off-limits for this role, fall back to Projects
   // rather than rendering an empty panel.
   const SECTION_CAPABILITY = { site: "siteSettings", hero: "heroGallery" };
@@ -343,6 +483,9 @@ function App({ session }) {
         </button>
         <button className={`side-btn ${section === "team" ? "on" : ""}`} onClick={() => goSection("team")}>
           <span>Team</span><span className="count">{counts.team}</span>
+        </button>
+        <button className={`side-btn ${section === "media" ? "on" : ""}`} onClick={() => goSection("media")}>
+          <span>Media</span><span className="count">▦</span>
         </button>
         <button className={`side-btn ${section === "inquiries" ? "on" : ""}`} onClick={() => goSection("inquiries")}>
           <span>Inquiries</span><span className={`count ${unreadInquiries ? "count-alert" : ""}`}>{unreadInquiries ? unreadInquiries : counts.inquiries}</span>
@@ -393,7 +536,7 @@ function App({ session }) {
             <span className="sep">/</span>
             <span>Dashboard</span>
             <span className="sep">/</span>
-            <b>{section === "projects" ? "Projects" : section === "categories" ? "Categories" : section === "news" ? "News" : section === "site" ? "Site settings" : section === "hero" ? "Hero gallery" : section === "inquiries" ? "Inquiries" : "Team"}</b>
+            <b>{section === "projects" ? "Projects" : section === "categories" ? "Categories" : section === "news" ? "News" : section === "site" ? "Site settings" : section === "hero" ? "Hero gallery" : section === "inquiries" ? "Inquiries" : section === "media" ? "Media" : "Team"}</b>
           </div>
           <div className="actions">
             <input
@@ -416,7 +559,7 @@ function App({ session }) {
                 <span className="ic">{Ic.reset}</span><span>Reset</span>
               </button>
             )}
-            <button className="btn primary" style={(section === "site" || section === "hero" || section === "inquiries") ? { display: "none" } : null} onClick={() => setEditing({ kind: section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news" : "team", id: null })}>
+            <button className="btn primary" style={(section === "site" || section === "hero" || section === "inquiries" || section === "media") ? { display: "none" } : null} onClick={() => setEditing({ kind: section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news" : "team", id: null })}>
               <span className="ic">{Ic.plus}</span><span>New {section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news item" : section === "site" ? "—" : "person"}</span>
             </button>
           </div>
@@ -435,6 +578,15 @@ function App({ session }) {
           {section === "team" && (
             <TeamList data={data.team} onEdit={(id) => setEditing({ kind: "team", id })} onDelete={(id) => onDelete("team", id)} onMove={onMoveTeam} onNew={() => setEditing({ kind: "team", id: null })} />
           )}
+          {section === "media" && (
+            <MediaLibrary
+              projects={data.projects}
+              data={data}
+              onReplaceData={update}
+              onExport={onExport}
+              onToast={setToast}
+            />
+          )}
           {section === "inquiries" && (
             <InquiriesList data={inquiries} onView={(id) => { setViewInquiry(id); setInquiryStatus(id, "read"); }} onDelete={deleteInquiry} />
           )}
@@ -442,7 +594,13 @@ function App({ session }) {
             <SiteSettings site={normaliseSite(data.site || DEFAULT_SITE)} onSave={onSaveSite} />
           )}
           {section === "hero" && can("heroGallery") && (
-            <HeroGallerySettings heroGallery={normaliseSite(data.site || DEFAULT_SITE).heroGallery} onSave={onSaveHeroGallery} />
+            <HeroGallerySettings
+              heroGallery={normaliseSite(data.site || DEFAULT_SITE).heroGallery}
+              projects={data.projects}
+              onSave={onSaveHeroGallery}
+              onToggleFeatured={onToggleFeatured}
+              onReorder={onReorderHeroGallery}
+            />
           )}
         </div>
       </main>
@@ -451,6 +609,7 @@ function App({ session }) {
         <ProjectSheet
           project={editing.id ? data.projects.find((p) => p.id === editing.id) : null}
           categories={data.categories}
+          brandLogos={normaliseSite(data.site || DEFAULT_SITE).brandLogos}
           onSave={onSaveProject}
           onClose={() => setEditing(null)}
         />
@@ -788,14 +947,91 @@ function SectionHead({ eyebrow, title }) {
 /* ============================================================
    SITE SETTINGS
    ============================================================ */
-function HeroGallerySettings({ heroGallery, onSave }) {
+/* The home page renders only the first six — pages.jsx slices there. */
+const HOME_GALLERY_MAX = 6;
+
+function HeroGallerySettings({ heroGallery, projects, onSave, onToggleFeatured, onReorder }) {
   const [interval, setInterval_] = useState(heroGallery.interval || 5200);
   const dirty = interval !== heroGallery.interval;
   const seconds = Math.round(interval / 100) / 10;
+
+  const order = heroGallery.order || [];
+  const chosen = useMemo(() => {
+    const rank = new Map(order.map((id, i) => [id, i]));
+    const at = (p) => (rank.has(p.id) ? rank.get(p.id) : Number.MAX_SAFE_INTEGER);
+    return projects.filter((p) => p.featured).slice().sort((a, b) => at(a) - at(b));
+  }, [projects, order]);
+
+  const available = projects.filter((p) => !p.featured);
+
+  const move = (index, dir) => {
+    const next = chosen.slice();
+    const target = index + dir;
+    if (target < 0 || target >= next.length) return;
+    const tmp = next[index];
+    next[index] = next[target];
+    next[target] = tmp;
+    onReorder(next.map((p) => p.id));
+  };
+
   return (
     <>
       <SectionHead eyebrow="/ Home page hero" title="Hero gallery" />
       <div className="settings-card">
+        <div className="form-section">
+          <div className="form-section-title">Projects in the gallery</div>
+          <p className="hero-hint">
+            Each project's <b>hero image</b> is what the gallery shows. This is the same switch as
+            “Show on home rail” inside a project — changing it here changes it there.
+          </p>
+
+          {chosen.length === 0 ? (
+            <p className="hero-hint">
+              Nothing is selected, so the home page falls back to the first {HOME_GALLERY_MAX} projects.
+            </p>
+          ) : (
+            <div className="hero-picks">
+              {chosen.map((p, i) => (
+                <div className={`hero-pick ${i >= HOME_GALLERY_MAX ? "spare" : ""}`} key={p.id}>
+                  <div className="hero-pick-slot">{i < HOME_GALLERY_MAX ? i + 1 : "—"}</div>
+                  <div className="hero-pick-thumb">
+                    {p.hero ? <img src={p.hero} alt="" /> : <span>no hero</span>}
+                  </div>
+                  <div className="hero-pick-name">
+                    {p.name || p.id}
+                    <span>{p.brand || ""}</span>
+                  </div>
+                  <div className="hero-pick-actions">
+                    <button className="delete" title="Move up" disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
+                    <button className="delete" title="Move down" disabled={i === chosen.length - 1} onClick={() => move(i, 1)}>↓</button>
+                    <button className="delete" title="Remove from the gallery" onClick={() => onToggleFeatured(p.id, false)}>{Ic.trash}</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {chosen.length > HOME_GALLERY_MAX && (
+            <p className="hero-hint hero-hint-warn">
+              {chosen.length - HOME_GALLERY_MAX} project(s) past the first {HOME_GALLERY_MAX} won't appear.
+              Move them up, or remove them.
+            </p>
+          )}
+
+          {available.length > 0 && (
+            <select
+              className="hero-add"
+              value=""
+              onChange={(e) => { if (e.target.value) onToggleFeatured(e.target.value, true); }}
+            >
+              <option value="">Add a project to the gallery…</option>
+              {available.map((p) => (
+                <option key={p.id} value={p.id}>{p.name || p.id}</option>
+              ))}
+            </select>
+          )}
+        </div>
+
         <div className="form-section">
           <div className="form-section-title">Auto-rotate speed</div>
           <div className="field-group cols-1">
@@ -814,7 +1050,7 @@ function HeroGallerySettings({ heroGallery, onSave }) {
         </div>
         <div className="settings-foot">
           <span className="muted">Changes take effect on the next page load.</span>
-          <button className="btn primary" disabled={!dirty} onClick={() => onSave({ interval })}>Save</button>
+          <button className="btn primary" disabled={!dirty} onClick={() => onSave({ ...heroGallery, interval })}>Save</button>
         </div>
       </div>
     </>
@@ -827,6 +1063,7 @@ function SiteSettings({ site, onSave }) {
   const setContact = (k, v) => setS((x) => ({ ...x, contact: { ...(x.contact || DEFAULT_SITE.contact), [k]: v } }));
   const setMenuImage = (k, v) => setS((x) => ({ ...x, menuImages: { ...(x.menuImages || DEFAULT_SITE.menuImages), [k]: v } }));
   const setPeopleField = (k, v) => setS((x) => ({ ...x, people: { ...(x.people || DEFAULT_SITE.people), [k]: v } }));
+  const setBrandLogo = (k, v) => setS((x) => ({ ...x, brandLogos: { ...(x.brandLogos || DEFAULT_SITE.brandLogos), [k]: v } }));
   const setField = (k, v) => setS((x) => ({ ...x, [k]: v }));
   const dirty = JSON.stringify(s) !== JSON.stringify(site);
   return (
@@ -838,6 +1075,17 @@ function SiteSettings({ site, onSave }) {
           <div className="field-group cols-1">
             <Field label="Fallback group image" hint="Used for team cards that do not have their own portrait yet.">
               <ImageInput value={(s.people || DEFAULT_SITE.people).hero || ""} onChange={(v) => setPeopleField("hero", v)} placeholder="People mosaic fallback image" />
+            </Field>
+          </div>
+        </div>
+        <div className="form-section">
+          <div className="form-section-title">Brand badges</div>
+          <div className="field-group">
+            <Field label="Protein Garden logo" hint="Shown beside every Protein Garden project unless that project overrides it.">
+              <ImageInput value={(s.brandLogos || DEFAULT_SITE.brandLogos).pg || ""} onChange={(v) => setBrandLogo("pg", v)} placeholder="Protein Garden logo · square" />
+            </Field>
+            <Field label="Dinas logo" hint="Leave empty to fall back to the lettered DN monogram.">
+              <ImageInput value={(s.brandLogos || DEFAULT_SITE.brandLogos).dn || ""} onChange={(v) => setBrandLogo("dn", v)} placeholder="Dinas logo · square" />
             </Field>
           </div>
         </div>
@@ -955,7 +1203,7 @@ const SPAN_OPTIONS = [
   { v: "gal-6",  l: "6 / 12" },
 ];
 
-function ProjectSheet({ project, categories, onSave, onClose }) {
+function ProjectSheet({ project, categories, brandLogos, onSave, onClose }) {
   const [p, setP] = useState(() => project ? JSON.parse(JSON.stringify(project)) : ({
     id: newId("pj"),
     slug: "",
@@ -983,12 +1231,89 @@ function ProjectSheet({ project, categories, onSave, onClose }) {
     design_team_gr: "",
     summary: "",
     hero: "",
+    icon: "",
     gallery: [],
   }));
   const set = (k, v) => setP((x) => ({ ...x, [k]: v }));
+
+  // badge falls back to the brand's logo whenever the project has no override
+  const brandKey = p.brand === "Dinas" || (p.id || "").startsWith("dn-") ? "dn" : "pg";
+  const brandName = brandKey === "dn" ? "Dinas" : "Protein Garden";
+  const brandLogo = (brandLogos || {})[brandKey] || "";
   const setGallery = (i, key, v) => setP((x) => ({ ...x, gallery: x.gallery.map((g, gi) => gi === i ? { ...g, [key]: v } : g) }));
   const addGallery = () => setP((x) => ({ ...x, gallery: [...x.gallery, { src: "", tag: "", span: "gal-6" }] }));
   const removeGallery = (i) => setP((x) => ({ ...x, gallery: x.gallery.filter((_, gi) => gi !== i) }));
+
+  /* ----- gallery: thumbnails / list + drag to reorder ----- */
+  const [galleryView, setGalleryView] = useState(() => {
+    try { return localStorage.getItem(GALLERY_VIEW_KEY) === "grid" ? "grid" : "list"; }
+    catch (e) { return "list"; }
+  });
+  const chooseGalleryView = (view) => {
+    setGalleryView(view);
+    try { localStorage.setItem(GALLERY_VIEW_KEY, view); } catch (e) { /* ignore */ }
+  };
+
+  const [dragIndex, setDragIndex] = useState(null);
+  const [overIndex, setOverIndex] = useState(null);
+  // Items only become draggable while the handle is held, so the text
+  // inputs inside a row stay selectable.
+  const [handleHeld, setHandleHeld] = useState(null);
+
+  const moveGallery = (from, to) => setP((x) => {
+    if (from == null || to == null || from === to) return x;
+    if (from < 0 || to < 0 || from >= x.gallery.length || to >= x.gallery.length) return x;
+    const gallery = x.gallery.slice();
+    const [moved] = gallery.splice(from, 1);
+    gallery.splice(to, 0, moved);
+    return { ...x, gallery };
+  });
+
+  const endDrag = () => { setDragIndex(null); setOverIndex(null); setHandleHeld(null); };
+
+  const dragProps = (i) => ({
+    draggable: handleHeld === i,
+    onDragStart: (e) => {
+      setDragIndex(i);
+      e.dataTransfer.effectAllowed = "move";
+      // Firefox needs data set for a drag to start at all.
+      try { e.dataTransfer.setData("text/plain", String(i)); } catch (err) { /* ignore */ }
+    },
+    onDragOver: (e) => {
+      if (dragIndex === null) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      if (overIndex !== i) setOverIndex(i);
+    },
+    onDrop: (e) => {
+      e.preventDefault();
+      moveGallery(dragIndex, i);
+      endDrag();
+    },
+    onDragEnd: endDrag,
+    className: [
+      galleryView === "grid" ? "gal-card" : "gallery-item",
+      dragIndex === i ? "is-dragging" : "",
+      overIndex === i && dragIndex !== null && dragIndex !== i ? "is-over" : "",
+    ].filter(Boolean).join(" "),
+  });
+
+  // The handle doubles as a keyboard control, so reordering works
+  // without a mouse.
+  const handleProps = (i) => ({
+    className: "gal-drag",
+    type: "button",
+    title: "Drag to reorder · ↑ ↓ with the keyboard",
+    "aria-label": `Reorder image ${i + 1} of ${p.gallery.length}`,
+    onMouseDown: () => setHandleHeld(i),
+    onMouseUp: () => setHandleHeld(null),
+    onTouchStart: () => setHandleHeld(i),
+    onTouchEnd: () => setHandleHeld(null),
+    onKeyDown: (e) => {
+      if (e.key === "ArrowUp" && i > 0) { e.preventDefault(); moveGallery(i, i - 1); }
+      if (e.key === "ArrowDown" && i < p.gallery.length - 1) { e.preventDefault(); moveGallery(i, i + 1); }
+    },
+  });
 
   const suggestedSlug = descriptiveProjectSlug(p);
   const activeCat = (categories && categories.length ? categories : DEFAULT_CATEGORIES).find((cc) => cc.id === (p.category || p.typology || "retail"));
@@ -1163,42 +1488,121 @@ function ProjectSheet({ project, categories, onSave, onClose }) {
           </div>
 
           <div className="form-section">
+            <div className="form-section-title">Badge</div>
+            <ImageInput
+              value={p.icon || brandLogo}
+              onChange={(v) => set("icon", v)}
+              placeholder="Brand logo · square"
+              extra={
+                <div className="badge-extra">
+                  <span>
+                    {p.icon
+                      ? "Custom badge for this project only."
+                      : `Inherited from ${brandName}. Upload one to override it here.`}
+                  </span>
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={!p.icon}
+                    onClick={() => set("icon", "")}>
+                    Reset to brand logo
+                  </button>
+                </div>
+              }
+            />
+          </div>
+
+          <div className="form-section">
             <div className="form-section-title">
               <span>Gallery</span>
-              <button className="add" onClick={addGallery}>{Ic.plus} Add image</button>
+              <div className="gal-tools">
+                {p.gallery.length > 1 && (
+                  <div className="gal-viewswitch" role="group" aria-label="Gallery view">
+                    <button
+                      type="button"
+                      className={galleryView === "grid" ? "on" : ""}
+                      onClick={() => chooseGalleryView("grid")}
+                      aria-pressed={galleryView === "grid"}
+                      title="Thumbnails"
+                    >{Ic.grid}<span>Thumbnails</span></button>
+                    <button
+                      type="button"
+                      className={galleryView === "list" ? "on" : ""}
+                      onClick={() => chooseGalleryView("list")}
+                      aria-pressed={galleryView === "list"}
+                      title="List"
+                    >{Ic.rows}<span>List</span></button>
+                  </div>
+                )}
+                <button className="add" onClick={addGallery}>{Ic.plus} Add image</button>
+              </div>
             </div>
+
             {p.gallery.length === 0 ? (
               <div className="muted" style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase" }}>No gallery images yet.</div>
             ) : null}
-            {p.gallery.map((g, i) => (
-              <div className="gallery-item" key={i}>
-                <ImageInput
-                  value={g.src}
-                  onChange={(v) => setGallery(i, "src", v)}
-                  placeholder={`Gallery ${i + 1}`}
-                  extra={
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                      <input
-                        type="text"
-                        value={g.tag || ""}
-                        onChange={(e) => setGallery(i, "tag", e.target.value)}
-                        placeholder="Caption (EN)"
-                      />
-                      <input
-                        type="text"
-                        value={g.tag_gr || ""}
-                        onChange={(e) => setGallery(i, "tag_gr", e.target.value)}
-                        placeholder="Caption (GR)"
-                      />
+
+            {p.gallery.length > 1 && (
+              <div className="gal-hint">Drag the handle to reorder · order here is the order on the site</div>
+            )}
+
+            <div className={galleryView === "grid" ? "gal-grid" : ""}>
+              {p.gallery.map((g, i) => (
+                galleryView === "grid" ? (
+                  <div key={i} {...dragProps(i)}>
+                    <div className="gal-card-top">
+                      <button {...handleProps(i)}>{Ic.grip}</button>
+                      <span className="gal-num">{i + 1}</span>
+                      <button className="remove" onClick={() => removeGallery(i)} title="Remove">{Ic.trash}</button>
                     </div>
-                  }
-                />
-                <select className="span-select" value={g.span || "gal-6"} onChange={(e) => setGallery(i, "span", e.target.value)}>
-                  {SPAN_OPTIONS.map((s) => <option key={s.v} value={s.v}>{s.l}</option>)}
-                </select>
-                <button className="remove" onClick={() => removeGallery(i)} title="Remove">{Ic.trash}</button>
-              </div>
-            ))}
+                    <GalleryThumb
+                      value={g.src}
+                      onChange={(v) => setGallery(i, "src", v)}
+                      index={i}
+                    />
+                    <input
+                      type="text"
+                      className="gal-caption"
+                      value={g.tag || ""}
+                      onChange={(e) => setGallery(i, "tag", e.target.value)}
+                      placeholder="Caption (EN)"
+                    />
+                    <select className="span-select" value={g.span || "gal-6"} onChange={(e) => setGallery(i, "span", e.target.value)}>
+                      {SPAN_OPTIONS.map((s) => <option key={s.v} value={s.v}>{s.l}</option>)}
+                    </select>
+                  </div>
+                ) : (
+                  <div key={i} {...dragProps(i)}>
+                    <button {...handleProps(i)}>{Ic.grip}</button>
+                    <ImageInput
+                      value={g.src}
+                      onChange={(v) => setGallery(i, "src", v)}
+                      placeholder={`Gallery ${i + 1}`}
+                      extra={
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                          <input
+                            type="text"
+                            value={g.tag || ""}
+                            onChange={(e) => setGallery(i, "tag", e.target.value)}
+                            placeholder="Caption (EN)"
+                          />
+                          <input
+                            type="text"
+                            value={g.tag_gr || ""}
+                            onChange={(e) => setGallery(i, "tag_gr", e.target.value)}
+                            placeholder="Caption (GR)"
+                          />
+                        </div>
+                      }
+                    />
+                    <select className="span-select" value={g.span || "gal-6"} onChange={(e) => setGallery(i, "span", e.target.value)}>
+                      {SPAN_OPTIONS.map((s) => <option key={s.v} value={s.v}>{s.l}</option>)}
+                    </select>
+                    <button className="remove" onClick={() => removeGallery(i)} title="Remove">{Ic.trash}</button>
+                  </div>
+                )
+              ))}
+            </div>
           </div>
         </div>
 
@@ -1465,24 +1869,70 @@ function Field({ label, hint, required, children }) {
   );
 }
 
+// Shared by ImageInput and the compact gallery thumbnail.
+/* Picks an image, downscales it, and puts it in the media library —
+   what gets stored in the content is a URL, not the image itself.
+
+   If the library isn't reachable (the local static server has no /api,
+   or no Blob store is linked yet) it falls back to embedding the image
+   so the dashboard still works, and says so: embedded images spend the
+   shared ~5MB localStorage budget that all your content lives in. */
+async function readImageFile(e, onChange, onBusy) {
+  const file = e.target.files && e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+
+  const setBusy = onBusy || function () {};
+  setBusy(true);
+
+  let shrunk;
+  try {
+    shrunk = await downscaleImage(file);
+  } catch (err) {
+    setBusy(false);
+    alert(err.message);
+    return;
+  }
+
+  try {
+    const body = await mediaApi.upload({ filename: file.name, dataUrl: shrunk.dataUrl });
+    onChange(body.item.url);
+  } catch (err) {
+    onChange(shrunk.dataUrl);
+    alert("This image was saved inside this browser rather than the media library.\n\n" + err.message);
+  }
+  setBusy(false);
+}
+
+/* Compact tile used by the gallery's thumbnail view. The full editor
+   (URL field, Greek caption) stays in the list view. */
+function GalleryThumb({ value, onChange, index }) {
+  const ref = useRef(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="gal-thumb">
+      <input type="file" ref={ref} accept="image/*" onChange={(e) => readImageFile(e, onChange, setBusy)} style={{ display: "none" }} />
+      {value
+        ? <img src={value} alt="" draggable="false" />
+        : <div className="gal-thumb-empty">Image {index + 1}</div>}
+      <button type="button" className="gal-thumb-btn" disabled={busy} onClick={() => ref.current && ref.current.click()}>
+        {busy ? "Uploading…" : value ? "Replace" : "Upload"}
+      </button>
+    </div>
+  );
+}
+
 function ImageInput({ value, onChange, placeholder, extra }) {
   const ref = useRef(null);
-  const onFile = (e) => {
-    const f = e.target.files && e.target.files[0];
-    if (!f) return;
-    if (f.size > 2 * 1024 * 1024) {
-      if (!confirm("Image is " + Math.round(f.size / 1024) + "kb. Large images bloat localStorage — keep going?")) return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => onChange(reader.result);
-    reader.readAsDataURL(f);
-    e.target.value = "";
-  };
+  const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const onFile = (e) => readImageFile(e, onChange, setBusy);
   const isDataUrl = value && value.startsWith("data:");
   const sizeKb = isDataUrl ? Math.round(value.length / 1024) : null;
 
   return (
     <div className="img-input">
+      {picking && <MediaPicker onPick={onChange} onClose={() => setPicking(false)} />}
       <div className="preview">
         {value ? <img src={value} alt="" /> : <div className="placeholder">{placeholder || "No image"}</div>}
       </div>
@@ -1495,8 +1945,11 @@ function ImageInput({ value, onChange, placeholder, extra }) {
           style={{ display: "none" }}
         />
         <div className="controls">
-          <button className="btn ghost" type="button" onClick={() => ref.current && ref.current.click()}>
-            <span className="ic">{Ic.upload}</span><span>{value ? "Replace" : "Upload"}</span>
+          <button className="btn ghost" type="button" disabled={busy} onClick={() => ref.current && ref.current.click()}>
+            <span className="ic">{Ic.upload}</span><span>{busy ? "Uploading…" : value ? "Replace" : "Upload"}</span>
+          </button>
+          <button className="btn ghost" type="button" onClick={() => setPicking(true)} title="Pick an image already in the library">
+            <span className="ic">{Ic.grid}</span><span>Library</span>
           </button>
           {value ? <button className="btn ghost" type="button" onClick={() => onChange("")}>{Ic.close}<span>Clear</span></button> : null}
         </div>
@@ -1508,7 +1961,428 @@ function ImageInput({ value, onChange, placeholder, extra }) {
         />
         {extra}
         <div className="meta-row">
-          {isDataUrl ? `Uploaded · ${sizeKb}kb base64` : value ? "URL" : "—"}
+          {isDataUrl
+            ? `Embedded in this browser · ${sizeKb}kb — move it to the library from the Media section`
+            : value ? "Linked" : "—"}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   MEDIA LIBRARY
+   ------------------------------------------------------------
+   Two groups: images assigned to a project, and the backlog —
+   everything not attached to one yet. Assignment is a field on
+   the library entry, so moving an image between the two never
+   changes its URL and never breaks a page already using it.
+   ============================================================ */
+
+/* Walks the content tree and collects the path to every embedded
+   base64 image. Deliberately generic rather than a list of known
+   fields (hero, gallery, photo…) so a field added later is still
+   picked up without touching this code. */
+function collectDataUrls(node, path, out) {
+  if (typeof node === "string") {
+    if (node.startsWith("data:image")) out.push({ path: path.slice(), value: node });
+    return out;
+  }
+  if (Array.isArray(node)) {
+    node.forEach((child, i) => collectDataUrls(child, path.concat(i), out));
+    return out;
+  }
+  if (node && typeof node === "object") {
+    Object.keys(node).forEach((key) => collectDataUrls(node[key], path.concat(key), out));
+  }
+  return out;
+}
+
+/* Copy-on-write down a single path, so untouched branches keep their
+   identity and React's change detection stays cheap. */
+function setAtPath(root, path, value) {
+  const clone = Array.isArray(root) ? root.slice() : { ...root };
+  let cursor = clone;
+  for (let i = 0; i < path.length - 1; i++) {
+    const key = path[i];
+    const child = cursor[key];
+    cursor[key] = Array.isArray(child) ? child.slice() : { ...child };
+    cursor = cursor[key];
+  }
+  cursor[path[path.length - 1]] = value;
+  return clone;
+}
+
+function MediaTile({ item, projects, onAssign, onDelete, onCaption }) {
+  const [caption, setCaption] = useState(item.caption || "");
+  useEffect(() => setCaption(item.caption || ""), [item.id, item.caption]);
+
+  return (
+    <div className="media-tile">
+      <a className="media-thumb" href={item.url} target="_blank" rel="noopener" title="Open full size">
+        <img src={item.url} alt={item.caption || item.filename} loading="lazy" />
+      </a>
+      <div className="media-body">
+        <div className="media-name" title={item.filename}>{item.filename}</div>
+        <div className="media-meta">
+          {formatBytes(item.size)}
+          {item.width && item.height ? ` · ${item.width}×${item.height}` : ""}
+        </div>
+        <input
+          className="media-caption"
+          type="text"
+          value={caption}
+          placeholder="Caption (optional)"
+          onChange={(e) => setCaption(e.target.value)}
+          onBlur={() => { if (caption !== (item.caption || "")) onCaption(item.id, caption); }}
+        />
+        <select
+          className="media-assign"
+          value={item.projectId || ""}
+          onChange={(e) => onAssign(item.id, e.target.value || null)}
+        >
+          <option value="">Backlog — no project</option>
+          {projects.map((p) => (
+            <option key={p.id} value={p.id}>{p.name || p.id}</option>
+          ))}
+        </select>
+        <div className="media-actions">
+          <button
+            className="btn ghost"
+            type="button"
+            onClick={() => {
+              if (navigator.clipboard) navigator.clipboard.writeText(item.url);
+            }}
+            title="Copy the image URL"
+          >
+            Copy URL
+          </button>
+          <button className="delete" type="button" onClick={() => onDelete(item)} title="Delete">{Ic.trash}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
+  const [items, setItems] = useState([]);
+  const [status, setStatus] = useState("loading"); // loading | ready | error
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const [query, setQuery] = useState("");
+  const fileRef = useRef(null);
+
+  const refresh = () => {
+    setStatus("loading");
+    mediaApi
+      .list()
+      .then((body) => { setItems((body && body.items) || []); setError(null); setStatus("ready"); })
+      .catch((err) => { setError(err); setStatus("error"); });
+  };
+
+  useEffect(() => { refresh(); }, []);
+
+  /* ----- upload ----- */
+  const onFiles = async (e) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";
+    if (!files.length) return;
+
+    const added = [];
+    for (let i = 0; i < files.length; i++) {
+      setBusy(files.length > 1 ? `Uploading ${i + 1} of ${files.length}…` : "Uploading…");
+      try {
+        const shrunk = await downscaleImage(files[i]);
+        const body = await mediaApi.upload({
+          filename: files[i].name,
+          dataUrl: shrunk.dataUrl,
+          width: shrunk.width,
+          height: shrunk.height,
+        });
+        added.push(body.item);
+      } catch (err) {
+        // Stop on the first failure instead of one alert per file.
+        setBusy(null);
+        if (added.length) setItems((prev) => added.concat(prev));
+        alert("Couldn't upload " + files[i].name + ".\n\n" + err.message);
+        return;
+      }
+    }
+
+    setBusy(null);
+    setItems((prev) => added.concat(prev));
+    onToast(added.length === 1 ? "Image uploaded" : added.length + " images uploaded");
+  };
+
+  /* ----- assign / caption / delete ----- */
+  const patch = (id, changes, failureNote) => {
+    const before = items;
+    setItems(items.map((x) => (x.id === id ? { ...x, ...changes } : x)));
+    mediaApi.update({ id, ...changes }).catch((err) => {
+      setItems(before); // put it back — the server is the source of truth
+      alert(failureNote + "\n\n" + err.message);
+    });
+  };
+
+  const onAssign = (id, projectId) => patch(id, { projectId }, "Couldn't move that image.");
+  const onCaption = (id, caption) => patch(id, { caption }, "Couldn't save that caption.");
+
+  const onDelete = (item) => {
+    if (!confirm(
+      "Delete " + item.filename + "?\n\n" +
+      "If a project or news item already uses this image, it will show as broken. This cannot be undone."
+    )) return;
+
+    mediaApi
+      .remove(item.id)
+      .then(() => { setItems((prev) => prev.filter((x) => x.id !== item.id)); onToast("Image deleted"); })
+      .catch((err) => alert("Couldn't delete that image.\n\n" + err.message));
+  };
+
+  /* ----- one-time migration out of localStorage ----- */
+  const [migrating, setMigrating] = useState(null);
+  const embedded = useMemo(() => collectDataUrls(data, [], []), [data]);
+
+  const onMigrate = async () => {
+    if (!embedded.length) return;
+    if (!confirm(
+      embedded.length + " embedded image(s) will be uploaded to storage and replaced with links.\n\n" +
+      "Export a JSON backup first — this rewrites your content. Continue?"
+    )) return;
+
+    onExport(); // backup on disk before anything is rewritten
+
+    // The same image can be embedded in several places; upload once.
+    const uploaded = new Map();
+    let next = data;
+    let done = 0;
+
+    for (const found of embedded) {
+      setMigrating(`Uploading ${done + 1} of ${embedded.length}…`);
+      try {
+        if (!uploaded.has(found.value)) {
+          // projects[3].hero -> tag the upload with that project's id
+          let projectId = null;
+          if (found.path[0] === "projects" && typeof found.path[1] === "number") {
+            const owner = data.projects[found.path[1]];
+            if (owner && owner.id) projectId = owner.id;
+          }
+          const body = await mediaApi.upload({
+            filename: found.path.join("-") + ".jpg",
+            dataUrl: found.value,
+            projectId,
+          });
+          uploaded.set(found.value, body.item);
+        }
+        next = setAtPath(next, found.path, uploaded.get(found.value).url);
+        done += 1;
+      } catch (err) {
+        setMigrating(null);
+        // Keep whatever succeeded rather than losing the work.
+        if (done) { onReplaceData(next); refresh(); }
+        alert("Stopped after " + done + " of " + embedded.length + ".\n\n" + err.message);
+        return;
+      }
+    }
+
+    setMigrating(null);
+    onReplaceData(next);
+    refresh();
+    onToast(done + " image(s) moved to storage");
+  };
+
+  /* ----- grouping ----- */
+  const groups = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const visible = q
+      ? items.filter((x) => ((x.filename || "") + " " + (x.caption || "")).toLowerCase().includes(q))
+      : items;
+
+    const known = new Set(projects.map((p) => p.id));
+    const assigned = new Map();
+    const backlog = [];
+
+    visible.forEach((item) => {
+      // An image pointing at a deleted project belongs in the backlog,
+      // not in a group nobody can see.
+      if (item.projectId && known.has(item.projectId)) {
+        if (!assigned.has(item.projectId)) assigned.set(item.projectId, []);
+        assigned.get(item.projectId).push(item);
+      } else {
+        backlog.push(item);
+      }
+    });
+
+    return {
+      backlog,
+      byProject: projects.filter((p) => assigned.has(p.id)).map((p) => ({ project: p, items: assigned.get(p.id) })),
+      count: visible.length,
+    };
+  }, [items, projects, query]);
+
+  if (status === "loading") {
+    return <div className="media-note">Loading the library…</div>;
+  }
+
+  if (status === "error") {
+    return (
+      <div className="media-note media-note-warn">
+        <b>The media library isn't available.</b>
+        <p>{error.message}</p>
+        {error.code === "blob_not_configured" && (
+          <p>In Vercel: <b>Storage → Create → Blob</b>, choose <b>Public</b>, connect it to this project, then redeploy.</p>
+        )}
+        <button className="btn ghost" type="button" onClick={refresh}>Try again</button>
+      </div>
+    );
+  }
+
+  const tileProps = { projects, onAssign, onDelete, onCaption };
+
+  return (
+    <div className="media">
+      <SectionHead
+        eyebrow="Media"
+        title={`${items.length} image${items.length === 1 ? "" : "s"} · ${groups.backlog.length} in backlog`}
+      />
+
+      <div className="media-bar">
+        <input type="file" ref={fileRef} accept="image/*" multiple onChange={onFiles} style={{ display: "none" }} />
+        <button className="btn primary" type="button" disabled={!!busy} onClick={() => fileRef.current && fileRef.current.click()}>
+          <span className="ic">{Ic.upload}</span><span>{busy || "Upload images"}</span>
+        </button>
+        <input
+          className="media-search"
+          type="search"
+          value={query}
+          placeholder="Search by filename or caption"
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        <button className="btn ghost" type="button" onClick={refresh}>Refresh</button>
+      </div>
+
+      {embedded.length > 0 && (
+        <div className="media-note media-note-warn">
+          <b>{embedded.length} image(s) are still stored inside this browser.</b>
+          <p>
+            They sit in localStorage as base64, which is capped at about 5MB for all your content
+            together and never leaves this machine. Moving them into storage frees that space and
+            makes them load faster on the live site.
+          </p>
+          <button className="btn primary" type="button" disabled={!!migrating} onClick={onMigrate}>
+            {migrating || "Move them to storage"}
+          </button>
+        </div>
+      )}
+
+      {groups.count === 0 && (
+        <div className="media-note">
+          {query ? "Nothing matches that search." : "No images yet. Upload a few to get started."}
+        </div>
+      )}
+
+      {groups.backlog.length > 0 && (
+        <div className="media-group">
+          <div className="media-group-head">
+            <b>Backlog</b>
+            <span>{groups.backlog.length} not assigned to a project</span>
+          </div>
+          <div className="media-grid">
+            {groups.backlog.map((item) => <MediaTile key={item.id} item={item} {...tileProps} />)}
+          </div>
+        </div>
+      )}
+
+      {groups.byProject.map(({ project, items: list }) => (
+        <div className="media-group" key={project.id}>
+          <div className="media-group-head">
+            <b>{project.name || project.id}</b>
+            <span>{list.length} image{list.length === 1 ? "" : "s"}</span>
+          </div>
+          <div className="media-grid">
+            {list.map((item) => <MediaTile key={item.id} item={item} {...tileProps} />)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* Modal used by ImageInput so the editors can reuse an image that is
+   already in the library instead of uploading a second copy of it. */
+function MediaPicker({ onPick, onClose }) {
+  const [items, setItems] = useState([]);
+  const [status, setStatus] = useState("loading");
+  const [error, setError] = useState(null);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    mediaApi
+      .list()
+      .then((body) => { setItems((body && body.items) || []); setStatus("ready"); })
+      .catch((err) => { setError(err); setStatus("error"); });
+  }, []);
+
+  useEffect(() => {
+    const k = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", k);
+    return () => document.removeEventListener("keydown", k);
+  }, []);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((x) => ((x.filename || "") + " " + (x.caption || "")).toLowerCase().includes(q));
+  }, [items, query]);
+
+  return (
+    <div className="sheet-wrap" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="sheet media-picker" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="sheet-head">
+          <div>
+            <div className="eyebrow">/ Media library</div>
+            <h2>Choose an image</h2>
+          </div>
+          <div className="controls">
+            <button className="btn ghost" type="button" onClick={onClose}>{Ic.close}</button>
+          </div>
+        </div>
+
+        <div className="sheet-body">
+          {status === "loading" && <div className="media-note">Loading…</div>}
+          {status === "error" && <div className="media-note media-note-warn">{error.message}</div>}
+
+          {status === "ready" && (
+            <Fragment>
+              <input
+                className="media-search"
+                type="search"
+                value={query}
+                placeholder="Search"
+                onChange={(e) => setQuery(e.target.value)}
+                autoFocus
+              />
+              {visible.length === 0 && (
+                <div className="media-note">
+                  {items.length ? "Nothing matches that search." : "The library is empty. Upload images in the Media section first."}
+                </div>
+              )}
+              <div className="media-grid picker">
+                {visible.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="media-pick"
+                    onClick={() => { onPick(item.url); onClose(); }}
+                    title={item.filename}
+                  >
+                    <img src={item.url} alt={item.caption || item.filename} loading="lazy" />
+                    <span>{item.filename}</span>
+                  </button>
+                ))}
+              </div>
+            </Fragment>
+          )}
         </div>
       </div>
     </div>

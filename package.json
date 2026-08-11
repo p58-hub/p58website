@@ -9,6 +9,7 @@
     "secret": "node scripts/hash-password.mjs --secret"
   },
   "dependencies": {
+    "@vercel/blob": "^2.8.0",
     "@vercel/functions": "^3.9.3"
   },
   "engines": {

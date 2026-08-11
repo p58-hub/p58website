@@ -192,16 +192,21 @@ function Nav({ route, go }) {
   // Past the project hero the bar becomes a reading header: back on the left,
   // the project's name where the wordmark sits.
   const showProjectBar = isProject && pastHero && projectForRoute;
-  const backRoute = route.from || { name: "home" };
-  const backLabel = backRoute.name === "projects" ? t("projects")
-    : backRoute.name === "interiors" ? t("retail")
+  // A project opened from a deep link has no referrer — the index is the useful
+  // way out, and on phones it is the only one.
+  const backRoute = route.from || { name: "projects" };
+  const backLabel = backRoute.name === "interiors" ? t("retail")
     : backRoute.name === "architecture" ? t("residential")
     : backRoute.name === "agency" ? t("agency")
-    : t("home");
+    : backRoute.name === "home" ? t("home")
+    : t("projects");
   useEffect(() => {
     document.body.classList.toggle("project-bar-active", !!showProjectBar);
     return () => document.body.classList.remove("project-bar-active");
   }, [showProjectBar]);
+
+  // filters and sort order are independent — changing one keeps the other
+  const keepSort = (r) => (route.sort ? { ...r, sort: route.sort } : r);
 
   return (
     <React.Fragment>
@@ -311,37 +316,26 @@ function Nav({ route, go }) {
 
         {/* Filter row — lives inside nav so both share one backdrop-filter */}
         {isInteriors ? (() => {
-          const allProjects = window.PROJECTS || [];
           const activeBrand = route.brand;
-          const count = activeBrand
-            ? allProjects.filter(p => (p.brandKey || (p.brand === "Dinas" ? "dn" : "pg")) === activeBrand).length
-            : allProjects.length;
           return (
             <div className="nav-filter-row">
               <div className="interiors-filter">
-                <button className={`filter-btn ${!activeBrand ? "on" : ""}`} onClick={() => go({ name: "interiors" })}>{t("all")}</button>
-                <button className={`filter-btn ${activeBrand === "pg" ? "on" : ""}`} onClick={() => go({ name: "interiors", brand: "pg" })}>Protein Garden</button>
-                <button className={`filter-btn ${activeBrand === "dn" ? "on" : ""}`} onClick={() => go({ name: "interiors", brand: "dn" })}>Dinas</button>
+                <button className={`filter-btn ${!activeBrand ? "on" : ""}`} onClick={() => go(keepSort({ name: "interiors" }))}>{t("all")}</button>
+                <button className={`filter-btn ${activeBrand === "pg" ? "on" : ""}`} onClick={() => go(keepSort({ name: "interiors", brand: "pg" }))}>Protein Garden</button>
+                <button className={`filter-btn ${activeBrand === "dn" ? "on" : ""}`} onClick={() => go(keepSort({ name: "interiors", brand: "dn" }))}>Dinas</button>
               </div>
-              <div className="meta"><b>{count}</b> {t("proj_word")}</div>
+              <ProjectSort route={route} go={go} />
             </div>
           );
         })() : null}
-        {isArchitecture ? (() => {
-          const archProjects = (window.PROJECTS || []).filter(p => {
-            const cat = (p.typology || p.category || "retail").toLowerCase();
-            return cat === "residential" || cat === "architecture";
-          });
-          const count = archProjects.length;
-          return (
-            <div className="nav-filter-row">
-              <div className="interiors-filter">
-                <button className="filter-btn on" onClick={() => go({ name: "architecture" })}>{t("all")}</button>
-              </div>
-              <div className="meta"><b>{count}</b> {t("proj_word")}</div>
+        {isArchitecture ? (
+          <div className="nav-filter-row">
+            <div className="interiors-filter">
+              <button className="filter-btn on" onClick={() => go(keepSort({ name: "architecture" }))}>{t("all")}</button>
             </div>
-          );
-        })() : null}
+            <ProjectSort route={route} go={go} />
+          </div>
+        ) : null}
         {isProjects ? (() => {
           const activeType = route.type;
           const activeBrand = activeType === "retail" && (route.brand === "pg" || route.brand === "dn") ? route.brand : null;
@@ -349,15 +343,15 @@ function Nav({ route, go }) {
             <div className="nav-filter-row">
               <div className="project-filter-groups">
                 <div className="interiors-filter">
-                  <button className={`filter-btn ${!activeType ? "on" : ""}`} onClick={() => go({ name: "projects" })}>{t("all")}</button>
-                  <button className={`filter-btn ${activeType === "retail" ? "on" : ""}`} onClick={() => go({ name: "projects", type: "retail" })}>{t("retail")}</button>
-                  <button className={`filter-btn ${activeType === "residential" ? "on" : ""}`} onClick={() => go({ name: "projects", type: "residential" })}>{t("residential")}</button>
+                  <button className={`filter-btn ${!activeType ? "on" : ""}`} onClick={() => go(keepSort({ name: "projects" }))}>{t("all")}</button>
+                  <button className={`filter-btn ${activeType === "retail" ? "on" : ""}`} onClick={() => go(keepSort({ name: "projects", type: "retail" }))}>{t("retail")}</button>
+                  <button className={`filter-btn ${activeType === "residential" ? "on" : ""}`} onClick={() => go(keepSort({ name: "projects", type: "residential" }))}>{t("residential")}</button>
                 </div>
                 {activeType === "retail" ? (
                   <div className="interiors-filter brand-filter">
-                    <button className={`filter-btn ${!activeBrand ? "on" : ""}`} onClick={() => go({ name: "projects", type: "retail" })}>{t("all_brands")}</button>
-                    <button className={`filter-btn ${activeBrand === "pg" ? "on" : ""}`} onClick={() => go({ name: "projects", type: "retail", brand: "pg" })}>Protein Garden</button>
-                    <button className={`filter-btn ${activeBrand === "dn" ? "on" : ""}`} onClick={() => go({ name: "projects", type: "retail", brand: "dn" })}>Dinas</button>
+                    <button className={`filter-btn ${!activeBrand ? "on" : ""}`} onClick={() => go(keepSort({ name: "projects", type: "retail" }))}>{t("all_brands")}</button>
+                    <button className={`filter-btn ${activeBrand === "pg" ? "on" : ""}`} onClick={() => go(keepSort({ name: "projects", type: "retail", brand: "pg" }))}>Protein Garden</button>
+                    <button className={`filter-btn ${activeBrand === "dn" ? "on" : ""}`} onClick={() => go(keepSort({ name: "projects", type: "retail", brand: "dn" }))}>Dinas</button>
                   </div>
                 ) : null}
               </div>
@@ -433,10 +427,11 @@ function ProjectSort({ route, go }) {
     };
   }, [open]);
 
+  // stay on whichever index we are on — only the order changes
   const choose = (key) => {
     setOpen(false);
     go({
-      name: "projects",
+      name: route.name,
       ...(route.type ? { type: route.type } : {}),
       ...(route.brand ? { brand: route.brand } : {}),
       ...(key === window.PROJECT_SORT_DEFAULT ? {} : { sort: key }),
