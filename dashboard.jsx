@@ -137,7 +137,10 @@ const Ic = {
 /* ============================================================
    ROOT APP
    ============================================================ */
-function App() {
+function App({ session }) {
+  const user = session.user;
+  const can = (capability) => window.P58Auth.can(user, capability);
+
   const [data, setData] = useState(load);
   const [section, setSection] = useState("projects");
   const [editing, setEditing] = useState(null); // { kind, id|null }
@@ -257,10 +260,13 @@ function App() {
     URL.revokeObjectURL(url);
   };
   const fileInputRef = useRef(null);
-  const onImport = () => fileInputRef.current && fileInputRef.current.click();
+  const onImport = () => {
+    if (!can("importData")) return;
+    if (fileInputRef.current) fileInputRef.current.click();
+  };
   const onImportFile = (e) => {
     const f = e.target.files && e.target.files[0];
-    if (!f) return;
+    if (!f || !can("importData")) return;
     const reader = new FileReader();
     reader.onload = () => {
       try {
@@ -276,6 +282,7 @@ function App() {
     e.target.value = "";
   };
   const onReset = () => {
+    if (!can("resetData")) return;
     if (!confirm("Reset all content to the bundled defaults? Your edits will be lost.")) return;
     localStorage.removeItem(STORE_KEY);
     location.reload();
@@ -301,8 +308,21 @@ function App() {
     setToast("Hero gallery saved");
   };
 
+  // If a section is off-limits for this role, fall back to Projects
+  // rather than rendering an empty panel.
+  const SECTION_CAPABILITY = { site: "siteSettings", hero: "heroGallery" };
+  useEffect(() => {
+    const needed = SECTION_CAPABILITY[section];
+    if (needed && !can(needed)) setSection("projects");
+  }, [section, user.role]);
+
   return (
     <div className="app">
+      {session.state === "dev" && (
+        <div className="dev-banner">
+          Local preview — no backend here, so sign-in is bypassed. On Vercel the dashboard requires a login.
+        </div>
+      )}
       {sideOpen && <div className="side-backdrop" onClick={() => setSideOpen(false)} />}
       <aside className={`side ${sideOpen ? "open" : ""}`}>
         <div className="side-brand">
@@ -327,12 +347,16 @@ function App() {
         <button className={`side-btn ${section === "inquiries" ? "on" : ""}`} onClick={() => goSection("inquiries")}>
           <span>Inquiries</span><span className={`count ${unreadInquiries ? "count-alert" : ""}`}>{unreadInquiries ? unreadInquiries : counts.inquiries}</span>
         </button>
-        <button className={`side-btn ${section === "site" ? "on" : ""}`} onClick={() => goSection("site")}>
-          <span>Site settings</span><span className="count">⚙</span>
-        </button>
-        <button className={`side-btn ${section === "hero" ? "on" : ""}`} onClick={() => goSection("hero")}>
-          <span>Hero gallery</span><span className="count">▶</span>
-        </button>
+        {can("siteSettings") && (
+          <button className={`side-btn ${section === "site" ? "on" : ""}`} onClick={() => goSection("site")}>
+            <span>Site settings</span><span className="count">⚙</span>
+          </button>
+        )}
+        {can("heroGallery") && (
+          <button className={`side-btn ${section === "hero" ? "on" : ""}`} onClick={() => goSection("hero")}>
+            <span>Hero gallery</span><span className="count">▶</span>
+          </button>
+        )}
 
         <div className="side-footer">
           <a className="side-link" href="index.html" target="_blank" rel="noopener">
@@ -341,6 +365,20 @@ function App() {
           <a className="side-link" href="mobile.html" target="_blank" rel="noopener">
             <span>Mobile preview</span><span>↗</span>
           </a>
+
+          <div className="side-user">
+            <div className="side-user-id">
+              <span className="side-user-avatar" aria-hidden="true">{initials(user.name)}</span>
+              <span className="side-user-text">
+                <b title={user.name}>{user.name}</b>
+                <span className={`side-user-role role-${user.role}`}>
+                  {window.P58Auth.ROLE_LABELS[user.role] || user.role}
+                </span>
+              </span>
+            </div>
+            <button className="side-signout" onClick={() => window.P58Auth.logout()}>Sign out</button>
+          </div>
+
           <div className="side-meta">localStorage · v1</div>
         </div>
       </aside>
@@ -365,15 +403,19 @@ function App() {
               style={{ display: "none" }}
               onChange={onImportFile}
             />
-            <button className="btn ghost" onClick={onImport} title="Import JSON">
-              <span className="ic">{Ic.upload}</span><span>Import</span>
-            </button>
+            {can("importData") && (
+              <button className="btn ghost" onClick={onImport} title="Import JSON">
+                <span className="ic">{Ic.upload}</span><span>Import</span>
+              </button>
+            )}
             <button className="btn ghost" onClick={onExport} title="Export JSON">
               <span className="ic">{Ic.download}</span><span>Export</span>
             </button>
-            <button className="btn ghost" onClick={onReset} title="Reset to defaults">
-              <span className="ic">{Ic.reset}</span><span>Reset</span>
-            </button>
+            {can("resetData") && (
+              <button className="btn ghost" onClick={onReset} title="Reset to defaults">
+                <span className="ic">{Ic.reset}</span><span>Reset</span>
+              </button>
+            )}
             <button className="btn primary" style={(section === "site" || section === "hero" || section === "inquiries") ? { display: "none" } : null} onClick={() => setEditing({ kind: section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news" : "team", id: null })}>
               <span className="ic">{Ic.plus}</span><span>New {section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news item" : section === "site" ? "—" : "person"}</span>
             </button>
@@ -396,10 +438,10 @@ function App() {
           {section === "inquiries" && (
             <InquiriesList data={inquiries} onView={(id) => { setViewInquiry(id); setInquiryStatus(id, "read"); }} onDelete={deleteInquiry} />
           )}
-          {section === "site" && (
+          {section === "site" && can("siteSettings") && (
             <SiteSettings site={normaliseSite(data.site || DEFAULT_SITE)} onSave={onSaveSite} />
           )}
-          {section === "hero" && (
+          {section === "hero" && can("heroGallery") && (
             <HeroGallerySettings heroGallery={normaliseSite(data.site || DEFAULT_SITE).heroGallery} onSave={onSaveHeroGallery} />
           )}
         </div>
@@ -1473,4 +1515,60 @@ function ImageInput({ value, onChange, placeholder, extra }) {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+/* ============================================================
+   AUTH GATE
+   ------------------------------------------------------------
+   middleware.js already blocks unauthenticated requests to this
+   page at the edge, so reaching here normally means a valid
+   session. This resolves *who* you are for role gating, and
+   catches the case where the session expires mid-session.
+   ============================================================ */
+function initials(name) {
+  const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function AuthGate() {
+  const [session, setSession] = useState(null);
+
+  useEffect(() => {
+    let live = true;
+    window.P58Auth.fetchSession().then((next) => {
+      if (!live) return;
+      if (next.state === "anon") { window.P58Auth.goToLogin(); return; }
+      setSession(next);
+    });
+    return () => { live = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!session || session.state !== "ok") return;
+    return window.P58Auth.watchSession(session, () => window.P58Auth.goToLogin("expired"));
+  }, [session]);
+
+  if (!session) {
+    return <div className="auth-splash"><span className="auth-splash-dot" />Checking your session…</div>;
+  }
+
+  if (session.state === "setup") {
+    return (
+      <div className="auth-splash auth-splash-setup">
+        <b>Sign-in isn’t configured yet</b>
+        <p>
+          Add <code>SESSION_SECRET</code> and <code>P58_USERS</code> in the Vercel
+          project settings, then redeploy. See <code>AUTH_SETUP.md</code>.
+        </p>
+      </div>
+    );
+  }
+
+  if (session.state === "anon") {
+    return <div className="auth-splash"><span className="auth-splash-dot" />Redirecting to sign in…</div>;
+  }
+
+  return <App session={session} />;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<AuthGate />);

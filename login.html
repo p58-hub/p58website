@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Project58 — Sign in</title>
+<link rel="icon" href="assets/logo-black.svg" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+<!-- Styles are inline on purpose: dashboard.css sits behind the auth
+     gate, so this page must not depend on it. -->
+<style>
+  :root {
+    --paper: #ffffff;
+    --paper-2: #f7f7f5;
+    --paper-3: #efeeea;
+    --ink: #14130f;
+    --ink-3: #6b6961;
+    --rule: #00000010;
+    --rule-strong: #0000001f;
+    --clay: oklch(0.58 0.11 38);
+    --danger: oklch(0.55 0.19 25);
+    --sans: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.45;
+    background: var(--paper-2);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    display: grid;
+    place-items: center;
+    padding: 24px;
+  }
+  .card {
+    width: 100%;
+    max-width: 380px;
+    background: var(--paper);
+    border: 1px solid var(--rule-strong);
+    border-radius: 14px;
+    padding: 32px 28px 26px;
+    box-shadow: 0 1px 2px #00000008, 0 12px 34px #0000000d;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 26px; }
+  .brand img { height: 22px; width: auto; display: block; }
+  .brand .tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    border: 1px solid var(--rule-strong);
+    border-radius: 5px;
+    padding: 2px 6px;
+  }
+  h1 { font-size: 19px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--ink-3); margin: 0 0 22px; font-size: 13px; }
+  label { display: block; font-size: 12px; font-weight: 500; margin-bottom: 6px; }
+  .field { margin-bottom: 14px; }
+  input[type="text"], input[type="password"] {
+    width: 100%;
+    font: inherit;
+    color: inherit;
+    padding: 10px 12px;
+    background: var(--paper-2);
+    border: 1px solid var(--rule-strong);
+    border-radius: 9px;
+    outline: none;
+  }
+  input[type="text"]:focus, input[type="password"]:focus {
+    border-color: var(--ink);
+    background: var(--paper);
+  }
+  .remember {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 16px 0 20px;
+    font-size: 13px;
+    color: var(--ink-3);
+    cursor: pointer;
+  }
+  .remember input { accent-color: var(--ink); margin: 0; }
+  button[type="submit"] {
+    width: 100%;
+    font: inherit;
+    font-weight: 500;
+    padding: 11px 14px;
+    border: 1px solid var(--ink);
+    border-radius: 9px;
+    background: var(--ink);
+    color: var(--paper);
+    cursor: pointer;
+  }
+  button[type="submit"]:hover:not(:disabled) { background: #000; }
+  button[type="submit"]:disabled { opacity: 0.55; cursor: default; }
+  .msg {
+    display: none;
+    margin-bottom: 18px;
+    padding: 10px 12px;
+    border-radius: 9px;
+    font-size: 13px;
+    border: 1px solid;
+  }
+  .msg.show { display: block; }
+  .msg.error { color: var(--danger); border-color: color-mix(in oklch, var(--danger) 35%, transparent); background: color-mix(in oklch, var(--danger) 7%, transparent); }
+  .msg.note { color: var(--ink-3); border-color: var(--rule-strong); background: var(--paper-2); }
+  .msg code { font-family: var(--mono); font-size: 12px; color: var(--ink); }
+  .foot {
+    margin-top: 22px;
+    padding-top: 16px;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--ink-3);
+  }
+  .foot a { color: var(--ink-3); text-decoration: none; }
+  .foot a:hover { color: var(--ink); }
+</style>
+</head>
+<body>
+  <main class="card">
+    <div class="brand">
+      <img src="assets/logo-black.svg" alt="Project58" />
+      <span class="tag">CMS</span>
+    </div>
+
+    <h1>Sign in</h1>
+    <p class="sub">The Project58 dashboard is private.</p>
+
+    <div id="msg" class="msg"></div>
+
+    <form id="form" autocomplete="on">
+      <div class="field">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required />
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+      </div>
+
+      <label class="remember">
+        <input id="remember" type="checkbox" />
+        <span>Keep me signed in on this device for 30 days</span>
+      </label>
+
+      <button id="submit" type="submit">Sign in</button>
+    </form>
+
+    <div class="foot">
+      <a href="/">← Back to project58.gr</a>
+      <span>Project58</span>
+    </div>
+  </main>
+
+<script>
+(function () {
+  var form = document.getElementById("form");
+  var submit = document.getElementById("submit");
+  var msgBox = document.getElementById("msg");
+  var params = new URLSearchParams(location.search);
+
+  function show(kind, html) {
+    msgBox.className = "msg show " + kind;
+    msgBox.innerHTML = html;
+  }
+  function hide() { msgBox.className = "msg"; }
+
+  // Only ever redirect to a same-origin path. "//evil.com" is a valid
+  // relative-looking URL to the browser, so reject anything but "/x".
+  function safeNext() {
+    var next = params.get("next") || "/dashboard";
+    if (next.charAt(0) !== "/" || next.charAt(1) === "/" || next.charAt(1) === "\\") {
+      return "/dashboard";
+    }
+    return next;
+  }
+
+  var reason = params.get("reason");
+  if (reason === "expired") {
+    show("note", "Your session expired. Please sign in again.");
+  } else if (reason === "setup") {
+    show("note",
+      "Sign-in isn't configured on this deployment yet. Add <code>SESSION_SECRET</code> " +
+      "and <code>P58_USERS</code> in the Vercel project settings, then redeploy.");
+  }
+
+  // Already signed in? Skip the form.
+  fetch("/api/session", { credentials: "same-origin" })
+    .then(function (r) { if (r.ok) location.replace(safeNext()); })
+    .catch(function () { /* offline or no API — just show the form */ });
+
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    hide();
+    submit.disabled = true;
+    submit.textContent = "Signing in…";
+
+    fetch("/api/login", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: document.getElementById("username").value,
+        password: document.getElementById("password").value,
+        remember: document.getElementById("remember").checked,
+      }),
+    })
+      .then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (body) {
+          return { ok: r.ok, status: r.status, body: body };
+        });
+      })
+      .then(function (res) {
+        if (res.ok) {
+          location.replace(safeNext());
+          return;
+        }
+        submit.disabled = false;
+        submit.textContent = "Sign in";
+        document.getElementById("password").value = "";
+
+        if (res.status === 503) {
+          show("note",
+            "Sign-in isn't configured on this deployment yet. Add <code>SESSION_SECRET</code> " +
+            "and <code>P58_USERS</code> in the Vercel project settings, then redeploy.");
+        } else {
+          show("error", (res.body && res.body.message) || "Sign-in failed. Please try again.");
+        }
+      })
+      .catch(function () {
+        submit.disabled = false;
+        submit.textContent = "Sign in";
+        show("error", "Couldn't reach the server. Check your connection and try again.");
+      });
+  });
+
+  document.getElementById("username").focus();
+})();
+</script>
+</body>
+</html>

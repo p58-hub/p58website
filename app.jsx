@@ -72,11 +72,10 @@ function routeKey(r) {
   return pathFromRoute(r || routeFromLocation());
 }
 
-// Phones have no home landing — the project index is the entry page, so any
-// route that resolves to "home" is rewritten before it can render. The pointer
-// test keeps the hero on computers: a narrow desktop window is still a desktop,
-// and only a touch device drops the landing.
-const MOBILE_MQ = "(max-width: 720px) and (pointer: coarse)";
+// The home landing exists only where the horizontal hero fits. Below this width
+// there is no landing at all — the project index is the entry page — so any
+// route resolving to "home" is rewritten before it can render.
+const MOBILE_MQ = "(max-width: 720px)";
 
 function resolveRoute(r) {
   const onPhone = typeof window !== "undefined" && window.matchMedia(MOBILE_MQ).matches;

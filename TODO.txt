@@ -1,8 +1,12 @@
 PROJECT58 — TODO
 ================
 
-[ ] Create dashboard accounts
-    - Add authentication / login for the dashboard so it isn't open to everyone.
+[x] Create dashboard accounts
+    - Done. Real server-side auth: middleware.js gates the dashboard files at
+      the edge, /api/login issues a signed HttpOnly cookie, roles are admin
+      (everything) and editor (content only). Setup steps in AUTH_SETUP.md —
+      SESSION_SECRET and P58_USERS must be set in Vercel or the dashboard
+      stays locked for everyone.
 
 [ ] Projects: add a toggle to hide the projects and display all the categories
     - In the Projects view, a switch that collapses the project rows and

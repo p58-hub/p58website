@@ -41,6 +41,7 @@ function Nav({ route, go }) {
   const [searchOpen, setSearchOpen] = useState(false);
   const [atTop, setAtTop] = useState(true);
   const [projectNavVisible, setProjectNavVisible] = useState(false);
+  const [pastHero, setPastHero] = useState(false);
   const [menuPreviewKey, setMenuPreviewKey] = useState("home");
   const menuRef = useRef(null);
   const lastScrollYRef = useRef(0);
@@ -51,10 +52,20 @@ function Nav({ route, go }) {
   useEffect(() => {
     const isVertical = !isHome && !isProject;
     if (isProject) {
-      // Nav always visible on project pages (split layout)
+      // Nav always visible on project pages (split layout). Once the hero has
+      // scrolled away the bar swaps the wordmark for the project name and a
+      // back button — see `showProjectBar` below.
       setProjectNavVisible(true);
-      return;
+      const onScroll = () => setPastHero(window.scrollY > window.innerHeight * 0.6);
+      onScroll();
+      window.addEventListener("scroll", onScroll, { passive: true });
+      window.addEventListener("resize", onScroll);
+      return () => {
+        window.removeEventListener("scroll", onScroll);
+        window.removeEventListener("resize", onScroll);
+      };
     }
+    setPastHero(false);
     if (isHome) {
       document.body.classList.remove("nav-scroll-hide");
       const onScroll = () => setAtTop(window.scrollY < 80);
@@ -178,24 +189,53 @@ function Nav({ route, go }) {
   const menuImageSrc = menuImages[menuPreviewKey] || (menuProject && menuProject.hero) || "";
   const menuPreviewLabel = menuPreviewKey === "projects" ? t("projects") : menuPreviewKey === "agency" ? t("agency") : menuPreviewKey === "contact" ? t("contact") : t("home");
 
+  // Past the project hero the bar becomes a reading header: back on the left,
+  // the project's name where the wordmark sits.
+  const showProjectBar = isProject && pastHero && projectForRoute;
+  const backRoute = route.from || { name: "home" };
+  const backLabel = backRoute.name === "projects" ? t("projects")
+    : backRoute.name === "interiors" ? t("retail")
+    : backRoute.name === "architecture" ? t("residential")
+    : backRoute.name === "agency" ? t("agency")
+    : t("home");
+  useEffect(() => {
+    document.body.classList.toggle("project-bar-active", !!showProjectBar);
+    return () => document.body.classList.remove("project-bar-active");
+  }, [showProjectBar]);
+
   return (
     <React.Fragment>
-      <nav className={`nav ${homeTop ? "home-top" : ""} ${isHome && isMobile && atTop ? "mobile-home-top" : ""} ${isProject && !projectNavVisible ? "nav-hidden" : ""}`} aria-label="Primary">
-        <div className="nav-logo" onClick={() => go({ name: "home" })} role="button" aria-label="Project58 home">
-          <img src="assets/logo-black.svg" alt="Project58" style={{ objectFit: "contain" }} />
-        </div>
+      <nav className={`nav ${homeTop ? "home-top" : ""} ${isHome && isMobile && atTop ? "mobile-home-top" : ""} ${isProject && !projectNavVisible ? "nav-hidden" : ""} ${showProjectBar ? "nav-project-bar" : ""}`} aria-label="Primary">
+        {showProjectBar ? (
+          <button className="nav-back" onClick={() => go(backRoute)}>
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M9 2L4 7l5 5" />
+            </svg>
+            <span>{backLabel}</span>
+          </button>
+        ) : (
+          <div className="nav-logo" onClick={() => go({ name: "home" })} role="button" aria-label="Project58 home">
+            <img src="assets/logo-black.svg" alt="Project58" style={{ objectFit: "contain" }} />
+          </div>
+        )}
 
         <div className="nav-center">
-          <button
-            className={`nav-link ${isRetail ? "active" : ""}`}
-            onClick={() => go({ name: "interiors" })}>
-            {t("retail")}
-          </button>
-          <button
-            className={`nav-link ${isResidential ? "active" : ""}`}
-            onClick={() => go({ name: "architecture" })}>
-            {t("residential")}
-          </button>
+          {showProjectBar ? (
+            <span className="nav-project-title">{pick(projectForRoute, "name")}</span>
+          ) : (
+            <React.Fragment>
+              <button
+                className={`nav-link ${isRetail ? "active" : ""}`}
+                onClick={() => go({ name: "interiors" })}>
+                {t("retail")}
+              </button>
+              <button
+                className={`nav-link ${isResidential ? "active" : ""}`}
+                onClick={() => go({ name: "architecture" })}>
+                {t("residential")}
+              </button>
+            </React.Fragment>
+          )}
         </div>
 
         <div className="nav-right">
