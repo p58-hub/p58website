@@ -88,6 +88,7 @@ const DICT = {
     contact: "Contact",
     home: "Home",
     menu: "Menu",
+    more: "More",
     search_placeholder: "Search projects, brands, pages…",
     no_results: "No results for",
     nav: "navigate",
@@ -98,6 +99,9 @@ const DICT = {
     projects: "Projects",
     all: "All",
     all_brands: "All brands",
+    sort: "Sort",
+    sort_date: "Completion date",
+    sort_region: "Region · City",
 
     // mobile drawer
     menu_eyebrow: "Project58 · Menu",
@@ -235,6 +239,7 @@ const DICT = {
     contact: "Επικοινωνία",
     home: "Αρχική",
     menu: "Μενού",
+    more: "Περισσότερα",
     search_placeholder: "Αναζήτηση έργων, brands, σελίδων…",
     no_results: "Κανένα αποτέλεσμα για",
     nav: "πλοήγηση",
@@ -245,6 +250,9 @@ const DICT = {
     projects: "Έργα",
     all: "Όλα",
     all_brands: "Όλα τα brands",
+    sort: "Ταξινόμηση",
+    sort_date: "Ημερομηνία ολοκλήρωσης",
+    sort_region: "Περιοχή · Πόλη",
 
     // mobile drawer
     menu_eyebrow: "Project58 · Μενού",

@@ -157,7 +157,16 @@ body.at-footer[data-route="home"] main {
   background: #f7f5f0;
   animation: site-intro-screen 1.5s cubic-bezier(.76, 0, .24, 1) both;
 }
+.site-intro-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
 .site-intro-mark {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -799,6 +808,65 @@ body.interiors-page .brand-head {
   border-color: var(--ink);
   color: var(--ink);
 }
+
+/* ---- Sort control — sits where the project count used to, in the filter row ---- */
+.sort-wrap { position: relative; flex: 0 0 auto; }
+.sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 9px 16px;
+  line-height: 1;
+  border: 1px solid var(--rule-strong);
+  background: none;
+  cursor: pointer;
+  color: var(--ink-2);
+  transition: background 180ms ease, color 180ms ease, border-color 180ms ease;
+}
+.sort-btn:hover,
+.sort-btn.on {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.sort-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  min-width: 220px;
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.12);
+}
+.sort-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: left;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  background: none;
+  cursor: pointer;
+  color: var(--ink-2);
+  transition: background 160ms ease, color 160ms ease;
+}
+.sort-option:last-child { border-bottom: 0; }
+.sort-option:hover { background: var(--paper-2); color: var(--ink); }
+.sort-option i { font-style: normal; opacity: 0; }
+.sort-option.on { color: var(--ink); }
+.sort-option.on i { opacity: 1; }
 
 /* ---- Project list — image centred at 50vw, image = 40vw (2/5 screen) ---- */
 .proj-list {
@@ -2785,6 +2853,20 @@ main h3 em {
     flex: 0 0 auto;
     font-size: 9px;
   }
+  .nav-filter-row .sort-btn {
+    padding: 7px 10px;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  .nav-filter-row .sort-menu {
+    min-width: 180px;
+  }
+  .nav-filter-row .sort-option {
+    font-size: 10px;
+    padding: 12px;
+  }
 
   /* mobile chrome stays compact while preserving navigation. */
   .nav-right .lang-toggle { display: none !important; }
@@ -2839,7 +2921,8 @@ main h3 em {
   body.contact-page-active .mobile-tab { color: rgba(255, 255, 255, 0.55); }
   body.contact-page-active .mobile-tab.on { color: var(--paper); }
   .mobile-tab {
-    width: 60px;
+    min-width: 84px;
+    padding: 0 14px;
     height: 54px;
     display: flex;
     flex-direction: column;

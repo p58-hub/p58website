@@ -419,9 +419,11 @@ function InteriorsPage({ go, brand }) {
 }
 
 /* ================== PROJECTS — unified list with type filter ================== */
-function ProjectsPage({ go, type, brand }) {
+function ProjectsPage({ go, type, brand, sort }) {
+  const pick = window.usePick();
   const normalisedType = type === "retail" || type === "residential" ? type : null;
   const normalisedBrand = normalisedType === "retail" && (brand === "pg" || brand === "dn") ? brand : null;
+  const order = window.PROJECT_SORTS[sort] ? sort : window.PROJECT_SORT_DEFAULT;
   const filtered = PROJECTS.filter((p) => {
     if (!normalisedType) return true;
     const category = (p.category || p.typology || "retail").toLowerCase();
@@ -430,13 +432,10 @@ function ProjectsPage({ go, type, brand }) {
     }
     if (category !== "retail") return false;
     return !normalisedBrand || BRAND_KEY(p) === normalisedBrand;
-  }).sort((a, b) =>
-    (Number(b.year) || 0) - (Number(a.year) || 0) ||
-    String(b.code || "").localeCompare(String(a.code || ""), undefined, { numeric: true })
-  );
+  }).sort(window.PROJECT_SORTS[order].compare(pick));
 
   return (
-    <div className="page-enter" key={`${normalisedType || "all"}:${normalisedBrand || "all"}`}>
+    <div className="page-enter" key={`${normalisedType || "all"}:${normalisedBrand || "all"}:${order}`}>
       <div className="proj-list">
         {filtered.map((p, i) =>
           <ProjListRow key={p.id} project={p} go={go} idx={i + 1} />

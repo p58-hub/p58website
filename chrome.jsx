@@ -203,6 +203,8 @@ function Nav({ route, go }) {
             <SearchIcon />
           </button>
 
+          {/* burger lives on desktop only — on mobile the tab bar's MORE opens the drawer */}
+          {!isMobile ? (
           <div className="nav-menu-wrap" ref={menuRef}>
             <button
               className={`nav-icon ${menuOpen ? "on" : ""}`}
@@ -264,6 +266,7 @@ function Nav({ route, go }) {
               </div> :
             null}
           </div>
+          ) : null}
         </div>
 
         {/* Filter row — lives inside nav so both share one backdrop-filter */}
@@ -302,16 +305,6 @@ function Nav({ route, go }) {
         {isProjects ? (() => {
           const activeType = route.type;
           const activeBrand = activeType === "retail" && (route.brand === "pg" || route.brand === "dn") ? route.brand : null;
-          const projects = window.PROJECTS || [];
-          const visible = projects.filter((p) => {
-            if (!activeType) return true;
-            const category = (p.category || p.typology || "retail").toLowerCase();
-            const matchesType = activeType === "residential"
-              ? category === "residential" || category === "architecture"
-              : category === "retail";
-            if (!matchesType || !activeBrand) return matchesType;
-            return (p.brandKey || (p.brand === "Dinas" ? "dn" : "pg")) === activeBrand;
-          });
           return (
             <div className="nav-filter-row">
               <div className="project-filter-groups">
@@ -328,7 +321,7 @@ function Nav({ route, go }) {
                   </div>
                 ) : null}
               </div>
-              <div className="meta"><b>{visible.length}</b> {t("proj_word")}</div>
+              <ProjectSort route={route} go={go} />
             </div>
           );
         })() : null}
@@ -344,11 +337,6 @@ function Nav({ route, go }) {
             </svg>
           </button>
           <div className="mobile-drawer-eyebrow">{t("menu_eyebrow")}</div>
-          <button
-          className={`mobile-drawer-link ${isHome ? "on" : ""}`}
-          onClick={() => {setMenuOpen(false);go({ name: "home" });}}>
-            <span>{t("home")}</span><span className="ar">→</span>
-          </button>
           <button
           className={`mobile-drawer-link ${isProjects || isRetail || isResidential ? "on" : ""}`}
           onClick={() => {setMenuOpen(false);go({ name: "projects" });}}>
@@ -378,9 +366,78 @@ function Nav({ route, go }) {
 
       {searchOpen ? <SearchOverlay go={go} onClose={() => setSearchOpen(false)} /> : null}
 
-      {showTabBar ? <MobileTabBar route={route} go={go} /> : null}
+      {showTabBar ? <MobileTabBar route={route} go={go} onMore={() => setMenuOpen(true)} /> : null}
     </React.Fragment>);
 
+}
+
+/* ============ Sort control for the projects index ============ */
+function ProjectSort({ route, go }) {
+  const t = window.useT();
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
+  const orders = window.PROJECT_SORTS || {};
+  const active = orders[route.sort] ? route.sort : window.PROJECT_SORT_DEFAULT;
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const choose = (key) => {
+    setOpen(false);
+    go({
+      name: "projects",
+      ...(route.type ? { type: route.type } : {}),
+      ...(route.brand ? { brand: route.brand } : {}),
+      ...(key === window.PROJECT_SORT_DEFAULT ? {} : { sort: key }),
+    });
+  };
+
+  return (
+    <div className="sort-wrap" ref={wrapRef}>
+      <button
+        className={`sort-btn ${open ? "on" : ""}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}>
+        <SortIcon />
+        <span>{t("sort")}</span>
+      </button>
+      {open ? (
+        <div className="sort-menu" role="listbox" aria-label={t("sort")}>
+          {Object.keys(orders).map((key) => (
+            <button
+              key={key}
+              className={`sort-option ${key === active ? "on" : ""}`}
+              role="option"
+              aria-selected={key === active}
+              onClick={() => choose(key)}>
+              <span>{t(orders[key].label)}</span>
+              <i aria-hidden="true">✓</i>
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>);
+}
+
+function SortIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" aria-hidden="true">
+      <line x1="2" y1="4" x2="12" y2="4" />
+      <line x1="3.5" y1="7" x2="10.5" y2="7" />
+      <line x1="5.5" y1="10" x2="8.5" y2="10" />
+    </svg>);
 }
 
 /* ============ Spotlight-style search ============ */
@@ -570,24 +627,28 @@ function TabPeopleIcon({ on }) {
   );
 }
 
-function MobileTabBar({ route, go }) {
+function TabMoreIcon() {
+  return (
+    <svg width="25" height="25" viewBox="0 0 24 24" fill="currentColor">
+      <circle cx="5" cy="12" r="2" />
+      <circle cx="12" cy="12" r="2" />
+      <circle cx="19" cy="12" r="2" />
+    </svg>
+  );
+}
+
+function MobileTabBar({ route, go, onMore }) {
   const t = window.useT();
-  const isHome = route.name === "home";
   const isProjects = route.name === "projects" || route.name === "interiors" || route.name === "architecture";
-  const isAgency = route.name === "agency";
   return (
     <nav className="mobile-tab-bar" aria-label="Mobile primary">
-      <button className={`mobile-tab ${isHome ? "on" : ""}`} aria-label={t("home")} aria-current={isHome ? "page" : undefined} onClick={() => go({ name: "home" })}>
-        <TabHomeIcon on={isHome} />
-        <span>{t("home")}</span>
-      </button>
       <button className={`mobile-tab ${isProjects ? "on" : ""}`} aria-label={t("projects")} aria-current={isProjects ? "page" : undefined} onClick={() => go({ name: "projects" })}>
         <TabProjectsIcon on={isProjects} />
         <span>{t("projects")}</span>
       </button>
-      <button className={`mobile-tab ${isAgency ? "on" : ""}`} aria-label={t("agency")} aria-current={isAgency ? "page" : undefined} onClick={() => go({ name: "agency" })}>
-        <TabPeopleIcon on={isAgency} />
-        <span>{t("agency")}</span>
+      <button className="mobile-tab" aria-label={t("more")} aria-haspopup="dialog" onClick={onMore}>
+        <TabMoreIcon />
+        <span>{t("more")}</span>
       </button>
     </nav>);
 }

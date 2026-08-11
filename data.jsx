@@ -747,5 +747,33 @@ function applyP58ContentFromStore() {
   } catch (e) { /* ignore malformed overrides */ }
 }
 
+/* Sort orders offered on the projects index. `compare` is handed the language-aware
+   pick() so the region ordering follows the names actually shown on screen.
+   Completion granularity is the project year — the data carries no finer date. */
+const PROJECT_SORT_DEFAULT = "date";
+const PROJECT_SORTS = {
+  date: {
+    label: "sort_date",
+    compare: () => (a, b) =>
+      (Number(b.year) || 0) - (Number(a.year) || 0) ||
+      String(b.code || "").localeCompare(String(a.code || ""), undefined, { numeric: true }),
+  },
+  region: {
+    label: "sort_region",
+    compare: (pick) => {
+      const where = (p) => String(pick(p, "location") || "").split(/\s*·\s*/);
+      return (a, b) => {
+        const [cityA = "", areaA = ""] = where(a);
+        const [cityB = "", areaB = ""] = where(b);
+        return (
+          cityA.localeCompare(cityB, undefined, { sensitivity: "base" }) ||
+          areaA.localeCompare(areaB, undefined, { sensitivity: "base" }) ||
+          (Number(b.year) || 0) - (Number(a.year) || 0)
+        );
+      };
+    },
+  },
+};
+
 applyP58ContentFromStore();
-Object.assign(window, { P58_STORE_KEY, DEFAULT_SITE_SETTINGS, normaliseSiteSettings, projectSlugFromFields, applyP58ContentFromStore });
+Object.assign(window, { P58_STORE_KEY, DEFAULT_SITE_SETTINGS, normaliseSiteSettings, projectSlugFromFields, applyP58ContentFromStore, PROJECT_SORTS, PROJECT_SORT_DEFAULT });
