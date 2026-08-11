@@ -14,9 +14,14 @@
      media/index.json   the library
      media/files/…      the images themselves
 
-   BLOB_READ_WRITE_TOKEN is injected automatically once a Blob
-   store is linked to the project. Without it we fail closed —
-   same principle as the auth code.
+   Credentials arrive automatically once a Blob store is linked,
+   in one of two shapes depending on how it was connected:
+
+     BLOB_STORE_ID + VERCEL_OIDC_TOKEN   the current default
+     BLOB_READ_WRITE_TOKEN               a static token
+
+   The SDK picks whichever is present, preferring OIDC. Without
+   either we fail closed — same principle as the auth code.
    ============================================================ */
 
 import { put, head } from "@vercel/blob";
@@ -32,9 +37,16 @@ export const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
 const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif", "image/gif", "image/svg+xml"];
 
+function isSet(name) {
+  const value = process.env[name];
+  return typeof value === "string" && value.length > 0;
+}
+
+/* BLOB_STORE_ID is set at build time when the store is linked; the
+   matching VERCEL_OIDC_TOKEN is injected into the function at run
+   time, so only the store id is worth checking here. */
 export function isBlobConfigured() {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
-  return typeof token === "string" && token.length > 0;
+  return isSet("BLOB_READ_WRITE_TOKEN") || isSet("BLOB_STORE_ID");
 }
 
 export function notConfigured(res) {

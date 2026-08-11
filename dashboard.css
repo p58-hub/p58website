@@ -837,6 +837,19 @@ a { color: inherit; }
   display: flex; flex-direction: column; gap: 8px;
 }
 .img-input .right .controls { display: flex; gap: 6px; }
+.badge-extra {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.badge-extra span {
+  font-size: 12px;
+  color: var(--ink-3);
+  line-height: 1.4;
+}
+.badge-extra .btn:disabled { opacity: 0.45; cursor: default; }
 .img-input .right input[type="text"] {
   background: var(--paper-2);
   border: 1px solid var(--rule);

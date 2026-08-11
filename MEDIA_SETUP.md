@@ -14,8 +14,11 @@ Choose **Public**. These are photos that get published on the site anyway, and a
 public store serves them straight from the CDN. Note that public vs private is
 fixed when the store is created and **cannot be changed later**.
 
-Connect the store to this project. Vercel injects `BLOB_READ_WRITE_TOKEN`
-automatically — there is no key to copy.
+Connect the store to this project. Vercel injects the credentials
+automatically — there is no key to copy. Depending on how the store is
+connected you get either `BLOB_STORE_ID` (paired with a `VERCEL_OIDC_TOKEN`
+minted per request, which is the current default) or a static
+`BLOB_READ_WRITE_TOKEN`. The SDK and `/api` accept both.
 
 ## 2. Redeploy
 
