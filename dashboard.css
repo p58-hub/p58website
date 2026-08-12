@@ -1391,3 +1391,23 @@ a { color: inherit; }
   font-size: 13px;
 }
 .hero-add:focus { outline: none; border-color: var(--ink); }
+
+/* Publish state — sits beside the Publish now button in the header.
+   Deliberately persistent, unlike the toast: the useful question is
+   "is what I see on screen also what the site is serving?", and a
+   message that has already faded cannot answer it. */
+.publish-state {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  align-self: center;
+  padding: 0 2px;
+  max-width: 34ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.publish-state--busy  { color: var(--ink-3); }
+.publish-state--ok    { color: var(--ok); }
+.publish-state--warn  { color: var(--clay); }
+.publish-state--error { color: var(--danger); }

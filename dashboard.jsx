@@ -364,6 +364,30 @@ function App({ session }) {
   const dirtyRef = useRef(false);
   useEffect(() => { dirtyRef.current = dirty; }, [dirty]);
 
+  /* Publishing state, kept separate from the toast. A toast that has already
+     faded cannot answer "did that reach the site?", and that is exactly the
+     question worth being able to answer at any moment. */
+  const [publishState, setPublishState] = useState({ status: "idle", message: "" });
+
+  const runPublish = (payload) => {
+    setPublishState({ status: "busy", message: "Publishing…" });
+    return publishContent(payload)
+      .then((result) => {
+        const ok = result === "published";
+        setPublishState({
+          status: ok ? "ok" : "warn",
+          message: ok
+            ? "Published " + new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+            : "Not published — saved on this device only",
+        });
+        return result;
+      })
+      .catch((err) => {
+        setPublishState({ status: "error", message: err.message });
+        throw err;
+      });
+  };
+
   useEffect(() => {
     let cancelled = false;
     fetchPublished().then((published) => {
@@ -394,17 +418,8 @@ function App({ session }) {
     persist(data);
     setToast("Saved");
 
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      publishContent(data)
-        .then((result) => {
-          if (cancelled) return;
-          setToast(result === "unconfigured" ? "Saved on this device only" : "Published to the site");
-        })
-        .catch((err) => { if (!cancelled) setToast(err.message); });
-    }, 1200);
-
-    return () => { cancelled = true; clearTimeout(timer); };
+    const timer = setTimeout(() => { runPublish(data).catch(() => { /* shown in publishState */ }); }, 1200);
+    return () => clearTimeout(timer);
   }, [data, dirty]);
 
   useEffect(() => {
@@ -684,6 +699,19 @@ function App({ session }) {
             <button className="btn ghost" onClick={onExport} title="Export JSON">
               <span className="ic">{Ic.download}</span><span>Export</span>
             </button>
+            <button
+              className="btn ghost"
+              onClick={() => runPublish(data).catch(() => { /* shown beside the button */ })}
+              disabled={publishState.status === "busy"}
+              title="Send the current content to the live site">
+              <span className="ic">{Ic.upload}</span>
+              <span>{publishState.status === "busy" ? "Publishing…" : "Publish now"}</span>
+            </button>
+            {publishState.message ? (
+              <span className={"publish-state publish-state--" + publishState.status} title={publishState.message}>
+                {publishState.message}
+              </span>
+            ) : null}
             {can("resetData") && (
               <button className="btn ghost" onClick={onReset} title="Reset to defaults">
                 <span className="ic">{Ic.reset}</span><span>Reset</span>
@@ -1738,7 +1766,7 @@ function ProjectSheet({ project, categories, brandLogos, onSave, onClose }) {
 
         <div className="sheet-foot">
           <div className="left">
-            <span>Saves to localStorage</span>
+            <span>Saves here, then publishes to the site</span>
             <span>·</span>
             <span>ID {p.id}</span>
           </div>
@@ -1818,7 +1846,7 @@ function NewsSheet({ item, onSave, onClose }) {
         </div>
 
         <div className="sheet-foot">
-          <div className="left"><span>Saves to localStorage</span></div>
+          <div className="left"><span>Saves here, then publishes to the site</span></div>
           <div className="right">
             <button className="btn ghost" onClick={onClose}>Cancel</button>
             <button className="btn primary" onClick={() => onSave(n)} disabled={!valid}>Save</button>
@@ -1893,7 +1921,7 @@ function TeamSheet({ member, onSave, onClose }) {
         </div>
 
         <div className="sheet-foot">
-          <div className="left"><span>Saves to localStorage</span></div>
+          <div className="left"><span>Saves here, then publishes to the site</span></div>
           <div className="right">
             <button className="btn ghost" onClick={onClose}>Cancel</button>
             <button className="btn primary" onClick={() => onSave(t)} disabled={!valid}>Save</button>
@@ -1975,7 +2003,7 @@ function CategorySheet({ category, onSave, onClose }) {
         </div>
 
         <div className="sheet-foot">
-          <div className="left"><span>Saves to localStorage</span></div>
+          <div className="left"><span>Saves here, then publishes to the site</span></div>
           <div className="right">
             <button className="btn ghost" onClick={onClose}>Cancel</button>
             <button className="btn primary" onClick={() => onSave({ ...c, id: c.id || slugFromLabel, subcategories: subs.filter((s) => (s.label || "").trim()) })} disabled={!valid}>Save category</button>
