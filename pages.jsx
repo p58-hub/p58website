@@ -70,10 +70,8 @@ function HomePage({ go }) {
     // The dashboard's Hero gallery section can pin an explicit order. Anything
     // it doesn't mention keeps its own position, after the ones it does.
     let order = [];
-    try {
-      const s = JSON.parse(localStorage.getItem("p58_data_v1") || "null");
-      if (Array.isArray(s?.site?.heroGallery?.order)) order = s.site.heroGallery.order;
-    } catch { /* fall back to the projects' own order */ }
+    const s = window.readP58Store ? window.readP58Store() : null;
+    if (Array.isArray(s?.site?.heroGallery?.order)) order = s.site.heroGallery.order;
 
     if (order.length) {
       const rank = new Map(order.map((id, idx) => [id, idx]));
@@ -84,10 +82,8 @@ function HomePage({ go }) {
   }, []);
 
   const heroIntervalMs = useM(() => {
-    try {
-      const s = JSON.parse(localStorage.getItem("p58_data_v1") || "null");
-      return Math.max(2000, Number(s?.site?.heroGallery?.interval) || 5200);
-    } catch { return 5200; }
+    const s = window.readP58Store ? window.readP58Store() : null;
+    return Math.max(2000, Number(s?.site?.heroGallery?.interval) || 5200);
   }, []);
 
   const [i, setI] = useS(0);
@@ -708,7 +704,7 @@ function AgencyPage() {
   const people = TEAM;
   const [selectedPerson, setSelectedPerson] = useS(null);
   const site = window.normaliseSiteSettings ? window.normaliseSiteSettings(
-    (() => { try { const stored = JSON.parse(localStorage.getItem(window.P58_STORE_KEY || "p58_data_v1") || "null"); return stored && stored.site ? stored.site : {}; } catch (e) { return {}; } })()
+    (() => { const stored = window.readP58Store ? window.readP58Store() : null; return stored && stored.site ? stored.site : {}; })()
   ) : window.DEFAULT_SITE_SETTINGS || {};
   const peopleSettings = site.people || { title: "People", title_gr: "Άνθρωποι", hero: "assets/people/people-hero-v2.png" };
   useE(() => {
@@ -888,7 +884,7 @@ function LegacyAgencyPage({ go }) {
 function AgencyFooter() {
   const [contactOpen, setContactOpen] = useS(false);
   const site = window.normaliseSiteSettings ? window.normaliseSiteSettings(
-    (() => { try { const r = JSON.parse(localStorage.getItem(window.P58_STORE_KEY || "p58_data_v1") || "null"); return r && r.site ? r.site : {}; } catch(e) { return {}; } })()
+    (() => { const r = window.readP58Store ? window.readP58Store() : null; return r && r.site ? r.site : {}; })()
   ) : window.DEFAULT_SITE_SETTINGS || {};
   const contact = site.contact || {};
 

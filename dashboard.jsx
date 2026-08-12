@@ -1,10 +1,16 @@
 // =========================================================
 // Project58 Dashboard — content admin
 // =========================================================
-// Manages Projects / News / Team. Persists to localStorage
-// under "p58_data_v1"; the live site (data.jsx) reads from
-// the same key, so saves here surface immediately on the
-// public pages.
+// Manages Projects / News / Team. Every change is written
+// twice: to localStorage under "p58_data_v1" straight away,
+// and then to /api/content, which is the copy the live site
+// serves to everyone else.
+//
+// The local write is what makes editing feel instant and
+// survive a closed tab; the publish is what makes the edit
+// real. Without a Blob store linked only the first happens,
+// which is the old behaviour — edits visible in this browser
+// alone. See MEDIA_SETUP.md.
 // =========================================================
 
 const { useState, useEffect, useMemo, useRef, Fragment } = React;
@@ -74,9 +80,12 @@ const seed = () => ({
   site: normaliseSite(DEFAULT_SITE),
 });
 
-const load = () => {
+/* Shapes a stored document into what the dashboard expects, patching up
+   older shapes as it goes. Takes the raw object rather than reading storage
+   itself, because the same document can now arrive from two places: this
+   browser's localStorage, or /api/content. Returns null if it isn't one. */
+const normaliseStored = (stored) => {
   try {
-    const stored = JSON.parse(localStorage.getItem(STORE_KEY) || "null");
     if (stored && stored.projects && stored.news && stored.team) {
       const projects = stored.projects.map((p) => ({
         ...p,
@@ -106,14 +115,61 @@ const load = () => {
       });
       return { ...stored, projects, team, categories, site: normaliseSite(stored.site || DEFAULT_SITE) };
     }
+  } catch (e) { /* not a usable document */ }
+  return null;
+};
+
+const load = () => {
+  try {
+    const normalised = normaliseStored(JSON.parse(localStorage.getItem(STORE_KEY) || "null"));
+    if (normalised) return normalised;
   } catch (e) { /* fallthrough */ }
   return seed();
 };
+
+/* What the site is currently showing everyone. Resolves null when there is
+   nothing published yet, no Blob store, or no API at all. */
+const fetchPublished = () =>
+  fetch("/api/content", { credentials: "same-origin" })
+    .then((res) => (res.ok ? res.json() : null))
+    .then((body) => (body && body.content ? normaliseStored(body.content) : null))
+    .catch(() => null);
 
 const persist = (data) => {
   try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); }
   catch (e) { alert("Couldn't save — localStorage is full. Try removing some images."); }
 };
+
+/* Publishing is what makes an edit visible to anyone other than this browser.
+   localStorage above stays the immediate, offline-safe copy; this uploads the
+   same document to /api/content, which the live site reads.
+
+   Resolves "unconfigured" rather than throwing when no Blob store is linked —
+   that is a setup state, not an error, and the old localStorage-only
+   behaviour is still perfectly usable in it. */
+const publishContent = (data) =>
+  fetch("/api/content", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    body: JSON.stringify({ content: data }),
+  })
+    .then((res) => {
+      if (res.ok) return "published";
+      // 503 is "no Blob store linked"; the rest are what a deployment with no
+      // /api at all answers, such as the static local preview. None of them
+      // are failures worth alarming about — the local save still stands.
+      if ([503, 404, 405, 501].includes(res.status)) return "unconfigured";
+      if (res.status === 401) throw new Error("Session expired — sign in again to publish");
+      return res.json().catch(() => null).then((body) => {
+        throw new Error((body && body.message) || "Couldn't publish (" + res.status + ")");
+      });
+    })
+    // A rejected fetch means offline or no server answering — same story.
+    .catch((err) => {
+      if (err instanceof TypeError) return "unconfigured";
+      throw err;
+    });
 
 const newId = (prefix) => prefix + "-" + Math.random().toString(36).slice(2, 8);
 const slugify = (value) => String(value || "")
@@ -241,6 +297,39 @@ const mediaApi = {
   remove: (id) => mediaFetch("/api/media?id=" + encodeURIComponent(id), { method: "DELETE" }),
 };
 
+/* Every library file a project points at — hero, badge and gallery. */
+function projectMediaUrls(project) {
+  const urls = [project.hero, project.icon];
+  (project.gallery || []).forEach((g) => urls.push(g && g.src));
+  return urls.filter((u) => typeof u === "string" && u && !u.startsWith("data:"));
+}
+
+/* Using a file in a project takes it out of the backlog. Only unassigned
+   items are claimed, so a file already filed under another project stays
+   where it is rather than being pulled back and forth. */
+async function claimBacklogForProject(project) {
+  const urls = new Set(projectMediaUrls(project));
+  if (!urls.size || !project.id) return 0;
+
+  let items;
+  try {
+    const body = await mediaApi.list();
+    items = (body && body.items) || [];
+  } catch (err) {
+    return 0; // library unreachable (local dev, no blob store) — nothing to file
+  }
+
+  let claimed = 0;
+  for (const item of items) {
+    if (item.projectId || !urls.has(item.url)) continue;
+    try {
+      await mediaApi.update({ id: item.id, projectId: project.id });
+      claimed += 1;
+    } catch (err) { /* leave it in the backlog rather than failing the save */ }
+  }
+  return claimed;
+}
+
 function formatBytes(bytes) {
   if (!Number.isFinite(bytes)) return "—";
   if (bytes < 1024) return bytes + " B";
@@ -265,6 +354,26 @@ function App({ session }) {
   const [sideOpen, setSideOpen] = useState(false);
   const goSection = (s) => { setSection(s); setSideOpen(false); };
 
+  /* Adopt whatever is published before anything can be edited. Without this,
+     opening the dashboard on a second computer would start from that
+     machine's own localStorage — possibly the untouched seed — and the first
+     edit would publish it straight over the real content.
+
+     setDirty is deliberately not called: adopting is not an edit, and
+     marking it dirty would publish a copy of what we just downloaded. */
+  const dirtyRef = useRef(false);
+  useEffect(() => { dirtyRef.current = dirty; }, [dirty]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPublished().then((published) => {
+      if (cancelled || !published || dirtyRef.current) return; // edited while in flight
+      persist(published); // keep the local copy in step
+      setData(published);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
   // keep inquiries in sync with new submissions from the live site
   useEffect(() => {
     const refresh = () => { try { setInquiries(JSON.parse(localStorage.getItem(INQUIRY_STORE_KEY) || "[]")); } catch (e) { /* ignore */ } };
@@ -276,15 +385,33 @@ function App({ session }) {
   const deleteInquiry = (id) => { if (!confirm("Delete this inquiry? This cannot be undone.")) return; persistInquiries(inquiries.filter((x) => x.id !== id)); setViewInquiry(null); };
   const setInquiryStatus = (id, status) => persistInquiries(inquiries.map((x) => x.id === id ? { ...x, status } : x));
 
-  // persist on every data change
+  /* Persist on every data change, then publish. The upload is debounced
+     because `data` changes on every keystroke and each publish sends the
+     whole document — the local copy is still written immediately, so a
+     tab closed mid-edit loses nothing. */
   useEffect(() => {
-    if (dirty) {
-      persist(data);
-      setToast("Saved");
-      const t = setTimeout(() => setToast(null), 1600);
-      return () => clearTimeout(t);
-    }
+    if (!dirty) return undefined;
+    persist(data);
+    setToast("Saved");
+
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      publishContent(data)
+        .then((result) => {
+          if (cancelled) return;
+          setToast(result === "unconfigured" ? "Saved on this device only" : "Published to the site");
+        })
+        .catch((err) => { if (!cancelled) setToast(err.message); });
+    }, 1200);
+
+    return () => { cancelled = true; clearTimeout(timer); };
   }, [data, dirty]);
+
+  useEffect(() => {
+    if (!toast) return undefined;
+    const t = setTimeout(() => setToast(null), 2400);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const update = (next) => { setData(next); setDirty(true); };
 
@@ -296,6 +423,9 @@ function App({ session }) {
       : [proj, ...data.projects];
     update({ ...data, projects: projects.map((p, order) => ({ ...p, order })) });
     setEditing(null);
+    claimBacklogForProject(proj).then((n) => {
+      if (n) setToast(n === 1 ? "1 file filed under this project" : n + " files filed under this project");
+    });
   };
   const onSaveCategory = (category) => {
     const nextCategory = {

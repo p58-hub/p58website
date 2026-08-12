@@ -714,10 +714,8 @@ function KindIcon({ kind }) {
    Falls back to sensible defaults so the footer always renders. */
 function useSiteSettings() {
   const [site, setSite] = useState(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem("p58_data_v1") || "null");
-      if (raw && raw.site) return window.normaliseSiteSettings ? window.normaliseSiteSettings(raw.site) : raw.site;
-    } catch (e) {}
+    const raw = window.readP58Store ? window.readP58Store() : null;
+    if (raw && raw.site) return window.normaliseSiteSettings ? window.normaliseSiteSettings(raw.site) : raw.site;
     return null;
   });
   useEffect(() => {

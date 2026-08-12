@@ -736,10 +736,58 @@ function sortByOrder(items) {
   });
 }
 
-function applyP58ContentFromStore() {
+/* ---------- where the content comes from ----------
+   Three sources, in order of authority:
+
+     1. /api/content   what the dashboard published — shared by everyone
+     2. localStorage   this browser's own copy, for offline edits and for
+                       deployments with no Blob store linked
+     3. BUNDLED_CONTENT the defaults compiled into this file
+
+   Before (1) existed an edit never left the browser that made it, so
+   visitors always saw (3). REMOTE_CONTENT stays null until the fetch
+   below resolves, which is why the app waits for P58_CONTENT_READY
+   before its first render. */
+let REMOTE_CONTENT = null;
+
+/* One exception to that order: once the dashboard writes to localStorage in
+   this browser, the local copy wins. That is the live preview — dashboard in
+   one tab, site in the other — which would otherwise stop working the moment
+   anything was published. Visitors never trip it: nothing writes the key. */
+let LOCAL_EDIT_WINS = false;
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key === P58_STORE_KEY) LOCAL_EDIT_WINS = true;
+  });
+}
+
+function readP58Store() {
+  if (!LOCAL_EDIT_WINS && REMOTE_CONTENT && typeof REMOTE_CONTENT === "object") return REMOTE_CONTENT;
   try {
     const stored = JSON.parse(localStorage.getItem(P58_STORE_KEY) || "null");
-    const source = stored && typeof stored === "object" ? stored : BUNDLED_CONTENT;
+    if (stored && typeof stored === "object") return stored;
+  } catch (e) { /* malformed — fall through to the defaults */ }
+  return BUNDLED_CONTENT;
+}
+
+/* Resolves once, whether or not the fetch worked: a site that cannot reach
+   its own API must still render, just with older content. */
+function loadRemoteContent() {
+  if (typeof fetch !== "function") return Promise.resolve(false);
+  return fetch("/api/content", { credentials: "same-origin" })
+    .then((res) => (res.ok ? res.json() : null))
+    .then((body) => {
+      if (!body || !body.content || typeof body.content !== "object") return false;
+      REMOTE_CONTENT = body.content;
+      applyP58ContentFromStore();
+      return true;
+    })
+    .catch(() => false); // no API (static preview), offline, or a bad response
+}
+
+function applyP58ContentFromStore() {
+  try {
+    const source = readP58Store();
     if (Array.isArray(source.projects) && source.projects.length) {
       PROJECTS.splice(0, PROJECTS.length, ...sortByOrder(source.projects.map(normaliseProject)));
     }
@@ -801,5 +849,9 @@ const PROJECT_SORTS = {
   },
 };
 
+// Apply what we have synchronously so anything reading PROJECTS at import
+// time still sees a populated array, then start the fetch that supersedes it.
 applyP58ContentFromStore();
-Object.assign(window, { P58_STORE_KEY, DEFAULT_SITE_SETTINGS, normaliseSiteSettings, projectSlugFromFields, applyP58ContentFromStore, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor });
+const P58_CONTENT_READY = loadRemoteContent();
+
+Object.assign(window, { P58_STORE_KEY, P58_CONTENT_READY, DEFAULT_SITE_SETTINGS, normaliseSiteSettings, projectSlugFromFields, applyP58ContentFromStore, readP58Store, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor });

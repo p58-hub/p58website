@@ -34,6 +34,26 @@ Everything lives in one store:
 | --- | --- |
 | `media/index.json` | the library: filename, size, caption, which project |
 | `media/files/…` | the images themselves |
+| `content/site.json` | the content itself — projects, news, team, settings |
+
+That last one is what makes an edit visible to anyone other than the person
+who made it. Before it existed the dashboard only wrote to `localStorage`, so
+every visitor fell back to the defaults compiled into `data.jsx` — the images
+uploaded fine, but nothing pointed at them.
+
+The dashboard now saves twice: to `localStorage` immediately, then to
+`/api/content` about a second later. The first keeps editing instant and
+survives a closed tab; the second publishes. The toast tells you which
+happened — "Saved" then "Published to the site", or "Saved on this device
+only" when there is no store to publish to.
+
+`GET /api/content` is deliberately open, since an anonymous visitor has to
+read it for the site to render; `PUT` needs a session. Responses are cached at
+the edge for a minute, so an edit reaches visitors within about that long.
+
+Writes are last-one-wins. Two people saving at the same moment means the later
+save is kept. Opening the dashboard always adopts what is published first, so
+a second computer can't republish its own stale copy over newer work.
 
 **Backlog is not a separate place.** It is every image whose `projectId` is
 `null`. Assigning an image to a project sets that field; sending it back to the

@@ -451,8 +451,14 @@ function pageLabel(r) {
   return r.name;
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <window.LangProvider>
-    <App />
-  </window.LangProvider>
-);
+/* Wait for /api/content before the first paint. Rendering immediately would
+   show the bundled defaults and then visibly swap to the published content a
+   moment later — most obvious on the hero images. The promise always resolves,
+   so a deployment with no API is delayed by one failed fetch, not forever. */
+(window.P58_CONTENT_READY || Promise.resolve()).then(() => {
+  ReactDOM.createRoot(document.getElementById("root")).render(
+    <window.LangProvider>
+      <App />
+    </window.LangProvider>
+  );
+});
