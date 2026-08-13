@@ -409,17 +409,16 @@ function App({ session }) {
   const deleteInquiry = (id) => { if (!confirm("Delete this inquiry? This cannot be undone.")) return; persistInquiries(inquiries.filter((x) => x.id !== id)); setViewInquiry(null); };
   const setInquiryStatus = (id, status) => persistInquiries(inquiries.map((x) => x.id === id ? { ...x, status } : x));
 
-  /* Persist on every data change, then publish. The upload is debounced
-     because `data` changes on every keystroke and each publish sends the
-     whole document — the local copy is still written immediately, so a
-     tab closed mid-edit loses nothing. */
+  /* Saving and publishing are deliberately two steps. Every change is
+     written to localStorage at once, so nothing is ever lost — but it only
+     reaches the live site when Publish is pressed. That keeps half-finished
+     edits off the site, and makes going live something you decide rather
+     than something that happens 1.2 seconds after you stop typing. */
   useEffect(() => {
-    if (!dirty) return undefined;
+    if (!dirty) return;
     persist(data);
-    setToast("Saved");
-
-    const timer = setTimeout(() => { runPublish(data).catch(() => { /* shown in publishState */ }); }, 1200);
-    return () => clearTimeout(timer);
+    setToast("Saved — ready to publish");
+    setPublishState({ status: "pending", message: "Ready to publish" });
   }, [data, dirty]);
 
   useEffect(() => {
@@ -700,12 +699,12 @@ function App({ session }) {
               <span className="ic">{Ic.download}</span><span>Export</span>
             </button>
             <button
-              className="btn ghost"
+              className={"btn " + (publishState.status === "pending" ? "primary" : "ghost")}
               onClick={() => runPublish(data).catch(() => { /* shown beside the button */ })}
               disabled={publishState.status === "busy"}
-              title="Send the current content to the live site">
-              <span className="ic">{Ic.upload}</span>
-              <span>{publishState.status === "busy" ? "Publishing…" : "Publish now"}</span>
+              title="Send the saved content to the live site">
+              <span className="ic">{Ic.external}</span>
+              <span>{publishState.status === "busy" ? "Publishing…" : "Publish"}</span>
             </button>
             {publishState.message ? (
               <span className={"publish-state publish-state--" + publishState.status} title={publishState.message}>

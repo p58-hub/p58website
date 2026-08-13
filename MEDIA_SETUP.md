@@ -41,11 +41,15 @@ who made it. Before it existed the dashboard only wrote to `localStorage`, so
 every visitor fell back to the defaults compiled into `data.jsx` — the images
 uploaded fine, but nothing pointed at them.
 
-The dashboard now saves twice: to `localStorage` immediately, then to
-`/api/content` about a second later. The first keeps editing instant and
-survives a closed tab; the second publishes. The toast tells you which
-happened — "Saved" then "Published to the site", or "Saved on this device
-only" when there is no store to publish to.
+Saving and publishing are two steps. Every change is written to `localStorage`
+straight away, so nothing is lost — but it reaches the live site only when
+**Publish** is pressed. That keeps half-finished edits off the site.
+
+After a save the header shows "Ready to publish" and the Publish button
+highlights. After publishing it shows the time it went out, and stays there:
+a message that has faded cannot answer "is what I'm looking at also what the
+site is serving?", which is the question worth being able to ask at any
+moment. A failure stays on screen too, with the reason.
 
 `GET /api/content` is deliberately open, since an anonymous visitor has to
 read it for the site to render; `PUT` needs a session. Responses are cached at

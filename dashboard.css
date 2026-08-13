@@ -1411,3 +1411,4 @@ a { color: inherit; }
 .publish-state--ok    { color: var(--ok); }
 .publish-state--warn  { color: var(--clay); }
 .publish-state--error { color: var(--danger); }
+.publish-state--pending { color: var(--clay); }
