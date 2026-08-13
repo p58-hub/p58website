@@ -812,11 +812,35 @@ function applyP58ContentFromStore() {
   } catch (e) { /* ignore malformed overrides */ }
 }
 
+/* Blob URLs keep their extension, so the file type is readable from the URL.
+   Used wherever a slot can hold either a still or a clip. */
+function isVideoSrc(src) {
+  if (typeof src !== "string" || !src) return false;
+  if (src.startsWith("data:video/")) return true;
+  return /\.mp4$/i.test(src.split(/[?#]/)[0]);
+}
+
 /* The badge a project shows in the indexes: its own override when set,
    otherwise whatever logo the brand carries. Empty means "use the monogram". */
-function projectIconFor(project, site) {
+function projectIconFor(project, site, categories) {
   if (!project) return "";
   if (project.icon) return project.icon;
+
+  // The logo set beside this brand in its category's sub-category list.
+  // Matched on the label rather than an id, because that label is what the
+  // project stores in `brand` — there is no id link between the two.
+  const brand = String(project.brand || "").trim().toLowerCase();
+  if (brand && Array.isArray(categories)) {
+    const catId = project.category || project.typology || "retail";
+    const cat = categories.find((c) => c && c.id === catId);
+    const subs = (cat && cat.subcategories) || [];
+    const match = subs.find((s) => String((s && s.label) || "").trim().toLowerCase() === brand);
+    if (match && match.icon) return match.icon;
+  }
+
+  // Before logos moved into the category, there were two fixed slots in
+  // Site settings. Kept so existing content keeps its badges until the
+  // logos are set on the sub-categories instead.
   const key = project.brandKey || ((project.id || "").startsWith("dn-") || project.brand === "Dinas" ? "dn" : "pg");
   return ((site && site.brandLogos) || DEFAULT_SITE_SETTINGS.brandLogos)[key] || "";
 }
@@ -854,4 +878,4 @@ const PROJECT_SORTS = {
 applyP58ContentFromStore();
 const P58_CONTENT_READY = loadRemoteContent();
 
-Object.assign(window, { P58_STORE_KEY, P58_CONTENT_READY, DEFAULT_SITE_SETTINGS, normaliseSiteSettings, projectSlugFromFields, applyP58ContentFromStore, readP58Store, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor });
+Object.assign(window, { P58_STORE_KEY, P58_CONTENT_READY, DEFAULT_SITE_SETTINGS, normaliseSiteSettings, projectSlugFromFields, applyP58ContentFromStore, readP58Store, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor, isVideoSrc });

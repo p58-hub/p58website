@@ -684,6 +684,20 @@ a { color: inherit; }
 }
 .sheet-foot .right { display: flex; gap: 8px; }
 
+/* Publish beside Save: full colour once the edit is ready to go live, faded
+   and inert while images are still uploading. */
+.sheet-publish { display: inline-flex; align-items: center; gap: 7px; }
+.sheet-publish.waiting {
+  opacity: 0.45;
+  filter: grayscale(1);
+  cursor: default;
+  background: var(--paper-2);
+  border: 1px solid var(--rule-strong);
+  color: var(--ink-3);
+}
+.sheet-publish.waiting:hover { background: var(--paper-2); }
+.sheet-publish .ic { display: inline-flex; }
+
 /* fieldset */
 .field-group {
   display: grid;
@@ -823,7 +837,8 @@ a { color: inherit; }
   position: relative;
   display: flex; align-items: center; justify-content: center;
 }
-.img-input .preview img { width: 100%; height: 100%; object-fit: cover; }
+.img-input .preview img,
+.img-input .preview video { width: 100%; height: 100%; object-fit: cover; }
 .img-input .preview .placeholder {
   font-family: var(--mono);
   font-size: 10px;
@@ -994,7 +1009,8 @@ a { color: inherit; }
   background: var(--paper-3);
   border: 1px solid var(--rule);
 }
-.gal-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gal-thumb img,
+.gal-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
 .gal-thumb-empty {
   width: 100%; height: 100%;
   display: grid; place-items: center;
@@ -1244,7 +1260,8 @@ a { color: inherit; }
   background: var(--paper-3);
   overflow: hidden;
 }
-.media-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.media-thumb img,
+.media-thumb video { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 .media-body { padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .media-name {
@@ -1412,3 +1429,130 @@ a { color: inherit; }
 .publish-state--warn  { color: var(--clay); }
 .publish-state--error { color: var(--danger); }
 .publish-state--pending { color: var(--clay); }
+
+/* Publish button — carries two extra jobs beyond being a button.
+   The count says how many projects differ from what the site is
+   serving; during uploads it turns into its own progress bar so
+   there is no second widget to find. */
+.publish-btn { position: relative; overflow: hidden; }
+.publish-btn--uploading {
+  --upload-pct: 0%;
+  color: var(--ink);
+  background: var(--paper-3);
+  border-color: var(--rule-strong);
+  cursor: progress;
+}
+.publish-btn--uploading::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: var(--upload-pct);
+  background: linear-gradient(90deg, var(--paper-3) 0%, var(--clay) 100%);
+  opacity: 0.35;
+  transition: width 200ms ease;
+  pointer-events: none;
+}
+.publish-btn--uploading > * { position: relative; }
+
+/* Row action icons stay reachable as the table narrows: the list
+   scrolls sideways rather than crushing the columns, and the
+   controls stay pinned to the right edge where the thumb is. */
+.list { overflow-x: auto; }
+.row-actions {
+  position: sticky;
+  right: 0;
+  background: inherit;
+  padding-left: 6px;
+}
+.row:hover .row-actions { background: var(--paper-2); }
+
+/* ---------- projects list: responsive columns ----------
+   Columns drop from the least useful inward as the table narrows,
+   rather than every column shrinking until all of them are
+   unreadable. Order: code · flags, then year · status, then
+   location. Name, thumbnail and the controls always survive. */
+.row-projects, .list-head.head-projects {
+  grid-template-columns: 64px 1fr 1fr 0.8fr 150px 164px;
+}
+@media (max-width: 1100px) {
+  .row-projects, .list-head.head-projects { grid-template-columns: 64px 1fr 1fr 0.8fr 164px; }
+  .row-projects > *:nth-child(5), .list-head.head-projects > *:nth-child(5) { display: none; }
+}
+@media (max-width: 860px) {
+  .row-projects, .list-head.head-projects { grid-template-columns: 64px 1fr 1fr 164px; }
+  .row-projects > *:nth-child(4), .list-head.head-projects > *:nth-child(4) { display: none; }
+}
+@media (max-width: 620px) {
+  .row-projects, .list-head.head-projects { grid-template-columns: 64px 1fr 164px; }
+  .row-projects > *:nth-child(3), .list-head.head-projects > *:nth-child(3) { display: none; }
+}
+
+/* ---------- per-row upload + publish ---------- */
+.row--uploading { position: relative; }
+.row--uploading::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: var(--upload-pct, 0%);
+  background: linear-gradient(90deg, var(--paper-3) 0%, var(--paper-2) 100%);
+  transition: width 220ms ease;
+  pointer-events: none;
+}
+.row--uploading > * { position: relative; }
+
+.row-upload {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  min-width: 34px;
+  text-align: right;
+}
+.row-publish {
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--paper);
+  background: var(--clay);
+  border: 0;
+  border-radius: 999px;
+  padding: 4px 10px;
+  margin-left: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.row-publish:hover { filter: brightness(1.08); }
+
+/* Sub-category row: name, its badge, remove. The badge controls stay small
+   so the name remains the thing you read first. */
+.sublist-row { display: flex; align-items: center; gap: 8px; }
+.sublist-row > input[type="text"] { flex: 1 1 auto; min-width: 0; }
+.sub-icon { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+.sub-icon-preview {
+  width: 26px; height: 26px;
+  display: grid; place-items: center;
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  background: var(--paper-2);
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: 11px;
+}
+.sub-icon-preview img { width: 100%; height: 100%; object-fit: contain; }
+.sub-icon-btn {
+  font-family: var(--sans);
+  font-size: 11px;
+  color: var(--ink-2);
+  background: var(--paper);
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  padding: 4px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sub-icon-btn:hover { background: var(--paper-2); }
+.sub-icon-btn:disabled { opacity: 0.5; cursor: default; }
+@media (max-width: 620px) {
+  .sublist-row { flex-wrap: wrap; }
+  .sub-icon { order: 3; width: 100%; }
+}

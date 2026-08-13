@@ -30,12 +30,17 @@ import { COOKIE_NAME, verifyToken, readCookie, json } from "./_auth.js";
 export const INDEX_PATH = "media/index.json";
 export const FILE_PREFIX = "media/files/";
 
-// A decoded image larger than this is refused. Vercel caps a function
+// A decoded file larger than this is refused. Vercel caps a function
 // request body at 4.5MB and base64 inflates by a third, so the client
-// downscales before uploading and this is only a backstop.
+// downscales before uploading and this is only a backstop. Note that
+// GIF and MP4 cannot be downscaled in the browser without losing the
+// animation, so for those this ceiling is the real one.
 export const MAX_IMAGE_BYTES = 3 * 1024 * 1024;
 
-const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif", "image/gif", "image/svg+xml"];
+const ALLOWED_TYPES = [
+  "image/jpeg", "image/png", "image/webp", "image/avif", "image/gif", "image/svg+xml",
+  "video/mp4",
+];
 
 function isSet(name) {
   const value = process.env[name];

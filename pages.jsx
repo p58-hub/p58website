@@ -2,6 +2,15 @@
 const { useState: useS, useEffect: useE, useRef: useR, useMemo: useM } = React;
 
 const BRAND_OF = { pg: "Protein Garden", dn: "Dinas" };
+
+/* Project slots accept a still or an MP4. Clips play silently on loop so they
+   read as moving imagery rather than a video the visitor has to start. */
+function SiteMedia({ src, alt, className, lazy }) {
+  if (window.isVideoSrc(src)) {
+    return <video className={className} src={src} muted loop playsInline autoPlay preload="metadata" aria-label={alt || undefined} />;
+  }
+  return <img className={className} src={src} alt={alt || ""} loading={lazy ? "lazy" : undefined} />;
+}
 const BRAND_KEY = (p) => p.brandKey || (p.id.startsWith("pg-") ? "pg" : "dn");
 
 const pgProjects = () => PROJECTS.filter((p) => BRAND_KEY(p) === "pg");
@@ -376,8 +385,8 @@ function AllProjectsGrid({ limit, go, compact = false, projects }) {
 function Tile({ project, cls, go, idx }) {
   const t = window.useT();
   const pick = window.usePick();
-  const pickedStatus = pick(project, "status");
-  const statusLabel = t(pickedStatus) !== pickedStatus ? t(pickedStatus) : pickedStatus;
+  const rawStatus = project.status || "";
+  const statusLabel = t(rawStatus) !== rawStatus ? t(rawStatus) : rawStatus;
   return (
     <div
       className={`bg-tile ${cls || ""}`}
@@ -387,7 +396,7 @@ function Tile({ project, cls, go, idx }) {
       </div>
       <div className="ovr">
         <div className="ovr-top">
-          <span>N°{String(idx).padStart(2, "0")} · {project.code} · {pick(project, "brand")}</span>
+          <span>N°{String(idx).padStart(2, "0")} · {project.code} · {project.brand}</span>
           <span>{project.year}</span>
         </div>
         <div className="ovr-bot">
@@ -467,24 +476,25 @@ function ProjListRow({ project, go, idx }) {
   const site = useSiteSettings();
   const bk = BRAND_KEY(project);
   const monogram = bk === "pg" ? "PG" : "DN";
-  const iconSrc = window.projectIconFor(project, site);
+  const stored = window.readP58Store ? window.readP58Store() : null;
+  const iconSrc = window.projectIconFor(project, site, stored && stored.categories);
   // Format location as "GREECE, ATHENS, NEIGHBORHOOD"
   const rawLoc = pick(project, "location") || "";
   const locParts = rawLoc.split(/\s*·\s*/);
   const locFormatted = ["Greece", ...locParts].join(", ").toUpperCase();
-  const pickedStatus = pick(project, "status");
-  const statusLabel = t(pickedStatus) !== pickedStatus ? t(pickedStatus) : pickedStatus;
+  const rawStatus = project.status || "";
+  const statusLabel = t(rawStatus) !== rawStatus ? t(rawStatus) : rawStatus;
   return (
     <div
       className="proj-list-row"
       onClick={() => go({ name: "project", id: project.slug || project.id })}>
       <div className="proj-list-info">
         {iconSrc
-          ? <img className="proj-list-icon proj-list-icon--img" src={iconSrc} alt={pick(project, "brand")} />
+          ? <img className="proj-list-icon proj-list-icon--img" src={iconSrc} alt={project.brand} />
           : <div className={`proj-list-icon proj-list-icon--${bk}`}>{monogram}</div>
         }
         <div className="proj-list-text">
-          <div className="proj-list-brand-name">{pick(project, "brand")}</div>
+          <div className="proj-list-brand-name">{project.brand}</div>
           <div className="proj-list-loc">{locFormatted}</div>
           <div className="proj-list-status">{statusLabel}</div>
         </div>
@@ -590,12 +600,14 @@ function ProjectPage({ id, go, from, transitionDirection }) {
     else navigateProject(prev, "prev");
   };
 
-  const pickedStatus = pick(p, "status");
-  const statusLabel = t(pickedStatus) !== pickedStatus ? t(pickedStatus) : pickedStatus;
+  // Status, size and brand carry one value each — the Greek comes from the
+  // dictionary, not from a parallel _gr field on the project.
+  const rawStatus = p.status || "";
+  const statusLabel = t(rawStatus) !== rawStatus ? t(rawStatus) : rawStatus;
   const projectMeta = [
     ["location", pick(p, "location")],
     ["status", statusLabel],
-    ["size", pick(p, "size")],
+    ["size", p.size],
     ["pd_type", pick(p, "type")],
     ["pd_lead_architect", pick(p, "lead_architect")],
     ["pd_design_team", pick(p, "design_team")],
@@ -628,9 +640,9 @@ function ProjectPage({ id, go, from, transitionDirection }) {
         {backLabel.replace("← ", "")}
       </button>
 
-      {/* Fullscreen cover image */}
+      {/* Fullscreen cover — still or clip */}
       <div className="pd-hero" onTouchStart={handleHeroTouchStart} onTouchEnd={handleHeroTouchEnd}>
-        <img src={p.hero} alt={pick(p, "name")} />
+        <SiteMedia src={p.hero} alt={pick(p, "name")} />
         <button
           className="pd-hero-nav pd-hero-nav--prev"
           aria-label={`Previous project: ${pick(prev, "name")}`}
@@ -670,7 +682,7 @@ function ProjectPage({ id, go, from, transitionDirection }) {
       {/* Gallery rows — full bleed */}
       {p.gallery.map((g, i) =>
       <div key={i} className="pd-page-gallery-row">
-          <img src={g.src} alt={pick(g, "tag")} loading="lazy" />
+          <SiteMedia src={g.src} alt={pick(g, "tag")} lazy />
           {pick(g, "tag") ? <span className="pd-page-tag">{pick(g, "tag")}</span> : null}
         </div>
       )}

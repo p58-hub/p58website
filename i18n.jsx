@@ -212,7 +212,18 @@ const DICT = {
     foot_big_em: "next space!",
     foot_instagram: "Instagram → @project.58",
 
-    // status options (project content)
+    // appointment form — the "step 0" screen shown before the four questions
+    inquiry_intro_kicker: "Before we begin",
+    inquiry_intro_cta: "Continue",
+    inquiry_intro_title: "Before we meet, a little context.",
+    inquiry_intro_body: "Four short questions about the space and the idea behind it. They let us walk into the appointment already thinking about your project — with the right people in the room and something to show you.",
+
+    // status options (project content). The three current ones come from
+    // the dashboard dropdown; the lowercase entries below are older values
+    // still sitting in saved content and are kept so those keep rendering.
+    "Design Phase": "Design Phase",
+    "In Construction": "In Construction",
+    "Built": "Built",
     "Completed": "Completed",
     "In construction": "In construction",
     "In design": "In design",
@@ -362,7 +373,16 @@ const DICT = {
     foot_big_em: "επιχείρησή ή το όνειρό σας!",
     foot_instagram: "Instagram → @project.58",
 
+    // appointment form — the "step 0" screen shown before the four questions
+    inquiry_intro_kicker: "Πριν ξεκινήσουμε",
+    inquiry_intro_cta: "Συνέχεια",
+    inquiry_intro_title: "Πριν συναντηθούμε, λίγα λόγια για εσάς.",
+    inquiry_intro_body: "Τέσσερις σύντομες ερωτήσεις για τον χώρο και την ιδέα πίσω από αυτόν. Μας επιτρέπουν να έρθουμε στο ραντεβού έχοντας ήδη σκεφτεί το έργο σας — με τους κατάλληλους ανθρώπους και κάτι έτοιμο να σας δείξουμε.",
+
     // status options
+    "Design Phase": "Στάδιο Μελέτης",
+    "In Construction": "Υπό Κατασκευή",
+    "Built": "Ολοκληρωμένο",
     "Completed": "Ολοκληρωμένο",
     "In construction": "Σε κατασκευή",
     "In design": "Σε σχεδιασμό",

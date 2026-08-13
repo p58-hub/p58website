@@ -76,8 +76,9 @@ async function uploadMedia(req, res, session) {
   if (decoded.error) {
     const messages = {
       too_large:
-        "That image is over " + Math.round(MAX_IMAGE_BYTES / 1024 / 1024) + "MB after processing. Try a smaller one.",
-      unsupported_type: "That file type isn't supported. Use JPEG, PNG, WebP, AVIF, GIF or SVG.",
+        "That file is over " + Math.round(MAX_IMAGE_BYTES / 1024 / 1024) + "MB after processing. " +
+        "Photos are shrunk automatically, but GIF and MP4 are uploaded as-is — compress or trim them first.",
+      unsupported_type: "That file type isn't supported. Use JPEG, PNG, WebP, AVIF, GIF, SVG or MP4.",
     };
     return json(res, 400, {
       error: decoded.error,

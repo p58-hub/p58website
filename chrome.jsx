@@ -753,21 +753,24 @@ function Footer({ go }) {
         <div className="foot-big">
           <img src="assets/logo-black.svg" alt="Project58" className="foot-logo" style={{ height: 28, marginBottom: 24, display: "block", filter: "invert(1)" }} />
           {site.foot_big || t("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }}>{site.foot_big_em || t("foot_big_em")}</em>
-          <div className="foot-cta">
-            <button className="foot-start-btn" onClick={() => go({ name: "start" })}>Start a project<span className="ar">→</span></button>
+          <div className="foot-cta foot-cta-center">
+            <button className="foot-start-btn" onClick={() => go({ name: "start" })}>Let’s meet!<span className="ar">→</span></button>
           </div>
         </div>
-        <div className="foot-col">
-          <h4>{contact.location_label}</h4>
-          <p><ContactItem href={contact.address_url}>{contact.address}</ContactItem></p>
-          <p style={{ marginTop: 8 }}><ContactItem href={contact.phone_url}>{contact.phone}</ContactItem></p>
-          <p style={{ marginTop: 4 }}><ContactItem href={contact.email_url}>{contact.email}</ContactItem></p>
-          <p style={{ marginTop: 14 }}><ContactItem href={contact.instagram_url}>{contact.instagram_text}</ContactItem></p>
+        <div className="foot-col foot-col-split">
+          <div>
+            <h4>{contact.location_label}</h4>
+            <p><ContactItem href={contact.address_url}>{contact.address}</ContactItem></p>
+            <p style={{ marginTop: 8 }}><ContactItem href={contact.phone_url}>{contact.phone}</ContactItem></p>
+          </div>
+          <div className="foot-col-b">
+            <p><ContactItem href={contact.email_url}>{contact.email}</ContactItem></p>
+            <p style={{ marginTop: 14 }}><ContactItem href={contact.instagram_url}>{contact.instagram_text}</ContactItem></p>
+          </div>
         </div>
       </div>
-      <div className="foot-bot">
+      <div className="foot-bot foot-bot-2">
         <span>{site.foot_copy_left || t("foot_copy_left")}</span>
-        <span className="center">{site.foot_copy_mid || t("foot_copy_mid")}</span>
         <span className="right">{site.foot_copy_right || t("foot_copy_right")}</span>
       </div>
     </footer>);
@@ -783,23 +786,25 @@ function ContactPage({ go }) {
     <div className="contact-page page-enter">
       <div className="foot-top foot-top-2col" style={{ padding: "0px", textAlign: "left" }}>
         <div className="foot-big">
-          <img src="assets/logo-black.svg" alt="Project58" className="foot-logo" style={{ height: 28, marginBottom: 24, display: "block", filter: "invert(1)" }} />
           {site.foot_big || t("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }}>{site.foot_big_em || t("foot_big_em")}</em>
-          <div className="foot-cta">
-            <button className="foot-start-btn" onClick={() => go({ name: "start" })}>Start a project<span className="ar">→</span></button>
+          <div className="foot-cta foot-cta-center">
+            <button className="foot-start-btn" onClick={() => go({ name: "start" })}>Let’s meet!<span className="ar">→</span></button>
           </div>
         </div>
-        <div className="foot-col">
-          <h4>{contact.location_label}</h4>
-          <p><ContactItem href={contact.address_url}>{contact.address}</ContactItem></p>
-          <p style={{ marginTop: 8 }}><ContactItem href={contact.phone_url}>{contact.phone}</ContactItem></p>
-          <p style={{ marginTop: 4 }}><ContactItem href={contact.email_url}>{contact.email}</ContactItem></p>
-          <p style={{ marginTop: 14 }}><ContactItem href={contact.instagram_url}>{contact.instagram_text}</ContactItem></p>
+        <div className="foot-col foot-col-split">
+          <div>
+            <h4>{contact.location_label}</h4>
+            <p><ContactItem href={contact.address_url}>{contact.address}</ContactItem></p>
+            <p style={{ marginTop: 8 }}><ContactItem href={contact.phone_url}>{contact.phone}</ContactItem></p>
+          </div>
+          <div className="foot-col-b">
+            <p><ContactItem href={contact.email_url}>{contact.email}</ContactItem></p>
+            <p style={{ marginTop: 14 }}><ContactItem href={contact.instagram_url}>{contact.instagram_text}</ContactItem></p>
+          </div>
         </div>
       </div>
-      <div className="foot-bot">
+      <div className="foot-bot foot-bot-2">
         <span>{site.foot_copy_left || t("foot_copy_left")}</span>
-        <span className="center">{site.foot_copy_mid || t("foot_copy_mid")}</span>
         <span className="right">{site.foot_copy_right || t("foot_copy_right")}</span>
       </div>
     </div>);
@@ -850,15 +855,18 @@ const INQUIRY_TIMELINES = ["As soon as possible", "Within 1–3 months", "Within
 const INQUIRY_BUDGETS = ["Not sure yet", "Under €50k", "€50k–€150k", "€150k–€400k", "€400k+"];
 
 function StartProjectPage({ go }) {
+  const t = window.useT();
   const site = useSiteSettings();
   const phone = (site && site.contact && site.contact.phone) || "";
   const phoneUrl = (site && site.contact && site.contact.phone_url) || (phone ? `tel:${phone.replace(/[^\d+]/g, "")}` : "");
   const [step, setStep] = useState(0);
+  // "step 0": the why-we-ask screen, shown once before the four questions
+  const [intro, setIntro] = useState(true);
   const [done, setDone] = useState(false);
   const [sending, setSending] = useState(false);
   const [f, setF] = useState({ type: "", location: "", size: "", timeline: "", budget: "", message: "", name: "", email: "", phone: "", company: "" });
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
-  const onClose = () => go({ name: "home" });
+  const onClose = () => go({ name: "contact" });
 
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim());
   const steps = [
@@ -889,6 +897,16 @@ function StartProjectPage({ go }) {
         <p className="inquiry-call">Prefer to talk now? Call us at <a href={phoneUrl}>{phone}</a>.</p>
       ) : null}
       <button className="inquiry-btn primary" onClick={onClose}>Close</button>
+    </div>
+  ) : intro ? (
+    <div className="inquiry-intro">
+      <div className="inquiry-step-kind">{t("inquiry_intro_kicker")}</div>
+      <h2 className="inquiry-title">{t("inquiry_intro_title")}</h2>
+      <p className="inquiry-intro-body">{t("inquiry_intro_body")}</p>
+      <div className="inquiry-nav">
+        <span />
+        <button className="inquiry-btn primary" onClick={() => setIntro(false)}>{t("inquiry_intro_cta")}</button>
+      </div>
     </div>
   ) : (
     <React.Fragment>
@@ -938,7 +956,7 @@ function StartProjectPage({ go }) {
       )}
 
       <div className="inquiry-nav">
-        {step > 0 ? <button className="inquiry-btn ghost" onClick={() => setStep(step - 1)}>Back</button> : <span />}
+        <button className="inquiry-btn ghost" onClick={() => (step > 0 ? setStep(step - 1) : setIntro(true))}>Back</button>
         {step < last
           ? <button className="inquiry-btn primary" onClick={() => canNext && setStep(step + 1)} disabled={!canNext}>Continue</button>
           : <button className="inquiry-btn primary" onClick={submit} disabled={!canNext || sending}>{sending ? "Sending…" : "Send inquiry"}</button>}
@@ -949,7 +967,7 @@ function StartProjectPage({ go }) {
   return (
     <div className="start-page page-enter">
       <div className="inquiry-card">
-        <button className="inquiry-close" aria-label="Back to home" onClick={onClose}>×</button>
+        <button className="inquiry-close" aria-label="Back to contact" onClick={onClose}>×</button>
         {body}
       </div>
     </div>

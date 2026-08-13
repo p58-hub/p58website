@@ -47,7 +47,14 @@ const slugifyId = (value) => String(value || "").toLowerCase().normalize("NFD").
 const normaliseSubcategories = (subs) => (Array.isArray(subs) ? subs : [])
   .map((s, order) => {
     const label = (typeof s === "string" ? s : (s && s.label)) || "";
-    return { id: (s && s.id) || slugifyId(label) || newId("sub"), label: label || (s && s.id) || "Sub-category", order: Number.isFinite(Number(s && s.order)) ? Number(s.order) : order };
+    return {
+      id: (s && s.id) || slugifyId(label) || newId("sub"),
+      label: label || (s && s.id) || "Sub-category",
+      order: Number.isFinite(Number(s && s.order)) ? Number(s.order) : order,
+      // The badge this brand shows beside its projects. Empty means the
+      // lettered monogram, which is also the fallback for a broken URL.
+      icon: (s && s.icon) || "",
+    };
   })
   .filter((s) => s.label)
   .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
@@ -208,10 +215,80 @@ const Ic = {
 const MEDIA_MAX_DIM = 2400;
 const MEDIA_QUALITY = 0.85;
 
+/* ------------------------------------------------------------
+   Upload registry
+   ------------------------------------------------------------
+   Each uploader used to own a private `busy` boolean, which was
+   enough to grey out its own button and useless to anything else.
+   The projects list needs to know that a given project is still
+   uploading, and the header needs the total across all of them —
+   neither can reach into a component's local state.
+
+   So progress lives here instead, keyed by project id, and the
+   views subscribe. Uploads outside a project editor (the media
+   library's own picker) report under BACKLOG_KEY.
+   ------------------------------------------------------------ */
+const BACKLOG_KEY = "__backlog__";
+
+const uploadRegistry = {
+  state: {},          // key -> { done, total }
+  subs: new Set(),
+
+  subscribe(fn) { this.subs.add(fn); return () => this.subs.delete(fn); },
+  emit() { const snap = JSON.parse(JSON.stringify(this.state)); this.subs.forEach((fn) => fn(snap)); },
+
+  begin(key, total) {
+    const k = key || BACKLOG_KEY;
+    const current = this.state[k] || { done: 0, total: 0 };
+    // Adding to an in-flight batch rather than replacing it: picking more
+    // files while the first lot is still going is normal, not a restart.
+    this.state[k] = { done: current.done, total: current.total + (total || 1) };
+    this.emit();
+  },
+  step(key) {
+    const k = key || BACKLOG_KEY;
+    const current = this.state[k];
+    if (!current) return;
+    current.done = Math.min(current.total, current.done + 1);
+    if (current.done >= current.total) delete this.state[k];
+    this.emit();
+  },
+};
+
+/* Subscribes a component to the registry. Returns { byKey, done, total }. */
+function useUploads() {
+  const [byKey, setByKey] = useState({});
+  useEffect(() => uploadRegistry.subscribe(setByKey), []);
+  return useMemo(() => {
+    let done = 0;
+    let total = 0;
+    Object.keys(byKey).forEach((k) => { done += byKey[k].done; total += byKey[k].total; });
+    return { byKey, done, total, active: total > 0 };
+  }, [byKey]);
+}
+
+/* Types that must reach the server byte-for-byte: rasterising a vector only
+   makes it worse, and pushing a GIF or an MP4 through a canvas would flatten
+   it to a single still frame. These skip the downscale, so the size ceiling
+   applies to the original file. */
+const MEDIA_PASSTHROUGH = ["image/svg+xml", "image/gif", "video/mp4"];
+// Matches MAX_IMAGE_BYTES in api/_media.js — the server's backstop, which for
+// these types is the only limit there is.
+const MEDIA_PASSTHROUGH_MAX_BYTES = 3 * 1024 * 1024;
+
 function downscaleImage(file) {
   return new Promise((resolve, reject) => {
-    // Vector stays vector — rasterising an SVG would only make it worse.
-    if (file.type === "image/svg+xml") {
+    if (MEDIA_PASSTHROUGH.includes(file.type)) {
+      // Caught here rather than at the server so the message can say why.
+      if (file.size > MEDIA_PASSTHROUGH_MAX_BYTES) {
+        reject(new Error(
+          file.name + " is " + (file.size / 1024 / 1024).toFixed(1) + "MB. " +
+          (file.type === "video/mp4" ? "MP4" : file.type === "image/gif" ? "GIF" : "SVG") +
+          " files are uploaded as-is to keep them intact, so they have to be under " +
+          Math.round(MEDIA_PASSTHROUGH_MAX_BYTES / 1024 / 1024) + "MB. Compress or trim it first."
+        ));
+        return;
+      }
       const reader = new FileReader();
       reader.onload = () => resolve({ dataUrl: reader.result, width: null, height: null });
       reader.onerror = () => reject(new Error("Couldn't read " + file.name));
@@ -369,11 +446,44 @@ function App({ session }) {
      question worth being able to answer at any moment. */
   const [publishState, setPublishState] = useState({ status: "idle", message: "" });
 
+  /* The last thing we know the site is serving. Comparing against it is what
+     tells us which projects carry unpublished edits — "dirty" only says that
+     something changed somewhere, which is no use per row. */
+  const [publishedSnapshot, setPublishedSnapshot] = useState(null);
+
+  const uploads = useUploads();
+
+  const pendingIds = useMemo(() => {
+    const projects = data.projects || [];
+    // Nothing published yet: everything is pending, by definition.
+    if (!publishedSnapshot) return projects.map((p) => p.id);
+    const live = new Map((publishedSnapshot.projects || []).map((p) => [p.id, JSON.stringify(p)]));
+    return projects.filter((p) => live.get(p.id) !== JSON.stringify(p)).map((p) => p.id);
+  }, [data.projects, publishedSnapshot]);
+
+  /* Whether anything at all differs from what the site is serving. pendingIds
+     only watches projects, but settings, team, news and categories are just as
+     publishable — the button has to appear for those too. */
+  const hasUnpublishedChanges = useMemo(
+    () => (publishedSnapshot ? JSON.stringify(data) !== JSON.stringify(publishedSnapshot) : true),
+    [data, publishedSnapshot]
+  );
+
+  /* The button is only worth showing when pressing it would do something —
+     plus while a publish is in flight, has failed, or is waiting on uploads,
+     since those all still need somewhere to report. */
+  const showPublish =
+    hasUnpublishedChanges ||
+    uploads.active ||
+    publishState.status === "busy" ||
+    publishState.status === "error";
+
   const runPublish = (payload) => {
     setPublishState({ status: "busy", message: "Publishing…" });
     return publishContent(payload)
       .then((result) => {
         const ok = result === "published";
+        if (ok) setPublishedSnapshot(payload);
         setPublishState({
           status: ok ? "ok" : "warn",
           message: ok
@@ -388,11 +498,48 @@ function App({ session }) {
       });
   };
 
+  /* Publishing one project still sends the whole document — that is the only
+     shape /api/content takes. What makes it "one project" is the base: we
+     start from what is already live and swap in just this project, so edits
+     to the others stay unpublished. */
+  const publishOneProject = (id) => {
+    const project = (data.projects || []).find((p) => p.id === id);
+    if (!project) return Promise.resolve();
+    if (!publishedSnapshot) return runPublish(data); // nothing live yet — seed it
+
+    const live = publishedSnapshot.projects || [];
+    const at = live.findIndex((p) => p.id === id);
+    const projects = at >= 0
+      ? live.map((p) => (p.id === id ? project : p))
+      : [...live, project];
+
+    return runPublish({ ...publishedSnapshot, projects });
+  };
+
+  /* The sheet's own Publish: store the edit, then push just this project live.
+     Going through the same document update keeps the two paths identical —
+     the only difference is that this one does not wait to be asked twice. */
+  const onSaveAndPublishProject = (proj) => {
+    onSaveProject(proj);
+    const live = publishedSnapshot ? (publishedSnapshot.projects || []) : null;
+    if (!live) {
+      const projects = (data.projects || []).some((p) => p.id === proj.id)
+        ? (data.projects || []).map((p) => (p.id === proj.id ? proj : p))
+        : [proj, ...(data.projects || [])];
+      return runPublish({ ...data, projects }).catch(() => {});
+    }
+    const at = live.findIndex((p) => p.id === proj.id);
+    const projects = at >= 0 ? live.map((p) => (p.id === proj.id ? proj : p)) : [...live, proj];
+    return runPublish({ ...publishedSnapshot, projects }).catch(() => {});
+  };
+
   useEffect(() => {
     let cancelled = false;
     fetchPublished().then((published) => {
-      if (cancelled || !published || dirtyRef.current) return; // edited while in flight
-      persist(published); // keep the local copy in step
+      if (cancelled || !published) return;
+      setPublishedSnapshot(published); // safe even mid-edit: it is what the site has
+      if (dirtyRef.current) return;    // edited while in flight
+      persist(published);              // keep the local copy in step
       setData(published);
     });
     return () => { cancelled = true; };
@@ -507,7 +654,11 @@ function App({ session }) {
     if (kind === "team") update({ ...data, team: data.team.filter((t) => t._id !== idOrIdx) });
   };
 
-  /* ----- export / import / reset ----- */
+  /* ----- export / reset -----
+     Export is no longer a toolbar button — the content lives on the server
+     now, so a manual JSON download is not the only copy any more. It stays
+     here because the media migration still takes a backup with it before
+     rewriting content, which is the one moment it genuinely matters. */
   const onExport = () => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -516,28 +667,6 @@ function App({ session }) {
     a.download = "project58-content-" + new Date().toISOString().slice(0, 10) + ".json";
     a.click();
     URL.revokeObjectURL(url);
-  };
-  const fileInputRef = useRef(null);
-  const onImport = () => {
-    if (!can("importData")) return;
-    if (fileInputRef.current) fileInputRef.current.click();
-  };
-  const onImportFile = (e) => {
-    const f = e.target.files && e.target.files[0];
-    if (!f || !can("importData")) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const next = JSON.parse(reader.result);
-        if (!next.projects || !next.news || !next.team) throw new Error("missing keys");
-        update(next);
-        setToast("Imported");
-      } catch (err) {
-        alert("Couldn't read that JSON. Make sure it has projects, news, team keys.");
-      }
-    };
-    reader.readAsText(f);
-    e.target.value = "";
   };
   const onReset = () => {
     if (!can("resetData")) return;
@@ -683,29 +812,31 @@ function App({ session }) {
             <b>{section === "projects" ? "Projects" : section === "categories" ? "Categories" : section === "news" ? "News" : section === "site" ? "Site settings" : section === "hero" ? "Hero gallery" : section === "inquiries" ? "Inquiries" : section === "media" ? "Media" : "Team"}</b>
           </div>
           <div className="actions">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/json"
-              style={{ display: "none" }}
-              onChange={onImportFile}
-            />
-            {can("importData") && (
-              <button className="btn ghost" onClick={onImport} title="Import JSON">
-                <span className="ic">{Ic.upload}</span><span>Import</span>
-              </button>
-            )}
-            <button className="btn ghost" onClick={onExport} title="Export JSON">
-              <span className="ic">{Ic.download}</span><span>Export</span>
-            </button>
+            {showPublish && (
             <button
-              className={"btn " + (publishState.status === "pending" ? "primary" : "ghost")}
+              className={
+                "btn publish-btn "
+                + (pendingIds.length || publishState.status === "pending" ? "primary" : "ghost")
+                + (uploads.active ? " publish-btn--uploading" : "")
+              }
+              style={uploads.active ? { "--upload-pct": Math.round((uploads.done / uploads.total) * 100) + "%" } : null}
               onClick={() => runPublish(data).catch(() => { /* shown beside the button */ })}
-              disabled={publishState.status === "busy"}
-              title="Send the saved content to the live site">
+              disabled={publishState.status === "busy" || uploads.active}
+              title={uploads.active
+                ? "Waiting for images to finish uploading"
+                : "Publish every project with unpublished changes"}>
               <span className="ic">{Ic.external}</span>
-              <span>{publishState.status === "busy" ? "Publishing…" : "Publish"}</span>
+              <span>
+                {uploads.active
+                  ? "Uploading " + uploads.done + "/" + uploads.total
+                  : publishState.status === "busy"
+                    ? "Publishing…"
+                    : pendingIds.length
+                      ? "Publish (" + pendingIds.length + ")"
+                      : "Publish"}
+              </span>
             </button>
+            )}
             {publishState.message ? (
               <span className={"publish-state publish-state--" + publishState.status} title={publishState.message}>
                 {publishState.message}
@@ -724,7 +855,7 @@ function App({ session }) {
 
         <div className="content">
           {section === "projects" && (
-            <ProjectsList data={data.projects} categories={data.categories} onEdit={(id) => setEditing({ kind: "project", id })} onDelete={(id) => onDelete("project", id)} onMove={onMoveProject} onNew={() => setEditing({ kind: "project", id: null })} />
+            <ProjectsList data={data.projects} categories={data.categories} onEdit={(id) => setEditing({ kind: "project", id })} onDelete={(id) => onDelete("project", id)} onMove={onMoveProject} onNew={() => setEditing({ kind: "project", id: null })} pendingIds={pendingIds} uploads={uploads} onPublishOne={(id) => publishOneProject(id).catch(() => { /* shown in the header */ })} publishBusy={publishState.status === "busy"} />
           )}
           {section === "categories" && (
             <CategoriesList data={data.categories} projects={data.projects} onEdit={(id) => setEditing({ kind: "category", id })} onDelete={(id) => onDelete("category", id)} onMove={onMoveCategory} onNew={() => setEditing({ kind: "category", id: null })} />
@@ -768,7 +899,10 @@ function App({ session }) {
           categories={data.categories}
           brandLogos={normaliseSite(data.site || DEFAULT_SITE).brandLogos}
           onSave={onSaveProject}
+          onPublish={onSaveAndPublishProject}
           onClose={() => setEditing(null)}
+          uploadsActive={uploads.active}
+          publishBusy={publishState.status === "busy"}
         />
       )}
       {editing && editing.kind === "category" && (
@@ -815,7 +949,7 @@ function categoryLabel(categories, id) {
   return cat ? cat.label : id || "Uncategorised";
 }
 
-function ProjectsList({ data, categories, onEdit, onDelete, onMove, onNew }) {
+function ProjectsList({ data, categories, onEdit, onDelete, onMove, onNew, pendingIds, uploads, onPublishOne, publishBusy }) {
   if (!data.length) return <Empty kind="projects" onNew={onNew} />;
   const groups = categories.map((cat) => ({
     category: cat,
@@ -824,10 +958,26 @@ function ProjectsList({ data, categories, onEdit, onDelete, onMove, onNew }) {
   const uncategorised = data.filter((p) => !categories.find((c) => c.id === (p.category || p.typology || "retail")));
   if (uncategorised.length) groups.push({ category: { id: "uncategorised", label: "Uncategorised", description: "Projects without a matching category" }, projects: uncategorised });
 
+  const pending = new Set(pendingIds || []);
+  const byKey = (uploads && uploads.byKey) || {};
+
   const renderRow = (p) => {
     const globalIndex = data.findIndex((x) => x.id === p.id);
+
+    // This project's own upload batch, if it has one in flight.
+    const job = byKey[p.id];
+    const pct = job && job.total ? Math.round((job.done / job.total) * 100) : 0;
+
+    // Publish is offered only once the images are in — publishing mid-upload
+    // would put a URL on the site that does not exist yet.
+    const canPublish = pending.has(p.id) && !job && !publishBusy;
+
     return (
-      <div className="row" key={p.id} onClick={() => onEdit(p.id)}>
+      <div
+        className={"row row-projects" + (job ? " row--uploading" : "") + (pending.has(p.id) ? " row--pending" : "")}
+        style={job ? { "--upload-pct": pct + "%" } : null}
+        key={p.id}
+        onClick={() => onEdit(p.id)}>
         <div className="thumb">
           {p.hero ? <img src={p.hero} alt="" /> : <div className="placeholder">no img</div>}
         </div>
@@ -842,12 +992,22 @@ function ProjectsList({ data, categories, onEdit, onDelete, onMove, onNew }) {
           <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(p.id, -1); }} title="Move up" disabled={globalIndex === 0}>↑</button>
           <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(p.id, 1); }} title="Move down" disabled={globalIndex === data.length - 1}>↓</button>
           <button className="delete" onClick={(e) => { e.stopPropagation(); onDelete(p.id); }} title="Delete">{Ic.trash}</button>
+          {job ? (
+            <span className="row-upload" title={"Uploading " + job.done + " of " + job.total}>{pct}%</span>
+          ) : canPublish ? (
+            <button
+              className="row-publish"
+              onClick={(e) => { e.stopPropagation(); onPublishOne(p.id); }}
+              title="Publish only this project to the live site">
+              Publish
+            </button>
+          ) : null}
         </div>
       </div>
     );
   };
   const listHead = (
-    <div className="list-head">
+    <div className="list-head head-projects">
       <span></span><span>Name</span><span>Location</span><span>Year · status</span><span>Code · flags</span><span></span>
     </div>
   );
@@ -1352,7 +1512,24 @@ function Empty({ kind, onNew }) {
 /* ============================================================
    PROJECT SHEET
    ============================================================ */
-const STATUS_OPTIONS = ["Completed", "In construction", "In design", "Concept"];
+/* The only three statuses a project can carry. Both the label and the value
+   are translated on the site, through the i18n dictionary — which is why this
+   is a fixed list and not free text: a typed value has no dictionary entry
+   and would appear untranslated in Greek. */
+const STATUS_OPTIONS = ["Design Phase", "In Construction", "Built"];
+
+/* Values saved before the list was fixed, mapped onto it. */
+const STATUS_ALIASES = {
+  "In design": "Design Phase",
+  "Concept": "Design Phase",
+  "In construction": "In Construction",
+  "Completed": "Built",
+};
+const normaliseStatus = (value) => {
+  const v = String(value || "").trim();
+  if (STATUS_OPTIONS.includes(v)) return v;
+  return STATUS_ALIASES[v] || STATUS_OPTIONS[0];
+};
 const SPAN_OPTIONS = [
   { v: "gal-12", l: "Full width" },
   { v: "gal-7",  l: "7 / 12" },
@@ -1360,7 +1537,7 @@ const SPAN_OPTIONS = [
   { v: "gal-6",  l: "6 / 12" },
 ];
 
-function ProjectSheet({ project, categories, brandLogos, onSave, onClose }) {
+function ProjectSheet({ project, categories, brandLogos, onSave, onPublish, onClose, uploadsActive, publishBusy }) {
   const [p, setP] = useState(() => project ? JSON.parse(JSON.stringify(project)) : ({
     id: newId("pj"),
     slug: "",
@@ -1477,7 +1654,17 @@ function ProjectSheet({ project, categories, brandLogos, onSave, onClose }) {
   const subOptions = (activeCat && activeCat.subcategories) || [];
   const subLabel = (activeCat && activeCat.subLabel && activeCat.subLabel !== "Sub-category") ? activeCat.subLabel : "Brand";
   const valid = p.name && p.code;
-  const save = () => valid && onSave({ ...p, slug: p.slug || suggestedSlug || p.id, typology: p.category || p.typology || "retail" });
+  const finished = () => ({ ...p, slug: p.slug || suggestedSlug || p.id, typology: p.category || p.typology || "retail" });
+  const save = () => valid && onSave(finished());
+
+  /* Publish sits beside Save and only turns up once this sheet holds something
+     the site does not have yet. It stays on screen while images are still
+     uploading — dimmed and unclickable — because publishing mid-upload would
+     put a project live pointing at pictures that are not there. */
+  const changed = !project || JSON.stringify(p) !== JSON.stringify(project);
+  const showPublish = valid && changed;
+  const publishReady = showPublish && !uploadsActive && !publishBusy;
+  const publish = () => publishReady && onPublish(finished());
 
   useEffect(() => {
     const k = (e) => { if (e.key === "Escape") onClose(); };
@@ -1532,9 +1719,7 @@ function ProjectSheet({ project, categories, brandLogos, onSave, onClose }) {
                   <input type="text" value={p.brand} onChange={(e) => set("brand", e.target.value)} placeholder="e.g. Protein Garden" />
                 )}
               </Field>
-              <Field label={`${subLabel} (GR)`} hint="Greek translation — falls back to EN">
-                <input type="text" value={p.brand_gr || ""} onChange={(e) => set("brand_gr", e.target.value)} />
-              </Field>
+
             </div>
             <div className="field-group cols-3">
               <Field label="Category">
@@ -1567,23 +1752,17 @@ function ProjectSheet({ project, categories, brandLogos, onSave, onClose }) {
               </Field>
             </div>
             <div className="field-group">
-              <Field label="Status (EN)">
-                <input list="project-status-options" type="text" value={p.status} onChange={(e) => set("status", e.target.value)} />
-                <datalist id="project-status-options">
-                  {STATUS_OPTIONS.map((s) => <option key={s} value={s} />)}
-                </datalist>
-              </Field>
-              <Field label="Status (GR)" hint="Greek translation — falls back to EN">
-                <input type="text" value={p.status_gr || ""} onChange={(e) => set("status_gr", e.target.value)} />
+              <Field label="Status" hint="Translated on the site, label and value">
+                <select value={normaliseStatus(p.status)} onChange={(e) => set("status", e.target.value)}>
+                  {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
               </Field>
             </div>
             <div className="field-group">
               <Field label="Size (EN)">
                 <input type="text" value={p.size} onChange={(e) => set("size", e.target.value)} placeholder="e.g. 142 m²" />
               </Field>
-              <Field label="Size (GR)" hint="Greek translation — falls back to EN">
-                <input type="text" value={p.size_gr || ""} onChange={(e) => set("size_gr", e.target.value)} />
-              </Field>
+
             </div>
             <div className="field-group">
               <Field label="Type (EN)">
@@ -1641,7 +1820,7 @@ function ProjectSheet({ project, categories, brandLogos, onSave, onClose }) {
 
           <div className="form-section">
             <div className="form-section-title">Hero image</div>
-            <ImageInput value={p.hero} onChange={(v) => set("hero", v)} placeholder="Hero · 16:9 recommended" />
+            <ImageInput value={p.hero} onChange={(v) => set("hero", v)} placeholder="Hero · 16:9 recommended" uploadKey={p.id} />
           </div>
 
           <div className="form-section">
@@ -1650,6 +1829,7 @@ function ProjectSheet({ project, categories, brandLogos, onSave, onClose }) {
               value={p.icon || brandLogo}
               onChange={(v) => set("icon", v)}
               placeholder="Brand logo · square"
+              uploadKey={p.id}
               extra={
                 <div className="badge-extra">
                   <span>
@@ -1716,6 +1896,7 @@ function ProjectSheet({ project, categories, brandLogos, onSave, onClose }) {
                       value={g.src}
                       onChange={(v) => setGallery(i, "src", v)}
                       index={i}
+                      uploadKey={p.id}
                     />
                     <input
                       type="text"
@@ -1735,6 +1916,7 @@ function ProjectSheet({ project, categories, brandLogos, onSave, onClose }) {
                       value={g.src}
                       onChange={(v) => setGallery(i, "src", v)}
                       placeholder={`Gallery ${i + 1}`}
+                      uploadKey={p.id}
                       extra={
                         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
                           <input
@@ -1772,6 +1954,22 @@ function ProjectSheet({ project, categories, brandLogos, onSave, onClose }) {
           <div className="right">
             <button className="btn ghost" onClick={onClose}>Cancel</button>
             <button className="btn primary" onClick={save} disabled={!valid}>Save project</button>
+            {showPublish && (
+              <button
+                className={"btn sheet-publish " + (publishReady ? "primary" : "waiting")}
+                onClick={publish}
+                disabled={!publishReady}
+                title={uploadsActive
+                  ? "Waiting for images to finish uploading"
+                  : publishBusy
+                    ? "Publishing…"
+                    : "Save and publish this project to the live site"}>
+                <span className="ic">{Ic.external}</span>
+                <span>
+                  {uploadsActive ? "Uploading…" : publishBusy ? "Publishing…" : "Save & publish"}
+                </span>
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -1944,8 +2142,8 @@ function CategorySheet({ category, onSave, onClose }) {
   }));
   const set = (k, v) => setC((x) => ({ ...x, [k]: v }));
   const subs = c.subcategories || [];
-  const setSub = (i, label) => setC((x) => ({ ...x, subcategories: x.subcategories.map((s, j) => j === i ? { ...s, label } : s) }));
-  const addSub = () => setC((x) => ({ ...x, subcategories: [...(x.subcategories || []), { id: newId("sub"), label: "", order: (x.subcategories || []).length }] }));
+  const setSub = (i, key, value) => setC((x) => ({ ...x, subcategories: x.subcategories.map((s, j) => j === i ? { ...s, [key]: value } : s) }));
+  const addSub = () => setC((x) => ({ ...x, subcategories: [...(x.subcategories || []), { id: newId("sub"), label: "", order: (x.subcategories || []).length, icon: "" }] }));
   const removeSub = (i) => setC((x) => ({ ...x, subcategories: x.subcategories.filter((_, j) => j !== i) }));
   useEffect(() => {
     const k = (e) => { if (e.key === "Escape") onClose(); };
@@ -1993,11 +2191,12 @@ function CategorySheet({ category, onSave, onClose }) {
               <div className="sublist-empty">No sub-categories yet.</div>
             ) : subs.map((s, i) => (
               <div className="sublist-row" key={s.id || i}>
-                <input type="text" value={s.label} onChange={(e) => setSub(i, e.target.value)} placeholder={`${c.subLabel || "Sub-category"} ${i + 1}`} />
+                <input type="text" value={s.label} onChange={(e) => setSub(i, "label", e.target.value)} placeholder={`${c.subLabel || "Sub-category"} ${i + 1}`} />
+                <SubIconPicker value={s.icon || ""} onChange={(v) => setSub(i, "icon", v)} />
                 <button className="delete" onClick={() => removeSub(i)} title="Remove">{Ic.trash}</button>
               </div>
             ))}
-            <button className="btn ghost sublist-add" onClick={addSub}><span className="ic">{Ic.plus}</span><span>Add {(c.subLabel || "sub-category").toLowerCase()}</span></button>
+            <button className="btn ghost sublist-add" onClick={addSub}><span className="ic">{Ic.plus}</span><span>Add Sub-category</span></button>
           </div>
         </div>
 
@@ -2026,6 +2225,25 @@ function Field({ label, hint, required, children }) {
   );
 }
 
+/* A slot can hold a still or a clip — render whichever this is. Clips are
+   muted and loop so a preview behaves like an animated thumbnail. */
+function MediaPreview({ src, alt, className, lazy }) {
+  if (window.isVideoSrc(src)) {
+    return (
+      <video
+        className={className}
+        src={src}
+        muted
+        loop
+        playsInline
+        autoPlay
+        preload="metadata"
+      />
+    );
+  }
+  return <img className={className} src={src} alt={alt || ""} loading={lazy ? "lazy" : undefined} draggable="false" />;
+}
+
 // Shared by ImageInput and the compact gallery thumbnail.
 /* Picks an image, downscales it, and puts it in the media library —
    what gets stored in the content is a URL, not the image itself.
@@ -2034,19 +2252,21 @@ function Field({ label, hint, required, children }) {
    or no Blob store is linked yet) it falls back to embedding the image
    so the dashboard still works, and says so: embedded images spend the
    shared ~5MB localStorage budget that all your content lives in. */
-async function readImageFile(e, onChange, onBusy) {
+async function readImageFile(e, onChange, onBusy, uploadKey) {
   const file = e.target.files && e.target.files[0];
   e.target.value = "";
   if (!file) return;
 
   const setBusy = onBusy || function () {};
   setBusy(true);
+  uploadRegistry.begin(uploadKey, 1);
 
   let shrunk;
   try {
     shrunk = await downscaleImage(file);
   } catch (err) {
     setBusy(false);
+    uploadRegistry.step(uploadKey);
     alert(err.message);
     return;
   }
@@ -2059,18 +2279,19 @@ async function readImageFile(e, onChange, onBusy) {
     alert("This image was saved inside this browser rather than the media library.\n\n" + err.message);
   }
   setBusy(false);
+  uploadRegistry.step(uploadKey);
 }
 
 /* Compact tile used by the gallery's thumbnail view. The full editor
    (URL field, Greek caption) stays in the list view. */
-function GalleryThumb({ value, onChange, index }) {
+function GalleryThumb({ value, onChange, index, uploadKey }) {
   const ref = useRef(null);
   const [busy, setBusy] = useState(false);
   return (
     <div className="gal-thumb">
-      <input type="file" ref={ref} accept="image/*" onChange={(e) => readImageFile(e, onChange, setBusy)} style={{ display: "none" }} />
+      <input type="file" ref={ref} accept="image/*,video/mp4" onChange={(e) => readImageFile(e, onChange, setBusy, uploadKey)} style={{ display: "none" }} />
       {value
-        ? <img src={value} alt="" draggable="false" />
+        ? <MediaPreview src={value} />
         : <div className="gal-thumb-empty">Image {index + 1}</div>}
       <button type="button" className="gal-thumb-btn" disabled={busy} onClick={() => ref.current && ref.current.click()}>
         {busy ? "Uploading…" : value ? "Replace" : "Upload"}
@@ -2079,11 +2300,34 @@ function GalleryThumb({ value, onChange, index }) {
   );
 }
 
-function ImageInput({ value, onChange, placeholder, extra }) {
+/* The badge that sits beside a sub-category's name in the category editor.
+   Deliberately smaller than ImageInput: this lives inside a list row, so a
+   preview panel and a URL field would swamp the name it belongs to. */
+function SubIconPicker({ value, onChange }) {
   const ref = useRef(null);
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
-  const onFile = (e) => readImageFile(e, onChange, setBusy);
+  return (
+    <div className="sub-icon">
+      {picking && <MediaPicker onPick={(v) => { onChange(v); setPicking(false); }} onClose={() => setPicking(false)} />}
+      <input type="file" ref={ref} accept="image/*" onChange={(e) => readImageFile(e, onChange, setBusy)} style={{ display: "none" }} />
+      <div className="sub-icon-preview">
+        {value ? <img src={value} alt="" /> : <span>—</span>}
+      </div>
+      <button type="button" className="sub-icon-btn" disabled={busy} onClick={() => ref.current && ref.current.click()} title="Upload a logo for this sub-category">
+        {busy ? "…" : "Upload"}
+      </button>
+      <button type="button" className="sub-icon-btn" onClick={() => setPicking(true)} title="Pick one already in the library">Library</button>
+      {value ? <button type="button" className="sub-icon-btn" onClick={() => onChange("")} title="Remove logo">Clear</button> : null}
+    </div>
+  );
+}
+
+function ImageInput({ value, onChange, placeholder, extra, uploadKey }) {
+  const ref = useRef(null);
+  const [busy, setBusy] = useState(false);
+  const [picking, setPicking] = useState(false);
+  const onFile = (e) => readImageFile(e, onChange, setBusy, uploadKey);
   const isDataUrl = value && value.startsWith("data:");
   const sizeKb = isDataUrl ? Math.round(value.length / 1024) : null;
 
@@ -2091,13 +2335,13 @@ function ImageInput({ value, onChange, placeholder, extra }) {
     <div className="img-input">
       {picking && <MediaPicker onPick={onChange} onClose={() => setPicking(false)} />}
       <div className="preview">
-        {value ? <img src={value} alt="" /> : <div className="placeholder">{placeholder || "No image"}</div>}
+        {value ? <MediaPreview src={value} /> : <div className="placeholder">{placeholder || "No image"}</div>}
       </div>
       <div className="right">
         <input
           type="file"
           ref={ref}
-          accept="image/*"
+          accept="image/*,video/mp4"
           onChange={onFile}
           style={{ display: "none" }}
         />
@@ -2177,7 +2421,7 @@ function MediaTile({ item, projects, onAssign, onDelete, onCaption }) {
   return (
     <div className="media-tile">
       <a className="media-thumb" href={item.url} target="_blank" rel="noopener" title="Open full size">
-        <img src={item.url} alt={item.caption || item.filename} loading="lazy" />
+        <MediaPreview src={item.url} alt={item.caption || item.filename} lazy />
       </a>
       <div className="media-body">
         <div className="media-name" title={item.filename}>{item.filename}</div>
@@ -2404,7 +2648,7 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
       />
 
       <div className="media-bar">
-        <input type="file" ref={fileRef} accept="image/*" multiple onChange={onFiles} style={{ display: "none" }} />
+        <input type="file" ref={fileRef} accept="image/*,video/mp4" multiple onChange={onFiles} style={{ display: "none" }} />
         <button className="btn primary" type="button" disabled={!!busy} onClick={() => fileRef.current && fileRef.current.click()}>
           <span className="ic">{Ic.upload}</span><span>{busy || "Upload images"}</span>
         </button>
@@ -2533,7 +2777,7 @@ function MediaPicker({ onPick, onClose }) {
                     onClick={() => { onPick(item.url); onClose(); }}
                     title={item.filename}
                   >
-                    <img src={item.url} alt={item.caption || item.filename} loading="lazy" />
+                    <MediaPreview src={item.url} alt={item.caption || item.filename} lazy />
                     <span>{item.filename}</span>
                   </button>
                 ))}
