@@ -87,6 +87,17 @@ async function uploadMedia(req, res, session) {
   }
 
   const filename = safeName(body.filename);
+  const items = await readIndex();
+  const duplicate = items.find((item) =>
+    item && String(item.filename || "").toLowerCase() === filename.toLowerCase()
+  );
+  if (duplicate) {
+    return json(res, 409, {
+      error: "duplicate_filename",
+      message: `A file named ${filename} already exists in Media. Rename the file before uploading it again.`,
+    });
+  }
+
   const blob = await put(FILE_PREFIX + filename, decoded.buffer, {
     access: "public",
     contentType: decoded.contentType,
@@ -104,12 +115,12 @@ async function uploadMedia(req, res, session) {
     width: Number.isFinite(body.width) ? body.width : null,
     height: Number.isFinite(body.height) ? body.height : null,
     projectId: cleanText(body.projectId, 120) || null,
+    kind: body.kind === "logo" || body.kind === "icon" ? body.kind : "image",
     caption: cleanText(body.caption, 300),
     uploadedAt: new Date().toISOString(),
     uploadedBy: session.u,
   };
 
-  const items = await readIndex();
   await writeIndex([item, ...items]);
 
   return json(res, 201, { item });
@@ -134,6 +145,9 @@ async function updateMedia(req, res) {
     item.projectId = body.projectId === null ? null : cleanText(body.projectId, 120) || null;
   }
   if ("caption" in body) item.caption = cleanText(body.caption, 300);
+  if ("kind" in body) {
+    item.kind = body.kind === "logo" || body.kind === "icon" ? body.kind : "image";
+  }
 
   const next = items.slice();
   next[idx] = item;

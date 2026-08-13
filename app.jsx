@@ -368,9 +368,20 @@ function App() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
+  // A hidden project must not remain reachable through an old bookmark or a
+  // previously shared URL. Replace that route with the public project index.
+  aUseEffect(() => {
+    if (route.name !== "project") return;
+    const exists = PROJECTS.some((p) => p.visible !== false && (p.id === route.id || p.slug === route.id));
+    if (exists) return;
+    const next = { name: "projects" };
+    history.replaceState({ route: pathFromRoute(next) }, "", pathFromRoute(next));
+    setRoute(next);
+  }, [route.name, route.id, contentVersion]);
+
   aUseEffect(() => {
     const project = route.name === "project"
-      ? PROJECTS.find((p) => p.id === route.id || p.slug === route.id)
+      ? PROJECTS.find((p) => p.visible !== false && (p.id === route.id || p.slug === route.id))
       : null;
     const title = project ? `${project.name} — Project58` : "Project58 — Architecture";
     const description = project && project.summary
@@ -396,14 +407,19 @@ function App() {
   }, [route.name, route.id, route.brand, route.type, contentVersion]);
 
   let page = null;
-  if (route.name === "home")         page = <HomePage go={go} />;
+  if (route.name === "home")         page = (window.visibleProjects ? window.visibleProjects() : PROJECTS.filter((p) => p.visible !== false)).length ? <HomePage go={go} /> : <ProjectsPage go={go} />;
   if (route.name === "projects")     page = <ProjectsPage go={go} type={route.type} brand={route.brand} sort={route.sort} />;
   if (route.name === "architecture") page = <ArchitecturePage go={go} sort={route.sort} />;
   if (route.name === "interiors")    page = <InteriorsPage go={go} brand={route.brand} sort={route.sort} />;
   if (route.name === "agency")       page = <AgencyPage go={go} />;
   if (route.name === "start")        page = <StartProjectPage go={go} />;
   if (route.name === "contact")      page = <ContactPage go={go} />;
-  if (route.name === "project")      page = <ProjectPage id={route.id} go={go} from={route.from} transitionDirection={route.transitionDirection} />;
+  if (route.name === "project") {
+    const projectIsVisible = PROJECTS.some((p) => p.visible !== false && (p.id === route.id || p.slug === route.id));
+    page = projectIsVisible
+      ? <ProjectPage id={route.id} go={go} from={route.from} transitionDirection={route.transitionDirection} />
+      : <ProjectsPage go={go} />;
+  }
 
   return (
     <React.Fragment>

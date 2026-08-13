@@ -722,10 +722,21 @@ function normaliseProject(p, order) {
     order: Number.isFinite(Number(p.order)) ? Number(p.order) : order,
     featured: p.featured != null ? Boolean(p.featured) : order < 6,
     ...p,
+    // Visibility is opt-out so every project created before this setting
+    // existed remains on the public site.
+    visible: p.visible !== false,
     brandKey,
     gallery: Array.isArray(p.gallery) ? p.gallery : [],
     body: Array.isArray(p.body) ? p.body : [],
   };
+}
+
+function isProjectVisible(project) {
+  return Boolean(project) && project.visible !== false;
+}
+
+function visibleProjects() {
+  return PROJECTS.filter(isProjectVisible);
 }
 
 function sortByOrder(items) {
@@ -878,4 +889,4 @@ const PROJECT_SORTS = {
 applyP58ContentFromStore();
 const P58_CONTENT_READY = loadRemoteContent();
 
-Object.assign(window, { P58_STORE_KEY, P58_CONTENT_READY, DEFAULT_SITE_SETTINGS, normaliseSiteSettings, projectSlugFromFields, applyP58ContentFromStore, readP58Store, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor, isVideoSrc });
+Object.assign(window, { P58_STORE_KEY, P58_CONTENT_READY, DEFAULT_SITE_SETTINGS, normaliseSiteSettings, projectSlugFromFields, applyP58ContentFromStore, readP58Store, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor, isProjectVisible, visibleProjects, isVideoSrc });

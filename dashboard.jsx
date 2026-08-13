@@ -77,6 +77,7 @@ const seed = () => ({
     category: p.category || p.typology || "retail",
     order: p.order != null ? p.order : order,
     featured: p.featured != null ? p.featured : order < 6,
+    visible: p.visible !== false,
     ...p,
     body: p.body.map((b) => [...b]),
     gallery: p.gallery.map((g) => ({ ...g })),
@@ -97,6 +98,7 @@ const normaliseStored = (stored) => {
       const projects = stored.projects.map((p) => ({
         ...p,
         slug: !p.slug || p.slug === p.id ? descriptiveProjectSlug(p) : p.slug,
+        visible: p.visible !== false,
       }));
       const team = stored.team.map((member, order) => ({ ...member, order: member.order != null ? member.order : order }));
       if (team[0] && team[0].name === "Nikos Andreadis") {
@@ -414,6 +416,16 @@ function formatBytes(bytes) {
   return (bytes / 1024 / 1024).toFixed(1) + " MB";
 }
 
+function normaliseMediaFilename(filename) {
+  const raw = String(filename || "image").split(/[\\/]/).pop();
+  const dot = raw.lastIndexOf(".");
+  const stem = (dot > 0 ? raw.slice(0, dot) : raw)
+    .toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+  const ext = (dot > 0 ? raw.slice(dot + 1) : "").toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 5);
+  return (stem || "image") + (ext ? "." + ext : "");
+}
+
 /* ============================================================
    ROOT APP
    ============================================================ */
@@ -619,6 +631,13 @@ function App({ session }) {
     projects[idx] = projects[nextIdx];
     projects[nextIdx] = tmp;
     update({ ...data, projects: projects.map((p, order) => ({ ...p, order })) });
+  };
+  const onToggleProjectVisibility = (id, visible) => {
+    update({
+      ...data,
+      projects: data.projects.map((p) => (p.id === id ? { ...p, visible } : p)),
+    });
+    setToast(visible ? "Project set to visible" : "Project set to hidden");
   };
   const onMoveTeam = (id, dir) => {
     const idx = data.team.findIndex((t) => t._id === id);
@@ -855,7 +874,7 @@ function App({ session }) {
 
         <div className="content">
           {section === "projects" && (
-            <ProjectsList data={data.projects} categories={data.categories} onEdit={(id) => setEditing({ kind: "project", id })} onDelete={(id) => onDelete("project", id)} onMove={onMoveProject} onNew={() => setEditing({ kind: "project", id: null })} pendingIds={pendingIds} uploads={uploads} onPublishOne={(id) => publishOneProject(id).catch(() => { /* shown in the header */ })} publishBusy={publishState.status === "busy"} />
+            <ProjectsList data={data.projects} categories={data.categories} onEdit={(id) => setEditing({ kind: "project", id })} onDelete={(id) => onDelete("project", id)} onMove={onMoveProject} onToggleVisibility={onToggleProjectVisibility} onNew={() => setEditing({ kind: "project", id: null })} pendingIds={pendingIds} uploads={uploads} onPublishOne={(id) => publishOneProject(id).catch(() => { /* shown in the header */ })} publishBusy={publishState.status === "busy"} />
           )}
           {section === "categories" && (
             <CategoriesList data={data.categories} projects={data.projects} onEdit={(id) => setEditing({ kind: "category", id })} onDelete={(id) => onDelete("category", id)} onMove={onMoveCategory} onNew={() => setEditing({ kind: "category", id: null })} />
@@ -949,7 +968,7 @@ function categoryLabel(categories, id) {
   return cat ? cat.label : id || "Uncategorised";
 }
 
-function ProjectsList({ data, categories, onEdit, onDelete, onMove, onNew, pendingIds, uploads, onPublishOne, publishBusy }) {
+function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisibility, onNew, pendingIds, uploads, onPublishOne, publishBusy }) {
   if (!data.length) return <Empty kind="projects" onNew={onNew} />;
   const groups = categories.map((cat) => ({
     category: cat,
@@ -983,12 +1002,22 @@ function ProjectsList({ data, categories, onEdit, onDelete, onMove, onNew, pendi
         </div>
         <div className="name">
           {p.name}
-          <span className="sub">{p.brand}</span>
+          <span className="sub">{p.brand} · {p.visible === false ? "Hidden" : "Visible on site"}</span>
         </div>
         <div className="meta">{p.location}</div>
         <div className="meta">{p.year} · {p.status}</div>
         <div className="meta">{p.code}{p.featured ? " · Featured" : ""}<span className="sub">{categoryLabel(categories, p.category || p.typology || "retail")} · /projects/{p.slug || p.id}</span></div>
         <div className="row-actions">
+          <button
+            className={"visibility-toggle " + (p.visible === false ? "is-hidden" : "is-visible")}
+            type="button"
+            role="switch"
+            aria-checked={p.visible !== false}
+            onClick={(e) => { e.stopPropagation(); onToggleVisibility(p.id, p.visible === false); }}
+            title={p.visible === false ? "Show this project on the live site" : "Hide this project from the live site"}>
+            <span aria-hidden="true"></span>
+            {p.visible === false ? "Hidden" : "Visible"}
+          </button>
           <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(p.id, -1); }} title="Move up" disabled={globalIndex === 0}>↑</button>
           <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(p.id, 1); }} title="Move down" disabled={globalIndex === data.length - 1}>↓</button>
           <button className="delete" onClick={(e) => { e.stopPropagation(); onDelete(p.id); }} title="Delete">{Ic.trash}</button>
@@ -1546,6 +1575,7 @@ function ProjectSheet({ project, categories, brandLogos, onSave, onPublish, onCl
     category: "retail",
     order: 0,
     featured: false,
+    visible: true,
     name: "",
     location: "Athens · ",
     type: "Fast Casual · Retail",
@@ -1673,7 +1703,7 @@ function ProjectSheet({ project, categories, brandLogos, onSave, onPublish, onCl
   }, []);
 
   return (
-    <div className="sheet-wrap" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <div className="sheet-wrap">
       <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
         <div className="sheet-head">
           <div>
@@ -1736,6 +1766,14 @@ function ProjectSheet({ project, categories, brandLogos, onSave, onPublish, onCl
                 <label className="checkline">
                   <input type="checkbox" checked={Boolean(p.featured)} onChange={(e) => set("featured", e.target.checked)} />
                   <span>Show on home rail</span>
+                </label>
+              </Field>
+            </div>
+            <div className="field-group cols-1">
+              <Field label="Visible on site" hint="Turn this off to keep the project in the dashboard while removing it from the public site.">
+                <label className="checkline">
+                  <input type="checkbox" checked={p.visible !== false} onChange={(e) => set("visible", e.target.checked)} />
+                  <span>{p.visible === false ? "Hidden from the live site" : "Shown on the live site"}</span>
                 </label>
               </Field>
             </div>
@@ -2272,7 +2310,11 @@ async function readImageFile(e, onChange, onBusy, uploadKey) {
   }
 
   try {
-    const body = await mediaApi.upload({ filename: file.name, dataUrl: shrunk.dataUrl });
+    const body = await mediaApi.upload({
+      filename: file.name,
+      dataUrl: shrunk.dataUrl,
+      projectId: uploadKey && uploadKey !== BACKLOG_KEY ? uploadKey : null,
+    });
     onChange(body.item.url);
   } catch (err) {
     onChange(shrunk.dataUrl);
@@ -2309,7 +2351,7 @@ function SubIconPicker({ value, onChange }) {
   const [picking, setPicking] = useState(false);
   return (
     <div className="sub-icon">
-      {picking && <MediaPicker onPick={(v) => { onChange(v); setPicking(false); }} onClose={() => setPicking(false)} />}
+      {picking && <MediaPicker onPick={(item) => { onChange(item.url); setPicking(false); }} onClose={() => setPicking(false)} />}
       <input type="file" ref={ref} accept="image/*" onChange={(e) => readImageFile(e, onChange, setBusy)} style={{ display: "none" }} />
       <div className="sub-icon-preview">
         {value ? <img src={value} alt="" /> : <span>—</span>}
@@ -2328,12 +2370,19 @@ function ImageInput({ value, onChange, placeholder, extra, uploadKey }) {
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
   const onFile = (e) => readImageFile(e, onChange, setBusy, uploadKey);
+  const onLibraryPick = (item) => {
+    onChange(item.url);
+    if (!uploadKey || item.projectId === uploadKey) return;
+    mediaApi.update({ id: item.id, projectId: uploadKey }).catch((err) => {
+      alert("The image was added to the project, but its Media assignment couldn't be updated.\n\n" + err.message);
+    });
+  };
   const isDataUrl = value && value.startsWith("data:");
   const sizeKb = isDataUrl ? Math.round(value.length / 1024) : null;
 
   return (
     <div className="img-input">
-      {picking && <MediaPicker onPick={onChange} onClose={() => setPicking(false)} />}
+      {picking && <MediaPicker onPick={onLibraryPick} onClose={() => setPicking(false)} />}
       <div className="preview">
         {value ? <MediaPreview src={value} /> : <div className="placeholder">{placeholder || "No image"}</div>}
       </div>
@@ -2414,12 +2463,16 @@ function setAtPath(root, path, value) {
   return clone;
 }
 
-function MediaTile({ item, projects, onAssign, onDelete, onCaption }) {
+function MediaTile({ item, projects, onAssign, onDelete, onCaption, onKind, selected, onSelect }) {
   const [caption, setCaption] = useState(item.caption || "");
   useEffect(() => setCaption(item.caption || ""), [item.id, item.caption]);
 
   return (
-    <div className="media-tile">
+    <div className={`media-tile ${selected ? "is-selected" : ""}`}>
+      <label className="media-select" title="Select for bulk actions">
+        <input type="checkbox" checked={!!selected} onChange={() => onSelect(item.id)} />
+        <span>Select</span>
+      </label>
       <a className="media-thumb" href={item.url} target="_blank" rel="noopener" title="Open full size">
         <MediaPreview src={item.url} alt={item.caption || item.filename} lazy />
       </a>
@@ -2428,6 +2481,7 @@ function MediaTile({ item, projects, onAssign, onDelete, onCaption }) {
         <div className="media-meta">
           {formatBytes(item.size)}
           {item.width && item.height ? ` · ${item.width}×${item.height}` : ""}
+          {item.uploadedAt ? ` · ${new Date(item.uploadedAt).toLocaleDateString()}` : ""}
         </div>
         <input
           className="media-caption"
@@ -2446,6 +2500,16 @@ function MediaTile({ item, projects, onAssign, onDelete, onCaption }) {
           {projects.map((p) => (
             <option key={p.id} value={p.id}>{p.name || p.id}</option>
           ))}
+        </select>
+        <select
+          className="media-assign"
+          value={item.kind || "image"}
+          onChange={(e) => onKind(item.id, e.target.value)}
+          aria-label="Media type"
+        >
+          <option value="image">Project image</option>
+          <option value="logo">Logo</option>
+          <option value="icon">Icon</option>
         </select>
         <div className="media-actions">
           <button
@@ -2471,7 +2535,15 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null);
   const [query, setQuery] = useState("");
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [collapsed, setCollapsed] = useState({});
+  const [selected, setSelected] = useState([]);
+  const [bulkProject, setBulkProject] = useState("");
   const fileRef = useRef(null);
+  const logoRef = useRef(null);
+  const iconRef = useRef(null);
 
   const refresh = () => {
     setStatus("loading");
@@ -2484,10 +2556,23 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
   useEffect(() => { refresh(); }, []);
 
   /* ----- upload ----- */
-  const onFiles = async (e) => {
+  const onFiles = async (e, kind = "image") => {
     const files = Array.from(e.target.files || []);
     e.target.value = "";
     if (!files.length) return;
+
+    const existingNames = new Set(items.map((item) => String(item.filename || "").toLowerCase()));
+    const batchNames = new Set();
+    const duplicate = files.find((file) => {
+      const name = normaliseMediaFilename(file.name).toLowerCase();
+      if (existingNames.has(name) || batchNames.has(name)) return true;
+      batchNames.add(name);
+      return false;
+    });
+    if (duplicate) {
+      alert(`A file named ${normaliseMediaFilename(duplicate.name)} already exists in Media or appears twice in this upload. Rename it before uploading.`);
+      return;
+    }
 
     const added = [];
     for (let i = 0; i < files.length; i++) {
@@ -2499,6 +2584,7 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
           dataUrl: shrunk.dataUrl,
           width: shrunk.width,
           height: shrunk.height,
+          kind,
         });
         added.push(body.item);
       } catch (err) {
@@ -2527,6 +2613,7 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
 
   const onAssign = (id, projectId) => patch(id, { projectId }, "Couldn't move that image.");
   const onCaption = (id, caption) => patch(id, { caption }, "Couldn't save that caption.");
+  const onKind = (id, kind) => patch(id, { kind }, "Couldn't change that media type.");
 
   const onDelete = (item) => {
     if (!confirm(
@@ -2538,6 +2625,46 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
       .remove(item.id)
       .then(() => { setItems((prev) => prev.filter((x) => x.id !== item.id)); onToast("Image deleted"); })
       .catch((err) => alert("Couldn't delete that image.\n\n" + err.message));
+  };
+
+  const toggleSelected = (id) => setSelected((current) =>
+    current.includes(id) ? current.filter((x) => x !== id) : current.concat(id)
+  );
+
+  const bulkUpdate = async (changes, successMessage) => {
+    const ids = selected.slice();
+    if (!ids.length) return;
+    setBusy(`Updating ${ids.length}…`);
+    try {
+      const updated = [];
+      for (const id of ids) updated.push((await mediaApi.update({ id, ...changes })).item);
+      const byId = new Map(updated.map((item) => [item.id, item]));
+      setItems((current) => current.map((item) => byId.get(item.id) || item));
+      setSelected([]);
+      onToast(successMessage);
+    } catch (err) {
+      alert("Couldn't update all selected files.\n\n" + err.message);
+      refresh();
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const bulkDelete = async () => {
+    const ids = selected.slice();
+    if (!ids.length || !confirm(`Delete ${ids.length} selected file(s)?\n\nThis cannot be undone.`)) return;
+    setBusy(`Deleting ${ids.length}…`);
+    try {
+      for (const id of ids) await mediaApi.remove(id);
+      setItems((current) => current.filter((item) => !ids.includes(item.id)));
+      setSelected([]);
+      onToast(`${ids.length} file(s) deleted`);
+    } catch (err) {
+      alert("Couldn't delete all selected files.\n\n" + err.message);
+      refresh();
+    } finally {
+      setBusy(null);
+    }
   };
 
   /* ----- one-time migration out of localStorage ----- */
@@ -2595,15 +2722,33 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
   /* ----- grouping ----- */
   const groups = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const visible = q
-      ? items.filter((x) => ((x.filename || "") + " " + (x.caption || "")).toLowerCase().includes(q))
-      : items;
+    const from = dateFrom ? new Date(dateFrom + "T00:00:00").getTime() : null;
+    const to = dateTo ? new Date(dateTo + "T23:59:59.999").getTime() : null;
+    const visible = items.filter((x) => {
+      if (q && !((x.filename || "") + " " + (x.caption || "")).toLowerCase().includes(q)) return false;
+      const effectiveProject = projects.some((p) => p.id === x.projectId) ? x.projectId : "backlog";
+      if (projectFilter !== "all" && effectiveProject !== projectFilter) return false;
+      const uploaded = Date.parse(x.uploadedAt || "");
+      if (from && (!uploaded || uploaded < from)) return false;
+      if (to && (!uploaded || uploaded > to)) return false;
+      return true;
+    });
 
     const known = new Set(projects.map((p) => p.id));
     const assigned = new Map();
     const backlog = [];
 
+    const logos = [];
+    const icons = [];
     visible.forEach((item) => {
+      const name = item.filename || "";
+      const inferredKind = item.kind === "logo" || /(^|[-_])logo([-_.]|$)/i.test(name)
+        ? "logo"
+        : item.kind === "icon" || item.contentType === "image/svg+xml" || /(^|[-_])icon([-_.]|$)/i.test(name)
+          ? "icon"
+          : "image";
+      if (inferredKind === "logo") { logos.push(item); return; }
+      if (inferredKind === "icon") { icons.push(item); return; }
       // An image pointing at a deleted project belongs in the backlog,
       // not in a group nobody can see.
       if (item.projectId && known.has(item.projectId)) {
@@ -2616,10 +2761,12 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
 
     return {
       backlog,
+      logos,
+      icons,
       byProject: projects.filter((p) => assigned.has(p.id)).map((p) => ({ project: p, items: assigned.get(p.id) })),
       count: visible.length,
     };
-  }, [items, projects, query]);
+  }, [items, projects, query, projectFilter, dateFrom, dateTo]);
 
   if (status === "loading") {
     return <div className="media-note">Loading the library…</div>;
@@ -2638,20 +2785,37 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
     );
   }
 
-  const tileProps = { projects, onAssign, onDelete, onCaption };
+  const tileProps = { projects, onAssign, onDelete, onCaption, onKind, onSelect: toggleSelected };
+  const renderGroup = (key, title, note, list) => list.length > 0 && (
+    <div className="media-group" key={key}>
+      <button className="media-group-head" type="button" onClick={() => setCollapsed((x) => ({ ...x, [key]: !x[key] }))}>
+        <b><span className="media-chevron">{collapsed[key] ? "▸" : "▾"}</span>{title}</b>
+        <span>{list.length} {note}</span>
+      </button>
+      {!collapsed[key] && (
+        <div className="media-grid">
+          {list.map((item) => <MediaTile key={item.id} item={item} selected={selected.includes(item.id)} {...tileProps} />)}
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="media">
       <SectionHead
         eyebrow="Media"
-        title={`${items.length} image${items.length === 1 ? "" : "s"} · ${groups.backlog.length} in backlog`}
+        title={`${items.length} file${items.length === 1 ? "" : "s"} · ${groups.backlog.length} in backlog`}
       />
 
       <div className="media-bar">
-        <input type="file" ref={fileRef} accept="image/*,video/mp4" multiple onChange={onFiles} style={{ display: "none" }} />
+        <input type="file" ref={fileRef} accept="image/*,video/mp4" multiple onChange={(e) => onFiles(e, "image")} style={{ display: "none" }} />
+        <input type="file" ref={logoRef} accept="image/*" multiple onChange={(e) => onFiles(e, "logo")} style={{ display: "none" }} />
+        <input type="file" ref={iconRef} accept="image/*" multiple onChange={(e) => onFiles(e, "icon")} style={{ display: "none" }} />
         <button className="btn primary" type="button" disabled={!!busy} onClick={() => fileRef.current && fileRef.current.click()}>
           <span className="ic">{Ic.upload}</span><span>{busy || "Upload images"}</span>
         </button>
+        <button className="btn ghost" type="button" disabled={!!busy} onClick={() => logoRef.current && logoRef.current.click()}>Upload logos</button>
+        <button className="btn ghost" type="button" disabled={!!busy} onClick={() => iconRef.current && iconRef.current.click()}>Upload icons</button>
         <input
           className="media-search"
           type="search"
@@ -2659,8 +2823,31 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
           placeholder="Search by filename or caption"
           onChange={(e) => setQuery(e.target.value)}
         />
+        <select className="media-filter" value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}>
+          <option value="all">All projects</option>
+          <option value="backlog">Backlog</option>
+          {projects.map((p) => <option key={p.id} value={p.id}>{p.name || p.id}</option>)}
+        </select>
+        <label className="media-date">From <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></label>
+        <label className="media-date">To <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></label>
         <button className="btn ghost" type="button" onClick={refresh}>Refresh</button>
       </div>
+
+      {selected.length > 0 && (
+        <div className="media-bulk">
+          <b>{selected.length} selected</b>
+          <select value={bulkProject} onChange={(e) => setBulkProject(e.target.value)}>
+            <option value="">Move to backlog</option>
+            {projects.map((p) => <option key={p.id} value={p.id}>{p.name || p.id}</option>)}
+          </select>
+          <button className="btn ghost" onClick={() => bulkUpdate({ projectId: bulkProject || null }, "Selected files moved")}>Move</button>
+          <button className="btn ghost" onClick={() => bulkUpdate({ kind: "image" }, "Selected files marked as images")}>Images</button>
+          <button className="btn ghost" onClick={() => bulkUpdate({ kind: "logo" }, "Selected files marked as logos")}>Logos</button>
+          <button className="btn ghost" onClick={() => bulkUpdate({ kind: "icon" }, "Selected files marked as icons")}>Icons</button>
+          <button className="btn ghost" onClick={() => setSelected([])}>Clear</button>
+          <button className="btn danger" onClick={bulkDelete}>Delete</button>
+        </div>
+      )}
 
       {embedded.length > 0 && (
         <div className="media-note media-note-warn">
@@ -2682,29 +2869,10 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
         </div>
       )}
 
-      {groups.backlog.length > 0 && (
-        <div className="media-group">
-          <div className="media-group-head">
-            <b>Backlog</b>
-            <span>{groups.backlog.length} not assigned to a project</span>
-          </div>
-          <div className="media-grid">
-            {groups.backlog.map((item) => <MediaTile key={item.id} item={item} {...tileProps} />)}
-          </div>
-        </div>
-      )}
-
-      {groups.byProject.map(({ project, items: list }) => (
-        <div className="media-group" key={project.id}>
-          <div className="media-group-head">
-            <b>{project.name || project.id}</b>
-            <span>{list.length} image{list.length === 1 ? "" : "s"}</span>
-          </div>
-          <div className="media-grid">
-            {list.map((item) => <MediaTile key={item.id} item={item} {...tileProps} />)}
-          </div>
-        </div>
-      ))}
+      {renderGroup("logos", "Logos", "logo(s)", groups.logos)}
+      {renderGroup("icons", "Icons", "icon(s)", groups.icons)}
+      {renderGroup("backlog", "Backlog", "not assigned to a project", groups.backlog)}
+      {groups.byProject.map(({ project, items: list }) => renderGroup(project.id, project.name || project.id, "image(s)", list))}
     </div>
   );
 }
@@ -2774,7 +2942,7 @@ function MediaPicker({ onPick, onClose }) {
                     key={item.id}
                     type="button"
                     className="media-pick"
-                    onClick={() => { onPick(item.url); onClose(); }}
+                    onClick={() => { onPick(item); onClose(); }}
                     title={item.filename}
                   >
                     <MediaPreview src={item.url} alt={item.caption || item.filename} lazy />

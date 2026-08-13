@@ -182,9 +182,10 @@ function Nav({ route, go }) {
     return () => document.body.classList.remove("mobile-tabbar-page");
   }, [showTabBar]);
 
-  const projectForRoute = route.name === "project" ? PROJECTS.find((p) => p.id === route.id || p.slug === route.id) : null;
+  const visible = window.visibleProjects ? window.visibleProjects() : PROJECTS.filter((p) => p.visible !== false);
+  const projectForRoute = route.name === "project" ? visible.find((p) => p.id === route.id || p.slug === route.id) : null;
   const currentBrand = route.brand || (projectForRoute ? (projectForRoute.brandKey || (projectForRoute.brand === "Dinas" ? "dn" : "pg")) : null);
-  const menuProject = projectForRoute || PROJECTS.find((p) => p.featured) || PROJECTS[0];
+  const menuProject = projectForRoute || visible.find((p) => p.featured) || visible[0];
   const menuImages = site.menuImages || {};
   const menuImageSrc = menuImages[menuPreviewKey] || (menuProject && menuProject.hero) || "";
   const menuPreviewLabel = menuPreviewKey === "projects" ? t("projects") : menuPreviewKey === "agency" ? t("agency") : menuPreviewKey === "contact" ? t("contact") : t("home");
@@ -486,7 +487,7 @@ function SearchOverlay({ go, onClose }) {
   useEffect(() => {inputRef.current && inputRef.current.focus();}, []);
 
   const all = React.useMemo(() => {
-    const sourceProjects = window.PROJECTS || [];
+    const sourceProjects = window.visibleProjects ? window.visibleProjects() : (window.PROJECTS || []).filter((p) => p.visible !== false);
     const newestFirst = (a, b) =>
       (Number(b.year) || 0) - (Number(a.year) || 0) ||
       String(b.code || "").localeCompare(String(a.code || ""), undefined, { numeric: true });

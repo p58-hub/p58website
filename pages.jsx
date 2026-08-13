@@ -13,8 +13,9 @@ function SiteMedia({ src, alt, className, lazy }) {
 }
 const BRAND_KEY = (p) => p.brandKey || (p.id.startsWith("pg-") ? "pg" : "dn");
 
-const pgProjects = () => PROJECTS.filter((p) => BRAND_KEY(p) === "pg");
-const dnProjects = () => PROJECTS.filter((p) => BRAND_KEY(p) === "dn");
+const publicProjects = () => window.visibleProjects ? window.visibleProjects() : PROJECTS.filter((p) => p.visible !== false);
+const pgProjects = () => publicProjects().filter((p) => BRAND_KEY(p) === "pg");
+const dnProjects = () => publicProjects().filter((p) => BRAND_KEY(p) === "dn");
 
 const PROJECT_PROGRESS_STOPS = [
   [0, "#3a2c22"],
@@ -73,8 +74,9 @@ function HomePage({ go }) {
   const isMobile = useHomeMobile();
 
   const featured = useM(() => {
-    const picked = PROJECTS.filter((p) => p.featured);
-    const list = (picked.length ? picked : PROJECTS).slice();
+    const visible = publicProjects();
+    const picked = visible.filter((p) => p.featured);
+    const list = (picked.length ? picked : visible).slice();
 
     // The dashboard's Hero gallery section can pin an explicit order. Anything
     // it doesn't mention keeps its own position, after the ones it does.
@@ -373,7 +375,8 @@ function MobileHomePage({ go, featured, active, setActive, cur, catOf }) {
 
 /* ================== PROJECT RIBBONS — all full-width ================== */
 function AllProjectsGrid({ limit, go, compact = false, projects }) {
-  const list = projects ? projects : limit ? PROJECTS.slice(0, limit) : PROJECTS;
+  const visible = projects ? projects.filter((p) => p.visible !== false) : publicProjects();
+  const list = limit ? visible.slice(0, limit) : visible;
   return (
     <div className="brand-grid">
       {list.map((p, i) =>
@@ -424,8 +427,8 @@ function InteriorsPage({ go, brand, sort }) {
   const pick = window.usePick();
   const order = window.PROJECT_SORTS[sort] ? sort : window.PROJECT_SORT_DEFAULT;
   const filtered = (brand ?
-  PROJECTS.filter((p) => BRAND_KEY(p) === brand) :
-  PROJECTS.slice()).sort(window.PROJECT_SORTS[order].compare(pick));
+  publicProjects().filter((p) => BRAND_KEY(p) === brand) :
+  publicProjects()).sort(window.PROJECT_SORTS[order].compare(pick));
   const title = brand ? BRAND_OF[brand] : t("interiors_h");
   const eyebrow = brand ?
   `${t("interiors_brand_eyebrow_a")} ${BRAND_OF[brand]} · ${filtered.length}${t("interiors_brand_eyebrow_b")}` :
@@ -446,7 +449,7 @@ function ProjectsPage({ go, type, brand, sort }) {
   const normalisedType = type === "retail" || type === "residential" ? type : null;
   const normalisedBrand = normalisedType === "retail" && (brand === "pg" || brand === "dn") ? brand : null;
   const order = window.PROJECT_SORTS[sort] ? sort : window.PROJECT_SORT_DEFAULT;
-  const filtered = PROJECTS.filter((p) => {
+  const filtered = publicProjects().filter((p) => {
     if (!normalisedType) return true;
     const category = (p.category || p.typology || "retail").toLowerCase();
     if (normalisedType === "residential") {
@@ -512,7 +515,7 @@ function ArchitecturePage({ go, sort }) {
   const order = window.PROJECT_SORTS[sort] ? sort : window.PROJECT_SORT_DEFAULT;
   // Show projects with typology/category of "residential" or "architecture".
   // All current projects are "retail"; this list will populate once arch projects are added.
-  const filtered = PROJECTS.filter(p => {
+  const filtered = publicProjects().filter(p => {
     const cat = (p.typology || p.category || "retail").toLowerCase();
     return cat === "residential" || cat === "architecture";
   }).sort(window.PROJECT_SORTS[order].compare(pick));
@@ -536,10 +539,11 @@ function ArchitecturePage({ go, sort }) {
 function ProjectPage({ id, go, from, transitionDirection }) {
   const t = window.useT();
   const pick = window.usePick();
-  const p = PROJECTS.find((x) => x.id === id || x.slug === id) || PROJECTS[0];
-  const idx = PROJECTS.findIndex((x) => x.id === p.id);
-  const prev = PROJECTS[(idx - 1 + PROJECTS.length) % PROJECTS.length];
-  const next = PROJECTS[(idx + 1) % PROJECTS.length];
+  const projects = publicProjects();
+  const p = projects.find((x) => x.id === id || x.slug === id) || projects[0];
+  const idx = projects.findIndex((x) => x.id === p.id);
+  const prev = projects[(idx - 1 + projects.length) % projects.length];
+  const next = projects[(idx + 1) % projects.length];
 
   const [transitioning, setTransitioning] = useS(null);
   const [scrollProgress, setScrollProgress] = useS(0);
