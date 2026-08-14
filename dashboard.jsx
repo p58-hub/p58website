@@ -879,6 +879,9 @@ function App({ session }) {
         <button className={`side-btn ${section === "projects" ? "on" : ""}`} onClick={() => goSection("projects")}>
           <span>Projects</span><span className="count">{counts.projects}</span>
         </button>
+        <button className={`side-btn ${section === "texts" ? "on" : ""}`} onClick={() => goSection("texts")}>
+          <span>Project texts</span><span className="count">{counts.projects}</span>
+        </button>
         <button className={`side-btn ${section === "categories" ? "on" : ""}`} onClick={() => goSection("categories")}>
           <span>Categories</span><span className="count">{counts.categories}</span>
         </button>
@@ -940,7 +943,7 @@ function App({ session }) {
             <span className="sep">/</span>
             <span>Dashboard</span>
             <span className="sep">/</span>
-            <b>{section === "projects" ? "Projects" : section === "categories" ? "Categories" : section === "news" ? "News" : section === "site" ? "Site settings" : section === "hero" ? "Hero gallery" : section === "inquiries" ? "Inquiries" : section === "media" ? "Media" : "Team"}</b>
+            <b>{section === "projects" ? "Projects" : section === "texts" ? "Project texts" : section === "categories" ? "Categories" : section === "news" ? "News" : section === "site" ? "Site settings" : section === "hero" ? "Hero gallery" : section === "inquiries" ? "Inquiries" : section === "media" ? "Media" : "Team"}</b>
           </div>
           <div className="actions">
             {showPublish && (
@@ -978,7 +981,7 @@ function App({ session }) {
                 <span className="ic">{Ic.reset}</span><span>Reset</span>
               </button>
             )}
-            <button className="btn primary" style={(section === "site" || section === "hero" || section === "inquiries" || section === "media") ? { display: "none" } : null} onClick={() => setEditing({ kind: section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news" : "team", id: null })}>
+            <button className="btn primary" style={(section === "texts" || section === "site" || section === "hero" || section === "inquiries" || section === "media") ? { display: "none" } : null} onClick={() => setEditing({ kind: section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news" : "team", id: null })}>
               <span className="ic">{Ic.plus}</span><span>New {section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news item" : section === "site" ? "—" : "person"}</span>
             </button>
           </div>
@@ -987,6 +990,17 @@ function App({ session }) {
         <div className="content">
           {section === "projects" && (
             <ProjectsList data={data.projects} categories={data.categories} onEdit={(id) => setEditing({ kind: "project", id })} onDelete={(id) => onDelete("project", id)} onMove={onMoveProject} onToggleVisibility={onToggleProjectVisibility} onNew={() => setEditing({ kind: "project", id: null })} pendingIds={pendingIds} uploads={uploads} onPublishOne={(id) => publishOneProject(id).catch(() => { /* shown in the header */ })} publishBusy={publishState.status === "busy"} />
+          )}
+          {section === "texts" && (
+            <ProjectTextsSheet
+              projects={data.projects}
+              onSave={(projects) => {
+                update({ ...data, projects });
+                setToast("Project texts saved — ready to publish");
+              }}
+              onOpenProject={(id) => setEditing({ kind: "project", id })}
+              onToast={setToast}
+            />
           )}
           {section === "categories" && (
             <CategoriesList data={data.categories} projects={data.projects} onEdit={(id) => setEditing({ kind: "category", id })} onDelete={(id) => onDelete("category", id)} onMove={onMoveCategory} onNew={() => setEditing({ kind: "category", id: null })} />
@@ -1075,6 +1089,170 @@ function App({ session }) {
 /* ============================================================
    LISTS
    ============================================================ */
+const PROJECT_TEXT_FIELDS = [
+  { key: "name", label: "Project name", greek: "name_gr", compact: true },
+  { key: "location", label: "Location", greek: "location_gr", compact: true },
+  { key: "type", label: "Type", greek: "type_gr", compact: true },
+  { key: "contractor", label: "Contractor", greek: "contractor_gr", compact: true },
+  { key: "engineer", label: "Engineer", greek: "engineer_gr", compact: true },
+  { key: "lead_architect", label: "Lead architect", greek: "lead_architect_gr", compact: true },
+  { key: "design_team", label: "Design team", greek: "design_team_gr", compact: true },
+  { key: "summary", label: "Short description", greek: "summary_gr" },
+];
+
+function projectTextRows(project) {
+  const rows = PROJECT_TEXT_FIELDS.map((field) => ({
+    id: `field-${field.key}`,
+    kind: "field",
+    label: field.label,
+    key: field.key,
+    greekKey: field.greek,
+    compact: field.compact,
+    en: project[field.key] || "",
+    gr: project[field.greek] || "",
+  }));
+
+  const bodyCount = Math.max((project.body || []).length, (project.body_gr || []).length);
+  for (let i = 0; i < bodyCount; i += 1) {
+    const en = (project.body || [])[i] || ["", ""];
+    const gr = (project.body_gr || [])[i] || ["", ""];
+    rows.push({ id: `body-${i}-title`, kind: "body", index: i, part: 0, label: `Section ${i + 1} · heading`, compact: true, en: en[0] || "", gr: gr[0] || "" });
+    rows.push({ id: `body-${i}-text`, kind: "body", index: i, part: 1, label: `Section ${i + 1} · text`, en: en[1] || "", gr: gr[1] || "" });
+  }
+
+  (project.gallery || []).forEach((image, i) => {
+    rows.push({ id: `gallery-${i}`, kind: "gallery", index: i, label: `Image ${i + 1} · caption`, compact: true, en: image.tag || "", gr: image.tag_gr || "" });
+  });
+  return rows;
+}
+
+function ProjectTextsSheet({ projects, onSave, onOpenProject, onToast }) {
+  const [draft, setDraft] = useState(() => projects.map((project) => ({ ...project })));
+  const [query, setQuery] = useState("");
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [language, setLanguage] = useState("all");
+
+  useEffect(() => {
+    setDraft(projects.map((project) => ({ ...project })));
+  }, [projects]);
+
+  const changed = JSON.stringify(draft) !== JSON.stringify(projects);
+  const normalisedQuery = query.trim().toLocaleLowerCase();
+  const groups = useMemo(() => draft.map((project) => {
+    const allRows = projectTextRows(project);
+    const projectHaystack = [project.name, project.name_gr, project.brand, project.code, project.location].join(" ").toLocaleLowerCase();
+    const rows = normalisedQuery
+      ? allRows.filter((row) => `${row.label} ${row.en} ${row.gr} ${projectHaystack}`.toLocaleLowerCase().includes(normalisedQuery))
+      : allRows;
+    return { project, rows };
+  }).filter(({ project, rows }) => (projectFilter === "all" || project.id === projectFilter) && rows.length), [draft, projectFilter, normalisedQuery]);
+
+  const setCell = (projectId, row, lang, value) => {
+    setDraft((current) => current.map((project) => {
+      if (project.id !== projectId) return project;
+      if (row.kind === "field") {
+        return { ...project, [lang === "en" ? row.key : row.greekKey]: value };
+      }
+      if (row.kind === "body") {
+        const key = lang === "en" ? "body" : "body_gr";
+        const sections = (project[key] || []).map((section) => [...section]);
+        while (sections.length <= row.index) sections.push(["", ""]);
+        sections[row.index][row.part] = value;
+        return { ...project, [key]: sections };
+      }
+      const gallery = (project.gallery || []).map((image) => ({ ...image }));
+      if (gallery[row.index]) gallery[row.index][lang === "en" ? "tag" : "tag_gr"] = value;
+      return { ...project, gallery };
+    }));
+  };
+
+  const copyVisible = () => {
+    const clean = (value) => String(value || "").replace(/\t/g, " ").replace(/\r?\n/g, " ");
+    const lines = [["Project", "Code", "Field", "English", "Greek"]];
+    groups.forEach(({ project, rows }) => rows.forEach((row) => {
+      lines.push([project.name, project.code, row.label, row.en, row.gr].map(clean));
+    }));
+    const text = lines.map((line) => line.join("\t")).join("\n");
+    if (!navigator.clipboard) {
+      onToast("Clipboard access is not available in this browser");
+      return;
+    }
+    navigator.clipboard.writeText(text)
+      .then(() => onToast("Visible project texts copied"))
+      .catch(() => onToast("Couldn’t copy the project texts"));
+  };
+
+  return (
+    <div className={`texts-sheet language-${language}`}>
+      <SectionHead eyebrow="/ All project copy · English + Greek" title="Project texts" />
+      <div className="texts-toolbar">
+        <label className="texts-search">
+          <span>Search</span>
+          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Project, field or text…" />
+        </label>
+        <label>
+          <span>Project</span>
+          <select value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+            <option value="all">All projects ({draft.length})</option>
+            {draft.map((project) => <option key={project.id} value={project.id}>{project.name} · {project.code}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>Language</span>
+          <select value={language} onChange={(event) => setLanguage(event.target.value)}>
+            <option value="all">English + Greek</option>
+            <option value="en">English</option>
+            <option value="gr">Greek</option>
+          </select>
+        </label>
+        <div className="texts-toolbar-actions">
+          <button className="btn ghost" type="button" onClick={copyVisible}>Copy visible</button>
+          <button className="btn primary" type="button" disabled={!changed} onClick={() => onSave(draft)}>Save changes</button>
+        </div>
+      </div>
+
+      <div className="texts-table-wrap">
+        <table className="texts-table">
+          <thead><tr><th>Project</th><th>Field</th><th className="text-col-en">English</th><th className="text-col-gr">Greek</th></tr></thead>
+          {groups.map(({ project, rows }) => (
+            <tbody key={project.id}>
+              {rows.map((row, index) => (
+                <tr key={row.id}>
+                  {index === 0 && (
+                    <th className="texts-project" rowSpan={rows.length} scope="rowgroup">
+                      <button type="button" onClick={() => onOpenProject(project.id)}>
+                        <strong>{project.name || "Untitled"}</strong>
+                        <span>{project.code} · {project.brand || "No brand"}</span>
+                        <span>{project.visible === false ? "Hidden" : "Visible"} ↗</span>
+                      </button>
+                    </th>
+                  )}
+                  <th className="texts-field" scope="row">{row.label}</th>
+                  <td className="text-col-en">
+                    {row.compact
+                      ? <input type="text" value={row.en} aria-label={`${project.name} · ${row.label} · English`} onChange={(event) => setCell(project.id, row, "en", event.target.value)} />
+                      : <textarea value={row.en} aria-label={`${project.name} · ${row.label} · English`} onChange={(event) => setCell(project.id, row, "en", event.target.value)} />}
+                  </td>
+                  <td className="text-col-gr">
+                    {row.compact
+                      ? <input type="text" value={row.gr} aria-label={`${project.name} · ${row.label} · Greek`} onChange={(event) => setCell(project.id, row, "gr", event.target.value)} placeholder="Greek translation" />
+                      : <textarea value={row.gr} aria-label={`${project.name} · ${row.label} · Greek`} onChange={(event) => setCell(project.id, row, "gr", event.target.value)} placeholder="Greek translation" />}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          ))}
+        </table>
+        {!groups.length && <div className="texts-empty">No project text matches these filters.</div>}
+      </div>
+      <div className="texts-foot">
+        <span>{groups.reduce((total, group) => total + group.rows.length, 0)} text fields shown</span>
+        <span>Save here, then use Publish to update the live site.</span>
+      </div>
+    </div>
+  );
+}
+
 function categoryLabel(categories, id) {
   const cat = categories.find((c) => c.id === id);
   return cat ? cat.label : id || "Uncategorised";
