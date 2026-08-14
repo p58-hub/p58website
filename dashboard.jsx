@@ -1620,6 +1620,7 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
     gallery: [],
   }));
   const set = (k, v) => setP((x) => ({ ...x, [k]: v }));
+  const sizeValue = String(p.size || "").replace(/\s*m(?:²|2)\s*$/i, "");
 
   // Every project shares one site-wide fallback unless it has an override.
   const fallbackBadge = defaultProjectBadge || "";
@@ -1817,7 +1818,18 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
             </div>
             <div className="field-group">
               <Field label="Size (EN)">
-                <input type="text" value={p.size} onChange={(e) => set("size", e.target.value)} placeholder="e.g. 142 m²" />
+                <div className="size-input">
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={sizeValue}
+                    onChange={(e) => {
+                      const value = e.target.value.replace(/\s*m(?:²|2)\s*$/i, "");
+                      set("size", value ? `${value} m²` : "");
+                    }}
+                    placeholder="e.g. 142" />
+                  <span className="size-input-unit" aria-hidden="true">m²</span>
+                </div>
               </Field>
 
             </div>
@@ -2298,7 +2310,17 @@ function MediaPreview({ src, alt, className, lazy }) {
       />
     );
   }
-  return <img className={className} src={src} alt={alt || ""} loading={lazy ? "lazy" : undefined} draggable="false" />;
+  return (
+    <img
+      className={className}
+      src={src}
+      alt={alt || ""}
+      loading={lazy ? "lazy" : undefined}
+      decoding="async"
+      fetchPriority={lazy ? "low" : undefined}
+      draggable="false"
+    />
+  );
 }
 
 // Shared by ImageInput and the compact gallery thumbnail.
@@ -2589,6 +2611,7 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [collapsed, setCollapsed] = useState({});
+  const [groupsDefaultCollapsed, setGroupsDefaultCollapsed] = useState(true);
   const [groupView, setGroupView] = useState("all");
   const [selected, setSelected] = useState([]);
   const [bulkProject, setBulkProject] = useState("");
@@ -2854,11 +2877,16 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
     })),
   ].filter(Boolean);
   const activeGroupView = groupView === "all" || visibleGroupKeys.includes(groupView) ? groupView : "all";
-  const allGroupsHidden = visibleGroupKeys.length > 0 && visibleGroupKeys.every((key) => collapsed[key]);
+  const isGroupCollapsed = (key) => Object.prototype.hasOwnProperty.call(collapsed, key)
+    ? collapsed[key]
+    : groupsDefaultCollapsed;
+  const allGroupsHidden = visibleGroupKeys.length > 0 && visibleGroupKeys.every(isGroupCollapsed);
   const toggleAllGroups = () => {
+    const hide = !allGroupsHidden;
     const next = { ...collapsed };
-    visibleGroupKeys.forEach((key) => { next[key] = !allGroupsHidden; });
+    visibleGroupKeys.forEach((key) => { next[key] = hide; });
     setCollapsed(next);
+    setGroupsDefaultCollapsed(hide);
     // A global action must always return to the global view. Otherwise
     // "Show all" expands every group but a previously selected sidebar
     // filter still leaves only one of them visible.
@@ -2866,11 +2894,18 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
   };
   const renderGroup = (key, title, note, list) => list.length > 0 && (activeGroupView === "all" || activeGroupView === key) && (
     <div className="media-group" id={`media-group-${key}`} key={key}>
-      <button className="media-group-head" type="button" onClick={() => setCollapsed((x) => ({ ...x, [key]: !x[key] }))}>
-        <b><span className="media-chevron">{collapsed[key] ? "▸" : "▾"}</span>{title}</b>
+      <button
+        className="media-group-head"
+        type="button"
+        onClick={() => setCollapsed((current) => ({
+          ...current,
+          [key]: !(Object.prototype.hasOwnProperty.call(current, key) ? current[key] : groupsDefaultCollapsed),
+        }))}
+      >
+        <b><span className="media-chevron">{isGroupCollapsed(key) ? "▸" : "▾"}</span>{title}</b>
         <span>{list.length} {note}</span>
       </button>
-      {!collapsed[key] && (
+      {!isGroupCollapsed(key) && (
         <div className="media-grid">
           {list.map((item) => <MediaTile key={item.id} item={item} selected={selected.includes(item.id)} {...tileProps} />)}
         </div>

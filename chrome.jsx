@@ -207,6 +207,10 @@ function Nav({ route, go }) {
   const keepSort = (r) => (route.sort ? { ...r, sort: route.sort } : r);
   const goToProjectsContact = () => {
     setMenuOpen(false);
+    if (!isMobile) {
+      go({ name: "contact" });
+      return;
+    }
     const target = route.name === "projects"
       ? {
           name: "projects",
