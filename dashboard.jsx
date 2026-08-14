@@ -2473,8 +2473,11 @@ function ImageInput({ value, onChange, placeholder, extra, uploadKey }) {
   const onFile = (e) => readImageFile(e, onChange, setBusy, uploadKey);
   const onLibraryPick = (item) => {
     onChange(item.url);
-    if (!uploadKey || item.projectId === uploadKey) return;
-    mediaApi.update({ id: item.id, projectId: uploadKey }).catch((err) => {
+    if (!uploadKey || (item.projectId === uploadKey && item.kind === "image")) return;
+    updateMediaWithRetry(
+      { id: item.id, projectId: uploadKey, kind: "image" },
+      (updated) => updated && updated.projectId === uploadKey && updated.kind === "image"
+    ).catch((err) => {
       alert("The image was added to the project, but its Media assignment couldn't be updated.\n\n" + err.message);
     });
   };
@@ -2604,13 +2607,12 @@ function MediaTile({ item, projects, onAssign, onDelete, onCaption, onKind, sele
         </select>
         <select
           className="media-assign"
-          value={item.kind || "image"}
-          onChange={(e) => onKind(item.id, e.target.value)}
+          value={item.kind === "logo" || item.kind === "icon" ? "graphic" : "image"}
+          onChange={(e) => onKind(item.id, e.target.value === "graphic" ? "icon" : "image")}
           aria-label="Media type"
         >
           <option value="image">Project image</option>
-          <option value="logo">Logo</option>
-          <option value="icon">Icon</option>
+          <option value="graphic">Graphic element</option>
         </select>
         <div className="media-actions">
           <button
@@ -2647,8 +2649,7 @@ function groupMediaItems(items, projects, query, projectFilter, dateFrom, dateTo
 
   const assigned = new Map();
   const backlog = [];
-  const logos = [];
-  const icons = [];
+  const graphics = [];
   visible.forEach((item) => {
     const name = item.filename || "";
     const inferredKind = item.kind === "logo" || /(^|[-_])logo([-_.]|$)/i.test(name)
@@ -2656,8 +2657,7 @@ function groupMediaItems(items, projects, query, projectFilter, dateFrom, dateTo
       : item.kind === "icon" || item.contentType === "image/svg+xml" || /(^|[-_])icon([-_.]|$)/i.test(name)
         ? "icon"
         : "image";
-    if (inferredKind === "logo") { logos.push(item); return; }
-    if (inferredKind === "icon") { icons.push(item); return; }
+    if (inferredKind === "logo" || inferredKind === "icon") { graphics.push(item); return; }
     if (item.projectId && known.has(item.projectId)) {
       if (!assigned.has(item.projectId)) assigned.set(item.projectId, []);
       assigned.get(item.projectId).push(item);
@@ -2668,8 +2668,7 @@ function groupMediaItems(items, projects, query, projectFilter, dateFrom, dateTo
 
   return {
     backlog,
-    logos,
-    icons,
+    graphics,
     byProject: projects.filter((p) => assigned.has(p.id)).map((p) => ({ project: p, items: assigned.get(p.id) })),
     count: visible.length,
   };
@@ -2689,9 +2688,9 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
   const [groupView, setGroupView] = useState("all");
   const [selected, setSelected] = useState([]);
   const [bulkProject, setBulkProject] = useState("");
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadDestination, setUploadDestination] = useState("graphics");
   const fileRef = useRef(null);
-  const logoRef = useRef(null);
-  const iconRef = useRef(null);
 
   const refresh = () => {
     setStatus("loading");
@@ -2704,7 +2703,7 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
   useEffect(() => { refresh(); }, []);
 
   /* ----- upload ----- */
-  const onFiles = async (e, kind = "image") => {
+  const onFiles = async (e) => {
     const files = Array.from(e.target.files || []);
     e.target.value = "";
     if (!files.length) return;
@@ -2732,7 +2731,8 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
           dataUrl: shrunk.dataUrl,
           width: shrunk.width,
           height: shrunk.height,
-          kind,
+          kind: uploadDestination === "graphics" ? "icon" : "image",
+          projectId: uploadDestination === "graphics" ? null : uploadDestination,
         });
         added.push(body.item);
       } catch (err) {
@@ -2764,7 +2764,11 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
       });
   };
 
-  const onAssign = (id, projectId) => patch(id, { projectId }, "Couldn't move that image.");
+  const onAssign = (id, projectId) => patch(
+    id,
+    projectId ? { projectId, kind: "image" } : { projectId: null },
+    "Couldn't move that image."
+  );
   const onCaption = (id, caption) => patch(id, { caption }, "Couldn't save that caption.");
   const onKind = (id, kind) => patch(id, { kind }, "Couldn't change that media type.");
 
@@ -2921,14 +2925,12 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
 
   const tileProps = { projects, onAssign, onDelete, onCaption, onKind, onSelect: toggleSelected };
   const visibleGroupKeys = [
-    groups.logos.length ? "logos" : null,
-    groups.icons.length ? "icons" : null,
+    groups.graphics.length ? "graphics" : null,
     groups.backlog.length ? "backlog" : null,
     ...groups.byProject.map(({ project }) => project.id),
   ].filter(Boolean);
   const groupNav = [
-    groups.logos.length ? { key: "logos", label: "Logos", count: groups.logos.length } : null,
-    groups.icons.length ? { key: "icons", label: "Icons", count: groups.icons.length } : null,
+    groups.graphics.length ? { key: "graphics", label: "Graphic Elements", count: groups.graphics.length } : null,
     groups.backlog.length ? { key: "backlog", label: "Backlog", count: groups.backlog.length } : null,
     ...groups.byProject.map(({ project, items: list }) => ({
       key: project.id,
@@ -2981,14 +2983,10 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
       />
 
       <div className="media-bar">
-        <input type="file" ref={fileRef} accept="image/jpeg,image/png,image/webp,image/avif,image/svg+xml,image/gif,video/mp4,.jpg,.jpeg,.png,.webp,.avif,.svg,.gif,.mp4" multiple onChange={(e) => onFiles(e, "image")} style={{ display: "none" }} />
-        <input type="file" ref={logoRef} accept="image/jpeg,image/png,image/webp,image/avif,image/svg+xml,image/gif,.jpg,.jpeg,.png,.webp,.avif,.svg,.gif" multiple onChange={(e) => onFiles(e, "logo")} style={{ display: "none" }} />
-        <input type="file" ref={iconRef} accept="image/jpeg,image/png,image/webp,image/avif,image/svg+xml,image/gif,.jpg,.jpeg,.png,.webp,.avif,.svg,.gif" multiple onChange={(e) => onFiles(e, "icon")} style={{ display: "none" }} />
-        <button className="btn primary" type="button" disabled={!!busy} onClick={() => fileRef.current && fileRef.current.click()}>
+        <input type="file" ref={fileRef} accept="image/jpeg,image/png,image/webp,image/avif,image/svg+xml,image/gif,video/mp4,.jpg,.jpeg,.png,.webp,.avif,.svg,.gif,.mp4" multiple onChange={onFiles} style={{ display: "none" }} />
+        <button className="btn primary" type="button" disabled={!!busy} onClick={() => setUploadOpen(true)}>
           <span className="ic">{Ic.upload}</span><span>{busy || "Upload media"}</span>
         </button>
-        <button className="btn ghost" type="button" disabled={!!busy} onClick={() => logoRef.current && logoRef.current.click()}>Upload logos</button>
-        <button className="btn ghost" type="button" disabled={!!busy} onClick={() => iconRef.current && iconRef.current.click()}>Upload icons</button>
         <input
           className="media-search"
           type="search"
@@ -3016,10 +3014,9 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
             <option value="">Move to backlog</option>
             {projects.map((p) => <option key={p.id} value={p.id}>{p.name || p.id}</option>)}
           </select>
-          <button className="btn ghost" onClick={() => bulkUpdate({ projectId: bulkProject || null }, "Selected files moved")}>Move</button>
-          <button className="btn ghost" onClick={() => bulkUpdate({ kind: "image" }, "Selected files marked as images")}>Images</button>
-          <button className="btn ghost" onClick={() => bulkUpdate({ kind: "logo" }, "Selected files marked as logos")}>Logos</button>
-          <button className="btn ghost" onClick={() => bulkUpdate({ kind: "icon" }, "Selected files marked as icons")}>Icons</button>
+          <button className="btn ghost" onClick={() => bulkUpdate(bulkProject ? { projectId: bulkProject, kind: "image" } : { projectId: null }, "Selected files moved")}>Move</button>
+          <button className="btn ghost" onClick={() => bulkUpdate({ kind: "image" }, "Selected files marked as project images")}>Project images</button>
+          <button className="btn ghost" onClick={() => bulkUpdate({ kind: "icon", projectId: null }, "Selected files moved to Graphic Elements")}>Graphic Elements</button>
           <button className="btn ghost" onClick={() => setSelected([])}>Clear</button>
           <button className="btn danger" onClick={bulkDelete}>Delete</button>
         </div>
@@ -3047,8 +3044,7 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
 
       <div className="media-layout">
         <div className="media-groups">
-          {renderGroup("logos", "Logos", "logo(s)", groups.logos)}
-          {renderGroup("icons", "Icons", "icon(s)", groups.icons)}
+          {renderGroup("graphics", "Graphic Elements", "file(s)", groups.graphics)}
           {renderGroup("backlog", "Backlog", "not assigned to a project", groups.backlog)}
           {groups.byProject.map(({ project, items: list }) => renderGroup(project.id, project.name || project.id, "image(s)", list))}
         </div>
@@ -3072,6 +3068,38 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
           ))}
         </aside>
       </div>
+
+      {uploadOpen && (
+        <div className="media-upload-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setUploadOpen(false); }}>
+          <div className="media-upload-dialog" role="dialog" aria-modal="true" aria-labelledby="media-upload-title">
+            <div className="eyebrow">/ Media destination</div>
+            <h2 id="media-upload-title">Upload media</h2>
+            <p>Choose the group where these files should appear.</p>
+            <label>
+              <span>Group</span>
+              <select value={uploadDestination} onChange={(e) => setUploadDestination(e.target.value)} autoFocus>
+                <option value="graphics">Graphic Elements</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>{project.name || project.id}</option>
+                ))}
+              </select>
+            </label>
+            <div className="media-upload-actions">
+              <button className="btn ghost" type="button" onClick={() => setUploadOpen(false)}>Cancel</button>
+              <button
+                className="btn primary"
+                type="button"
+                onClick={() => {
+                  setUploadOpen(false);
+                  fileRef.current && fileRef.current.click();
+                }}
+              >
+                Choose files
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3115,8 +3143,7 @@ function MediaPicker({ currentProjectId, onPick, onClose }) {
   );
   const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name || project.id])), [projects]);
   const groupNav = [
-    groups.logos.length ? { key: "logos", label: "Logos", count: groups.logos.length } : null,
-    groups.icons.length ? { key: "icons", label: "Icons", count: groups.icons.length } : null,
+    groups.graphics.length ? { key: "graphics", label: "Graphic Elements", count: groups.graphics.length } : null,
     groups.backlog.length ? { key: "backlog", label: "Backlog", count: groups.backlog.length } : null,
     ...groups.byProject.map(({ project, items: list }) => ({ key: project.id, label: project.name || project.id, count: list.length })),
   ].filter(Boolean);
@@ -3182,8 +3209,7 @@ function MediaPicker({ currentProjectId, onPick, onClose }) {
               )}
               <div className="media-layout media-picker-layout">
                 <div className="media-groups">
-                  {renderGroup("logos", "Logos", "logo(s)", groups.logos)}
-                  {renderGroup("icons", "Icons", "icon(s)", groups.icons)}
+                  {renderGroup("graphics", "Graphic Elements", "file(s)", groups.graphics)}
                   {renderGroup("backlog", "Backlog", "not assigned", groups.backlog)}
                   {groups.byProject.map(({ project, items: list }) => renderGroup(project.id, project.name || project.id, "image(s)", list))}
                 </div>
