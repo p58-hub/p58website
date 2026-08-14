@@ -278,21 +278,42 @@ const MEDIA_PASSTHROUGH = ["image/svg+xml", "image/gif", "video/mp4"];
 // these types is the only limit there is.
 const MEDIA_PASSTHROUGH_MAX_BYTES = 3 * 1024 * 1024;
 
+function mediaFileType(file) {
+  const reported = String((file && file.type) || "").toLowerCase();
+  if ([
+    "image/jpeg", "image/png", "image/webp", "image/avif",
+    "image/svg+xml", "image/gif", "video/mp4",
+  ].includes(reported)) return reported;
+  const name = String((file && file.name) || "").toLowerCase();
+  if (name.endsWith(".svg")) return "image/svg+xml";
+  if (name.endsWith(".gif")) return "image/gif";
+  if (name.endsWith(".mp4")) return "video/mp4";
+  if (name.endsWith(".png")) return "image/png";
+  if (name.endsWith(".webp")) return "image/webp";
+  if (name.endsWith(".avif")) return "image/avif";
+  if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+  return "";
+}
+
 function downscaleImage(file) {
   return new Promise((resolve, reject) => {
-    if (MEDIA_PASSTHROUGH.includes(file.type)) {
+    const inputType = mediaFileType(file);
+    if (MEDIA_PASSTHROUGH.includes(inputType)) {
       // Caught here rather than at the server so the message can say why.
       if (file.size > MEDIA_PASSTHROUGH_MAX_BYTES) {
         reject(new Error(
           file.name + " is " + (file.size / 1024 / 1024).toFixed(1) + "MB. " +
-          (file.type === "video/mp4" ? "MP4" : file.type === "image/gif" ? "GIF" : "SVG") +
+          (inputType === "video/mp4" ? "MP4" : inputType === "image/gif" ? "GIF" : "SVG") +
           " files are uploaded as-is to keep them intact, so they have to be under " +
           Math.round(MEDIA_PASSTHROUGH_MAX_BYTES / 1024 / 1024) + "MB. Compress or trim it first."
         ));
         return;
       }
       const reader = new FileReader();
-      reader.onload = () => resolve({ dataUrl: reader.result, width: null, height: null });
+      reader.onload = () => {
+        const dataUrl = String(reader.result || "").replace(/^data:;base64,/, `data:${inputType};base64,`);
+        resolve({ dataUrl, width: null, height: null });
+      };
       reader.onerror = () => reject(new Error("Couldn't read " + file.name));
       reader.readAsDataURL(file);
       return;
@@ -314,7 +335,7 @@ function downscaleImage(file) {
       ctx.drawImage(img, 0, 0, w, h);
 
       // PNG keeps its transparency; everything else is far smaller as JPEG.
-      const type = file.type === "image/png" ? "image/png" : "image/jpeg";
+      const type = inputType === "image/png" ? "image/png" : "image/jpeg";
       resolve({ dataUrl: canvas.toDataURL(type, MEDIA_QUALITY), width: w, height: h });
     };
     img.onerror = () => {
@@ -375,6 +396,22 @@ const mediaApi = {
     }),
   remove: (id) => mediaFetch("/api/media?id=" + encodeURIComponent(id), { method: "DELETE" }),
 };
+
+async function updateMediaWithRetry(payload, verify) {
+  let lastError = null;
+  const waits = [0, 250, 750, 1500];
+  for (const wait of waits) {
+    if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+    try {
+      const body = await mediaApi.update(payload);
+      if (!verify || verify(body && body.item)) return body;
+      lastError = new Error("The Media API did not confirm the change.");
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError || new Error("The Media change could not be saved.");
+}
 
 /* Every library file a project points at — hero, badge and gallery. */
 function projectMediaUrls(project) {
@@ -2333,19 +2370,11 @@ function MediaPreview({ src, alt, className, lazy }) {
    shared ~5MB localStorage budget that all your content lives in. */
 async function ensureProjectMediaAssignment(item, projectId) {
   if (!item || !item.id || !projectId) return item;
-  let lastError = null;
-  const waits = [0, 250, 750, 1500];
-  for (const wait of waits) {
-    if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
-    try {
-      const body = await mediaApi.update({ id: item.id, projectId });
-      if (body && body.item && body.item.projectId === projectId) return body.item;
-      lastError = new Error("The Media API did not confirm the project assignment.");
-    } catch (err) {
-      lastError = err;
-    }
-  }
-  throw lastError || new Error("The project assignment could not be confirmed.");
+  const body = await updateMediaWithRetry(
+    { id: item.id, projectId },
+    (updated) => updated && updated.projectId === projectId
+  );
+  return body.item;
 }
 
 async function readImageFile(e, onChange, onBusy, uploadKey) {
@@ -2454,7 +2483,7 @@ function ImageInput({ value, onChange, placeholder, extra, uploadKey }) {
 
   return (
     <div className="img-input">
-      {picking && <MediaPicker onPick={onLibraryPick} onClose={() => setPicking(false)} />}
+      {picking && <MediaPicker currentProjectId={uploadKey} onPick={onLibraryPick} onClose={() => setPicking(false)} />}
       <div className="preview">
         {value ? <MediaPreview src={value} /> : <div className="placeholder">{placeholder || "No image"}</div>}
       </div>
@@ -2601,6 +2630,51 @@ function MediaTile({ item, projects, onAssign, onDelete, onCaption, onKind, sele
   );
 }
 
+function groupMediaItems(items, projects, query, projectFilter, dateFrom, dateTo) {
+  const q = query.trim().toLowerCase();
+  const from = dateFrom ? new Date(dateFrom + "T00:00:00").getTime() : null;
+  const to = dateTo ? new Date(dateTo + "T23:59:59.999").getTime() : null;
+  const known = new Set(projects.map((p) => p.id));
+  const visible = items.filter((item) => {
+    if (q && !((item.filename || "") + " " + (item.caption || "")).toLowerCase().includes(q)) return false;
+    const effectiveProject = known.has(item.projectId) ? item.projectId : "backlog";
+    if (projectFilter !== "all" && effectiveProject !== projectFilter) return false;
+    const uploaded = Date.parse(item.uploadedAt || "");
+    if (from && (!uploaded || uploaded < from)) return false;
+    if (to && (!uploaded || uploaded > to)) return false;
+    return true;
+  });
+
+  const assigned = new Map();
+  const backlog = [];
+  const logos = [];
+  const icons = [];
+  visible.forEach((item) => {
+    const name = item.filename || "";
+    const inferredKind = item.kind === "logo" || /(^|[-_])logo([-_.]|$)/i.test(name)
+      ? "logo"
+      : item.kind === "icon" || item.contentType === "image/svg+xml" || /(^|[-_])icon([-_.]|$)/i.test(name)
+        ? "icon"
+        : "image";
+    if (inferredKind === "logo") { logos.push(item); return; }
+    if (inferredKind === "icon") { icons.push(item); return; }
+    if (item.projectId && known.has(item.projectId)) {
+      if (!assigned.has(item.projectId)) assigned.set(item.projectId, []);
+      assigned.get(item.projectId).push(item);
+    } else {
+      backlog.push(item);
+    }
+  });
+
+  return {
+    backlog,
+    logos,
+    icons,
+    byProject: projects.filter((p) => assigned.has(p.id)).map((p) => ({ project: p, items: assigned.get(p.id) })),
+    count: visible.length,
+  };
+}
+
 function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
   const [items, setItems] = useState([]);
   const [status, setStatus] = useState("loading"); // loading | ready | error
@@ -2679,10 +2753,15 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
   const patch = (id, changes, failureNote) => {
     const before = items;
     setItems(items.map((x) => (x.id === id ? { ...x, ...changes } : x)));
-    mediaApi.update({ id, ...changes }).catch((err) => {
-      setItems(before); // put it back — the server is the source of truth
-      alert(failureNote + "\n\n" + err.message);
-    });
+    updateMediaWithRetry(
+      { id, ...changes },
+      (updated) => updated && Object.keys(changes).every((key) => updated[key] === changes[key])
+    )
+      .then((body) => setItems((current) => current.map((x) => (x.id === id ? body.item : x))))
+      .catch((err) => {
+        setItems(before); // put it back — the server is the source of truth
+        alert(failureNote + "\n\n" + err.message);
+      });
   };
 
   const onAssign = (id, projectId) => patch(id, { projectId }, "Couldn't move that image.");
@@ -2695,10 +2774,23 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
       "If a project or news item already uses this image, it will show as broken. This cannot be undone."
     )) return;
 
+    // The storage request can take a moment. Remove the card immediately so
+    // the click always has visible feedback, and restore it only on failure.
+    const previousIndex = items.findIndex((current) => current.id === item.id);
+    setItems((current) => current.filter((x) => x.id !== item.id));
+    setSelected((current) => current.filter((id) => id !== item.id));
     mediaApi
       .remove(item.id)
-      .then(() => { setItems((prev) => prev.filter((x) => x.id !== item.id)); onToast("Image deleted"); })
-      .catch((err) => alert("Couldn't delete that image.\n\n" + err.message));
+      .then(() => onToast("Image deleted"))
+      .catch((err) => {
+        setItems((current) => {
+          if (current.some((x) => x.id === item.id)) return current;
+          const restored = current.slice();
+          restored.splice(Math.max(0, Math.min(previousIndex, restored.length)), 0, item);
+          return restored;
+        });
+        alert("Couldn't delete that image. It has been restored.\n\n" + err.message);
+      });
   };
 
   const toggleSelected = (id) => setSelected((current) =>
@@ -2711,7 +2803,13 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
     setBusy(`Updating ${ids.length}…`);
     try {
       const updated = [];
-      for (const id of ids) updated.push((await mediaApi.update({ id, ...changes })).item);
+      for (const id of ids) {
+        const body = await updateMediaWithRetry(
+          { id, ...changes },
+          (item) => item && Object.keys(changes).every((key) => item[key] === changes[key])
+        );
+        updated.push(body.item);
+      }
       const byId = new Map(updated.map((item) => [item.id, item]));
       setItems((current) => current.map((item) => byId.get(item.id) || item));
       setSelected([]);
@@ -2727,14 +2825,19 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
   const bulkDelete = async () => {
     const ids = selected.slice();
     if (!ids.length || !confirm(`Delete ${ids.length} selected file(s)?\n\nThis cannot be undone.`)) return;
+    const removed = items.filter((item) => ids.includes(item.id));
     setBusy(`Deleting ${ids.length}…`);
+    setItems((current) => current.filter((item) => !ids.includes(item.id)));
+    setSelected([]);
     try {
       for (const id of ids) await mediaApi.remove(id);
-      setItems((current) => current.filter((item) => !ids.includes(item.id)));
-      setSelected([]);
       onToast(`${ids.length} file(s) deleted`);
     } catch (err) {
       alert("Couldn't delete all selected files.\n\n" + err.message);
+      setItems((current) => {
+        const present = new Set(current.map((item) => item.id));
+        return current.concat(removed.filter((item) => !present.has(item.id)));
+      });
       refresh();
     } finally {
       setBusy(null);
@@ -2794,53 +2897,10 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
   };
 
   /* ----- grouping ----- */
-  const groups = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const from = dateFrom ? new Date(dateFrom + "T00:00:00").getTime() : null;
-    const to = dateTo ? new Date(dateTo + "T23:59:59.999").getTime() : null;
-    const visible = items.filter((x) => {
-      if (q && !((x.filename || "") + " " + (x.caption || "")).toLowerCase().includes(q)) return false;
-      const effectiveProject = projects.some((p) => p.id === x.projectId) ? x.projectId : "backlog";
-      if (projectFilter !== "all" && effectiveProject !== projectFilter) return false;
-      const uploaded = Date.parse(x.uploadedAt || "");
-      if (from && (!uploaded || uploaded < from)) return false;
-      if (to && (!uploaded || uploaded > to)) return false;
-      return true;
-    });
-
-    const known = new Set(projects.map((p) => p.id));
-    const assigned = new Map();
-    const backlog = [];
-
-    const logos = [];
-    const icons = [];
-    visible.forEach((item) => {
-      const name = item.filename || "";
-      const inferredKind = item.kind === "logo" || /(^|[-_])logo([-_.]|$)/i.test(name)
-        ? "logo"
-        : item.kind === "icon" || item.contentType === "image/svg+xml" || /(^|[-_])icon([-_.]|$)/i.test(name)
-          ? "icon"
-          : "image";
-      if (inferredKind === "logo") { logos.push(item); return; }
-      if (inferredKind === "icon") { icons.push(item); return; }
-      // An image pointing at a deleted project belongs in the backlog,
-      // not in a group nobody can see.
-      if (item.projectId && known.has(item.projectId)) {
-        if (!assigned.has(item.projectId)) assigned.set(item.projectId, []);
-        assigned.get(item.projectId).push(item);
-      } else {
-        backlog.push(item);
-      }
-    });
-
-    return {
-      backlog,
-      logos,
-      icons,
-      byProject: projects.filter((p) => assigned.has(p.id)).map((p) => ({ project: p, items: assigned.get(p.id) })),
-      count: visible.length,
-    };
-  }, [items, projects, query, projectFilter, dateFrom, dateTo]);
+  const groups = useMemo(
+    () => groupMediaItems(items, projects, query, projectFilter, dateFrom, dateTo),
+    [items, projects, query, projectFilter, dateFrom, dateTo]
+  );
 
   if (status === "loading") {
     return <div className="media-note">Loading the library…</div>;
@@ -2921,11 +2981,11 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
       />
 
       <div className="media-bar">
-        <input type="file" ref={fileRef} accept="image/*,video/mp4" multiple onChange={(e) => onFiles(e, "image")} style={{ display: "none" }} />
-        <input type="file" ref={logoRef} accept="image/*" multiple onChange={(e) => onFiles(e, "logo")} style={{ display: "none" }} />
-        <input type="file" ref={iconRef} accept="image/*" multiple onChange={(e) => onFiles(e, "icon")} style={{ display: "none" }} />
+        <input type="file" ref={fileRef} accept="image/jpeg,image/png,image/webp,image/avif,image/svg+xml,image/gif,video/mp4,.jpg,.jpeg,.png,.webp,.avif,.svg,.gif,.mp4" multiple onChange={(e) => onFiles(e, "image")} style={{ display: "none" }} />
+        <input type="file" ref={logoRef} accept="image/jpeg,image/png,image/webp,image/avif,image/svg+xml,image/gif,.jpg,.jpeg,.png,.webp,.avif,.svg,.gif" multiple onChange={(e) => onFiles(e, "logo")} style={{ display: "none" }} />
+        <input type="file" ref={iconRef} accept="image/jpeg,image/png,image/webp,image/avif,image/svg+xml,image/gif,.jpg,.jpeg,.png,.webp,.avif,.svg,.gif" multiple onChange={(e) => onFiles(e, "icon")} style={{ display: "none" }} />
         <button className="btn primary" type="button" disabled={!!busy} onClick={() => fileRef.current && fileRef.current.click()}>
-          <span className="ic">{Ic.upload}</span><span>{busy || "Upload images"}</span>
+          <span className="ic">{Ic.upload}</span><span>{busy || "Upload media"}</span>
         </button>
         <button className="btn ghost" type="button" disabled={!!busy} onClick={() => logoRef.current && logoRef.current.click()}>Upload logos</button>
         <button className="btn ghost" type="button" disabled={!!busy} onClick={() => iconRef.current && iconRef.current.click()}>Upload icons</button>
@@ -3018,11 +3078,23 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
 
 /* Modal used by ImageInput so the editors can reuse an image that is
    already in the library instead of uploading a second copy of it. */
-function MediaPicker({ onPick, onClose }) {
+function MediaPicker({ currentProjectId, onPick, onClose }) {
   const [items, setItems] = useState([]);
   const [status, setStatus] = useState("loading");
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
+  const [projectFilter, setProjectFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [groupView, setGroupView] = useState("all");
+  const [collapsed, setCollapsed] = useState({});
+  const projects = useMemo(() => {
+    const saved = (load().projects || []).slice();
+    if (currentProjectId && !saved.some((project) => project.id === currentProjectId)) {
+      saved.unshift({ id: currentProjectId, name: "Current project" });
+    }
+    return saved;
+  }, [currentProjectId]);
 
   useEffect(() => {
     mediaApi
@@ -3037,11 +3109,42 @@ function MediaPicker({ onPick, onClose }) {
     return () => document.removeEventListener("keydown", k);
   }, []);
 
-  const visible = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((x) => ((x.filename || "") + " " + (x.caption || "")).toLowerCase().includes(q));
-  }, [items, query]);
+  const groups = useMemo(
+    () => groupMediaItems(items, projects, query, projectFilter, dateFrom, dateTo),
+    [items, projects, query, projectFilter, dateFrom, dateTo]
+  );
+  const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name || project.id])), [projects]);
+  const groupNav = [
+    groups.logos.length ? { key: "logos", label: "Logos", count: groups.logos.length } : null,
+    groups.icons.length ? { key: "icons", label: "Icons", count: groups.icons.length } : null,
+    groups.backlog.length ? { key: "backlog", label: "Backlog", count: groups.backlog.length } : null,
+    ...groups.byProject.map(({ project, items: list }) => ({ key: project.id, label: project.name || project.id, count: list.length })),
+  ].filter(Boolean);
+  const visibleGroupKeys = groupNav.map((group) => group.key);
+  const activeGroupView = groupView === "all" || visibleGroupKeys.includes(groupView) ? groupView : "all";
+  const choose = (item) => { onPick(item); onClose(); };
+  const renderTile = (item) => {
+    const owner = item.projectId && projectNames.get(item.projectId);
+    const isCurrent = owner && item.projectId === currentProjectId;
+    return (
+      <button key={item.id} type="button" className={`media-pick${owner ? " is-assigned" : ""}`} onClick={() => choose(item)} title={item.filename}>
+        <span className="media-pick-preview">
+          <MediaPreview src={item.url} alt={item.caption || item.filename} lazy />
+          {owner && <span className={`media-pick-assigned${isCurrent ? " is-current" : ""}`} title={`Already assigned to ${owner}`}><b>✓</b>{isCurrent ? "Current project" : owner}</span>}
+        </span>
+        <span className="media-pick-name">{item.filename}</span>
+      </button>
+    );
+  };
+  const renderGroup = (key, title, note, list) => list.length > 0 && (activeGroupView === "all" || activeGroupView === key) && (
+    <div className="media-group media-picker-group" key={key}>
+      <button className="media-group-head" type="button" onClick={() => setCollapsed((current) => ({ ...current, [key]: !current[key] }))}>
+        <b><span className="media-chevron">{collapsed[key] ? "▸" : "▾"}</span>{title}</b>
+        <span>{list.length} {note}</span>
+      </button>
+      {!collapsed[key] && <div className="media-grid picker">{list.map(renderTile)}</div>}
+    </div>
+  );
 
   return (
     <div className="sheet-wrap" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -3062,32 +3165,33 @@ function MediaPicker({ onPick, onClose }) {
 
           {status === "ready" && (
             <Fragment>
-              <input
-                className="media-search"
-                type="search"
-                value={query}
-                placeholder="Search"
-                onChange={(e) => setQuery(e.target.value)}
-                autoFocus
-              />
-              {visible.length === 0 && (
+              <div className="media-bar media-picker-bar">
+                <input className="media-search" type="search" value={query} placeholder="Search by filename or caption" onChange={(e) => setQuery(e.target.value)} autoFocus />
+                <select className="media-filter" value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}>
+                  <option value="all">All projects</option>
+                  <option value="backlog">Backlog</option>
+                  {projects.map((project) => <option key={project.id} value={project.id}>{project.name || project.id}</option>)}
+                </select>
+                <label className="media-date">From <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></label>
+                <label className="media-date">To <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></label>
+              </div>
+              {groups.count === 0 && (
                 <div className="media-note">
                   {items.length ? "Nothing matches that search." : "The library is empty. Upload images in the Media section first."}
                 </div>
               )}
-              <div className="media-grid picker">
-                {visible.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className="media-pick"
-                    onClick={() => { onPick(item); onClose(); }}
-                    title={item.filename}
-                  >
-                    <MediaPreview src={item.url} alt={item.caption || item.filename} lazy />
-                    <span>{item.filename}</span>
-                  </button>
-                ))}
+              <div className="media-layout media-picker-layout">
+                <div className="media-groups">
+                  {renderGroup("logos", "Logos", "logo(s)", groups.logos)}
+                  {renderGroup("icons", "Icons", "icon(s)", groups.icons)}
+                  {renderGroup("backlog", "Backlog", "not assigned", groups.backlog)}
+                  {groups.byProject.map(({ project, items: list }) => renderGroup(project.id, project.name || project.id, "image(s)", list))}
+                </div>
+                {groupNav.length > 0 && <aside className="media-group-nav media-picker-nav" aria-label="Media groups">
+                  <div className="media-group-nav-title">Groups</div>
+                  <button className={activeGroupView === "all" ? "on" : ""} type="button" onClick={() => setGroupView("all")}><span>View all</span><b>{groups.count}</b></button>
+                  {groupNav.map((group) => <button className={activeGroupView === group.key ? "on" : ""} type="button" key={group.key} onClick={() => { setGroupView(group.key); setCollapsed((current) => ({ ...current, [group.key]: false })); }}><span>{group.label}</span><b>{group.count}</b></button>)}
+                </aside>}
               </div>
             </Fragment>
           )}

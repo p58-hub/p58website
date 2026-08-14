@@ -1448,9 +1448,14 @@ a { color: inherit; }
 }
 
 /* picker */
-.media-picker .media-search { margin-bottom: 18px; }
+.sheet.media-picker { width: min(1240px, 100%); }
+.media-picker-bar { margin-top: 0; }
+.media-picker-layout { grid-template-columns: minmax(0, 1fr) 220px; }
+.media-picker-nav { top: 0; }
+.media-picker-group { margin-bottom: 26px; }
 .media-grid.picker { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .media-pick {
+  position: relative;
   display: flex;
   flex-direction: column;
   text-align: left;
@@ -1459,8 +1464,10 @@ a { color: inherit; }
   overflow: hidden;
   background: var(--paper);
 }
-.media-pick img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: var(--paper-3); }
-.media-pick span {
+.media-pick-preview { position: relative; display: block; padding: 0; overflow: hidden; }
+.media-pick-preview > img,
+.media-pick-preview > video { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: var(--paper-3); }
+.media-pick .media-pick-name {
   padding: 8px;
   font-size: 11.5px;
   white-space: nowrap;
@@ -1468,6 +1475,36 @@ a { color: inherit; }
   text-overflow: ellipsis;
 }
 .media-pick:hover { border-color: var(--ink); }
+.media-pick.is-assigned { border-color: color-mix(in oklab, var(--ink) 45%, var(--rule-strong)); }
+.media-pick-assigned {
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  bottom: 7px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 7px;
+  border-radius: 6px;
+  background: color-mix(in oklab, var(--ink) 88%, transparent);
+  color: var(--paper);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  font-family: var(--mono);
+  font-size: 8px;
+  line-height: 1.2;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.media-pick-assigned b { flex: 0 0 auto; font-size: 11px; }
+.media-pick-assigned.is-current { background: var(--clay); }
+
+@media (max-width: 900px) {
+  .media-picker-layout { grid-template-columns: 1fr; }
+  .media-picker-nav { grid-row: 1; }
+}
 
 /* ============ Hero gallery picker ============ */
 .hero-hint {

@@ -131,11 +131,16 @@ async function uploadMedia(req, res, session) {
 async function updateMedia(req, res) {
   const body = await readJsonBody(req, 64 * 1024);
   const id = body && typeof body.id === "string" ? body.id : "";
-  if (!id) return json(res, 400, { error: "missing_id" });
+  if (!id) return json(res, 400, { error: "missing_id", message: "The media item id is missing." });
 
   const items = await readIndex();
   const idx = items.findIndex((x) => x && x.id === id);
-  if (idx < 0) return json(res, 404, { error: "not_found" });
+  if (idx < 0) {
+    return json(res, 404, {
+      error: "not_found",
+      message: "That media item was not found in the current index. Refresh Media and try again.",
+    });
+  }
 
   const item = { ...items[idx] };
 
@@ -151,7 +156,14 @@ async function updateMedia(req, res) {
 
   const next = items.slice();
   next[idx] = item;
-  await writeIndex(next);
+  try {
+    await writeIndex(next);
+  } catch {
+    return json(res, 503, {
+      error: "index_write_failed",
+      message: "Media storage could not save the change. Try again in a moment.",
+    });
+  }
 
   return json(res, 200, { item });
 }
