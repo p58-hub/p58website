@@ -2290,6 +2290,23 @@ function MediaPreview({ src, alt, className, lazy }) {
    or no Blob store is linked yet) it falls back to embedding the image
    so the dashboard still works, and says so: embedded images spend the
    shared ~5MB localStorage budget that all your content lives in. */
+async function ensureProjectMediaAssignment(item, projectId) {
+  if (!item || !item.id || !projectId) return item;
+  let lastError = null;
+  const waits = [0, 250, 750, 1500];
+  for (const wait of waits) {
+    if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+    try {
+      const body = await mediaApi.update({ id: item.id, projectId });
+      if (body && body.item && body.item.projectId === projectId) return body.item;
+      lastError = new Error("The Media API did not confirm the project assignment.");
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError || new Error("The project assignment could not be confirmed.");
+}
+
 async function readImageFile(e, onChange, onBusy, uploadKey) {
   const file = e.target.files && e.target.files[0];
   e.target.value = "";
@@ -2309,16 +2326,30 @@ async function readImageFile(e, onChange, onBusy, uploadKey) {
     return;
   }
 
+  const projectId = uploadKey && uploadKey !== BACKLOG_KEY ? uploadKey : null;
+  let uploadedItem = null;
   try {
     const body = await mediaApi.upload({
       filename: file.name,
       dataUrl: shrunk.dataUrl,
-      projectId: uploadKey && uploadKey !== BACKLOG_KEY ? uploadKey : null,
+      projectId,
     });
-    onChange(body.item.url);
+    uploadedItem = body.item;
   } catch (err) {
     onChange(shrunk.dataUrl);
     alert("This image was saved inside this browser rather than the media library.\n\n" + err.message);
+    setBusy(false);
+    uploadRegistry.step(uploadKey);
+    return;
+  }
+
+  onChange(uploadedItem.url);
+  if (projectId) {
+    try {
+      await ensureProjectMediaAssignment(uploadedItem, projectId);
+    } catch (err) {
+      alert("The image uploaded, but Media could not confirm its project assignment. Try Save project, then Refresh in Media.\n\n" + err.message);
+    }
   }
   setBusy(false);
   uploadRegistry.step(uploadKey);
@@ -2786,6 +2817,18 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
   }
 
   const tileProps = { projects, onAssign, onDelete, onCaption, onKind, onSelect: toggleSelected };
+  const visibleGroupKeys = [
+    groups.logos.length ? "logos" : null,
+    groups.icons.length ? "icons" : null,
+    groups.backlog.length ? "backlog" : null,
+    ...groups.byProject.map(({ project }) => project.id),
+  ].filter(Boolean);
+  const allGroupsHidden = visibleGroupKeys.length > 0 && visibleGroupKeys.every((key) => collapsed[key]);
+  const toggleAllGroups = () => {
+    const next = { ...collapsed };
+    visibleGroupKeys.forEach((key) => { next[key] = !allGroupsHidden; });
+    setCollapsed(next);
+  };
   const renderGroup = (key, title, note, list) => list.length > 0 && (
     <div className="media-group" key={key}>
       <button className="media-group-head" type="button" onClick={() => setCollapsed((x) => ({ ...x, [key]: !x[key] }))}>
@@ -2830,6 +2873,9 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
         </select>
         <label className="media-date">From <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></label>
         <label className="media-date">To <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></label>
+        <button className="btn ghost" type="button" disabled={!visibleGroupKeys.length} onClick={toggleAllGroups}>
+          {allGroupsHidden ? "Show all groups" : "Hide all groups"}
+        </button>
         <button className="btn ghost" type="button" onClick={refresh}>Refresh</button>
       </div>
 
