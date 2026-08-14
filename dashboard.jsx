@@ -516,6 +516,7 @@ function App({ session }) {
 
   const [data, setData] = useState(load);
   const [section, setSection] = useState("projects");
+  const [textsProject, setTextsProject] = useState("all");
   const [editing, setEditing] = useState(null); // { kind, id|null }
   const [toast, setToast] = useState(null);
   const [dirty, setDirty] = useState(false);
@@ -523,6 +524,7 @@ function App({ session }) {
   const [viewInquiry, setViewInquiry] = useState(null);
   const [sideOpen, setSideOpen] = useState(false);
   const goSection = (s) => { setSection(s); setSideOpen(false); };
+  const goProjectTexts = (id = "all") => { setTextsProject(id); setEditing(null); goSection("texts"); };
 
   /* Adopt whatever is published before anything can be edited. Without this,
      opening the dashboard on a second computer would start from that
@@ -989,11 +991,12 @@ function App({ session }) {
 
         <div className="content">
           {section === "projects" && (
-            <ProjectsList data={data.projects} categories={data.categories} onEdit={(id) => setEditing({ kind: "project", id })} onDelete={(id) => onDelete("project", id)} onMove={onMoveProject} onToggleVisibility={onToggleProjectVisibility} onNew={() => setEditing({ kind: "project", id: null })} pendingIds={pendingIds} uploads={uploads} onPublishOne={(id) => publishOneProject(id).catch(() => { /* shown in the header */ })} publishBusy={publishState.status === "busy"} />
+            <ProjectsList data={data.projects} categories={data.categories} onEdit={(id) => setEditing({ kind: "project", id })} onDelete={(id) => onDelete("project", id)} onMove={onMoveProject} onToggleVisibility={onToggleProjectVisibility} onNew={() => setEditing({ kind: "project", id: null })} onTexts={() => goProjectTexts("all")} pendingIds={pendingIds} uploads={uploads} onPublishOne={(id) => publishOneProject(id).catch(() => { /* shown in the header */ })} publishBusy={publishState.status === "busy"} />
           )}
           {section === "texts" && (
             <ProjectTextsSheet
               projects={data.projects}
+              initialProject={textsProject}
               onSave={(projects) => {
                 update({ ...data, projects });
                 setToast("Project texts saved — ready to publish");
@@ -1045,6 +1048,7 @@ function App({ session }) {
           defaultProjectBadge={normaliseSite(data.site || DEFAULT_SITE).defaultProjectBadge}
           onSave={onSaveProject}
           onPublish={onSaveAndPublishProject}
+          onTexts={editing.id ? () => goProjectTexts(editing.id) : null}
           onClose={() => setEditing(null)}
           uploadsActive={uploads.active}
           publishBusy={publishState.status === "busy"}
@@ -1126,15 +1130,20 @@ function projectTextRows(project) {
   return rows;
 }
 
-function ProjectTextsSheet({ projects, onSave, onOpenProject, onToast }) {
+function ProjectTextsSheet({ projects, initialProject = "all", onSave, onOpenProject, onToast }) {
   const [draft, setDraft] = useState(() => projects.map((project) => ({ ...project })));
   const [query, setQuery] = useState("");
-  const [projectFilter, setProjectFilter] = useState("all");
+  const [selectedProject, setSelectedProject] = useState(initialProject);
+  const [expandedProjects, setExpandedProjects] = useState(() => new Set());
   const [language, setLanguage] = useState("all");
 
   useEffect(() => {
     setDraft(projects.map((project) => ({ ...project })));
   }, [projects]);
+
+  useEffect(() => {
+    setSelectedProject(initialProject);
+  }, [initialProject]);
 
   const changed = JSON.stringify(draft) !== JSON.stringify(projects);
   const normalisedQuery = query.trim().toLocaleLowerCase();
@@ -1145,7 +1154,12 @@ function ProjectTextsSheet({ projects, onSave, onOpenProject, onToast }) {
       ? allRows.filter((row) => `${row.label} ${row.en} ${row.gr} ${projectHaystack}`.toLocaleLowerCase().includes(normalisedQuery))
       : allRows;
     return { project, rows };
-  }).filter(({ project, rows }) => (projectFilter === "all" || project.id === projectFilter) && rows.length), [draft, projectFilter, normalisedQuery]);
+  }).filter(({ project, rows }) => (selectedProject === "all" || project.id === selectedProject) && rows.length), [draft, selectedProject, normalisedQuery]);
+
+  const dirtyProjectIds = useMemo(() => {
+    const original = new Map(projects.map((project) => [project.id, JSON.stringify(project)]));
+    return new Set(draft.filter((project) => original.get(project.id) !== JSON.stringify(project)).map((project) => project.id));
+  }, [draft, projects]);
 
   const setCell = (projectId, row, lang, value) => {
     setDraft((current) => current.map((project) => {
@@ -1182,6 +1196,45 @@ function ProjectTextsSheet({ projects, onSave, onOpenProject, onToast }) {
       .catch(() => onToast("Couldn’t copy the project texts"));
   };
 
+  const chooseProject = (id) => {
+    setSelectedProject(id);
+    if (id === "all") setExpandedProjects(new Set());
+  };
+
+  const toggleExpanded = (id) => {
+    setExpandedProjects((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const renderTextTable = (project, rows) => (
+    <div className="texts-table-wrap">
+      <table className="texts-table">
+        <thead><tr><th>Field</th><th className="text-col-en">English</th><th className="text-col-gr">Greek</th></tr></thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id}>
+              <th className="texts-field" scope="row">{row.label}</th>
+              <td className="text-col-en">
+                {row.compact
+                  ? <input type="text" value={row.en} aria-label={`${project.name} · ${row.label} · English`} onChange={(event) => setCell(project.id, row, "en", event.target.value)} />
+                  : <textarea value={row.en} aria-label={`${project.name} · ${row.label} · English`} onChange={(event) => setCell(project.id, row, "en", event.target.value)} />}
+              </td>
+              <td className="text-col-gr">
+                {row.compact
+                  ? <input type="text" value={row.gr} aria-label={`${project.name} · ${row.label} · Greek`} onChange={(event) => setCell(project.id, row, "gr", event.target.value)} placeholder="Greek translation" />
+                  : <textarea value={row.gr} aria-label={`${project.name} · ${row.label} · Greek`} onChange={(event) => setCell(project.id, row, "gr", event.target.value)} placeholder="Greek translation" />}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
   return (
     <div className={`texts-sheet language-${language}`}>
       <SectionHead eyebrow="/ All project copy · English + Greek" title="Project texts" />
@@ -1189,13 +1242,6 @@ function ProjectTextsSheet({ projects, onSave, onOpenProject, onToast }) {
         <label className="texts-search">
           <span>Search</span>
           <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Project, field or text…" />
-        </label>
-        <label>
-          <span>Project</span>
-          <select value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
-            <option value="all">All projects ({draft.length})</option>
-            {draft.map((project) => <option key={project.id} value={project.id}>{project.name} · {project.code}</option>)}
-          </select>
         </label>
         <label>
           <span>Language</span>
@@ -1211,39 +1257,63 @@ function ProjectTextsSheet({ projects, onSave, onOpenProject, onToast }) {
         </div>
       </div>
 
-      <div className="texts-table-wrap">
-        <table className="texts-table">
-          <thead><tr><th>Project</th><th>Field</th><th className="text-col-en">English</th><th className="text-col-gr">Greek</th></tr></thead>
-          {groups.map(({ project, rows }) => (
-            <tbody key={project.id}>
-              {rows.map((row, index) => (
-                <tr key={row.id}>
-                  {index === 0 && (
-                    <th className="texts-project" rowSpan={rows.length} scope="rowgroup">
-                      <button type="button" onClick={() => onOpenProject(project.id)}>
-                        <strong>{project.name || "Untitled"}</strong>
-                        <span>{project.code} · {project.brand || "No brand"}</span>
-                        <span>{project.visible === false ? "Hidden" : "Visible"} ↗</span>
-                      </button>
-                    </th>
-                  )}
-                  <th className="texts-field" scope="row">{row.label}</th>
-                  <td className="text-col-en">
-                    {row.compact
-                      ? <input type="text" value={row.en} aria-label={`${project.name} · ${row.label} · English`} onChange={(event) => setCell(project.id, row, "en", event.target.value)} />
-                      : <textarea value={row.en} aria-label={`${project.name} · ${row.label} · English`} onChange={(event) => setCell(project.id, row, "en", event.target.value)} />}
-                  </td>
-                  <td className="text-col-gr">
-                    {row.compact
-                      ? <input type="text" value={row.gr} aria-label={`${project.name} · ${row.label} · Greek`} onChange={(event) => setCell(project.id, row, "gr", event.target.value)} placeholder="Greek translation" />
-                      : <textarea value={row.gr} aria-label={`${project.name} · ${row.label} · Greek`} onChange={(event) => setCell(project.id, row, "gr", event.target.value)} placeholder="Greek translation" />}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          ))}
-        </table>
-        {!groups.length && <div className="texts-empty">No project text matches these filters.</div>}
+      <div className="texts-workspace">
+        <nav className="texts-project-menu" aria-label="Projects">
+          <button type="button" className={selectedProject === "all" ? "on" : ""} onClick={() => chooseProject("all")}>
+            <span><strong>All projects</strong><small>Collapsed overview</small></span>
+            <b>{draft.length}</b>
+          </button>
+          <div className="texts-project-menu-list">
+            {draft.map((project) => (
+              <button key={project.id} type="button" className={selectedProject === project.id ? "on" : ""} onClick={() => chooseProject(project.id)}>
+                <span><strong>{project.name || "Untitled"}</strong><small>{project.code} · {project.brand || "No brand"}</small></span>
+                {dirtyProjectIds.has(project.id) && <i title="Unsaved changes" aria-label="Unsaved changes"></i>}
+              </button>
+            ))}
+          </div>
+        </nav>
+
+        <div className="texts-editor">
+          {selectedProject === "all" ? (
+            <div className="texts-accordions">
+              {groups.map(({ project, rows }) => {
+                const expanded = expandedProjects.has(project.id);
+                return (
+                  <section className={`texts-project-panel ${expanded ? "is-open" : ""}`} key={project.id}>
+                    <button className="texts-project-line" type="button" onClick={() => toggleExpanded(project.id)} aria-expanded={expanded}>
+                      <span className="texts-project-chevron" aria-hidden="true">›</span>
+                      <strong>{project.name || "Untitled"}</strong>
+                      <span>{project.code}</span>
+                      <span>{project.brand || "No brand"}</span>
+                      <span>{rows.length} fields</span>
+                      {dirtyProjectIds.has(project.id) && <i>Edited</i>}
+                    </button>
+                    {expanded && (
+                      <div className="texts-project-panel-body">
+                        <div className="texts-project-panel-head">
+                          <span>{project.visible === false ? "Hidden from site" : "Visible on site"}</span>
+                          <button type="button" onClick={() => onOpenProject(project.id)}>Open full project ↗</button>
+                        </div>
+                        {renderTextTable(project, rows)}
+                      </div>
+                    )}
+                  </section>
+                );
+              })}
+            </div>
+          ) : groups.length ? (
+            groups.map(({ project, rows }) => (
+              <section className="texts-selected-project" key={project.id}>
+                <div className="texts-selected-head">
+                  <div><span>{project.code} · {project.brand || "No brand"}</span><h2>{project.name || "Untitled"}</h2></div>
+                  <button className="btn ghost" type="button" onClick={() => onOpenProject(project.id)}>Open full project ↗</button>
+                </div>
+                {renderTextTable(project, rows)}
+              </section>
+            ))
+          ) : <div className="texts-empty">No project text matches this search.</div>}
+          {selectedProject === "all" && !groups.length && <div className="texts-empty">No project text matches this search.</div>}
+        </div>
       </div>
       <div className="texts-foot">
         <span>{groups.reduce((total, group) => total + group.rows.length, 0)} text fields shown</span>
@@ -1258,7 +1328,7 @@ function categoryLabel(categories, id) {
   return cat ? cat.label : id || "Uncategorised";
 }
 
-function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisibility, onNew, pendingIds, uploads, onPublishOne, publishBusy }) {
+function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisibility, onNew, onTexts, pendingIds, uploads, onPublishOne, publishBusy }) {
   if (!data.length) return <Empty kind="projects" onNew={onNew} />;
   const groups = categories.map((cat) => ({
     category: cat,
@@ -1351,7 +1421,9 @@ function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisi
 
   return (
     <>
-      <SectionHead eyebrow="/ Category · sub-category · live / hidden" title="Projects" />
+      <SectionHead eyebrow="/ Category · sub-category · live / hidden" title="Projects">
+        <button className="btn ghost" type="button" onClick={onTexts}>Project texts →</button>
+      </SectionHead>
       {groups.map((group) => {
         // Build the ordered list of sub-category buckets (brands).
         const defined = (group.category.subcategories || []).map((s) => s.label);
@@ -1583,13 +1655,14 @@ function InquirySheet({ inquiry, onDelete, onClose }) {
   );
 }
 
-function SectionHead({ eyebrow, title }) {
+function SectionHead({ eyebrow, title, children }) {
   return (
     <div className="section-head">
       <div>
         <div className="eyebrow">{eyebrow}</div>
         <h1>{title}</h1>
       </div>
+      {children ? <div className="section-head-actions">{children}</div> : null}
     </div>
   );
 }
@@ -1875,7 +1948,7 @@ const SPAN_OPTIONS = [
   { v: "gal-6",  l: "6 / 12" },
 ];
 
-function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPublish, onClose, uploadsActive, publishBusy }) {
+function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPublish, onTexts, onClose, uploadsActive, publishBusy }) {
   const [p, setP] = useState(() => project ? JSON.parse(JSON.stringify(project)) : ({
     id: newId("pj"),
     slug: "",
@@ -2036,6 +2109,7 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
           </div>
           <div className="controls">
             <span className={`status-pill ${project ? "saved" : "draft"}`}>{project ? "Saved" : "Draft"}</span>
+            {onTexts && <button className="btn ghost" type="button" onClick={onTexts}>Project texts →</button>}
             <button className="btn ghost" onClick={onClose}>{Ic.close}</button>
           </div>
         </div>
