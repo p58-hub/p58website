@@ -814,7 +814,9 @@ function App({ session }) {
   const unreadInquiries = inquiries.filter((x) => (x.status || "new") === "new").length;
 
   const onSaveSite = (site) => {
-    update({ ...data, site: normaliseSite(site) });
+    const nextSite = normaliseSite(site);
+    update({ ...data, site: nextSite });
+    if (window.applySiteFavicon) window.applySiteFavicon(nextSite);
     setToast("Settings saved");
   };
 
@@ -1540,6 +1542,14 @@ function SiteSettings({ site, onSave }) {
     <>
       <SectionHead eyebrow="/ Footer addresses · contact details" title="Site settings" />
       <div className="settings-card">
+        <div className="form-section">
+          <div className="form-section-title">Browser favicon</div>
+          <div className="field-group cols-1">
+            <Field label="Favicon" hint="Shown in browser tabs and bookmarks. Use a square SVG or PNG for the sharpest result.">
+              <ImageInput value={s.favicon || ""} onChange={(value) => setField("favicon", value)} placeholder="Favicon · square SVG or PNG" />
+            </Field>
+          </div>
+        </div>
         <div className="form-section">
           <div className="form-section-title">People mosaic</div>
           <div className="field-group cols-1">

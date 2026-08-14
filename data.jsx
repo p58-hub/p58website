@@ -611,6 +611,7 @@ TIMELINE.forEach((r, i) => { if (TIMELINE_GR[i]) Object.assign(r, TIMELINE_GR[i]
 const P58_STORE_KEY = "p58_data_v1";
 const P58_PROJECT_PREVIEW_PREFIX = "p58_project_preview_v1:";
 const DEFAULT_SITE_SETTINGS = {
+  favicon: "https://fdjd29ysr4tmphjq.public.blob.vercel-storage.com/media/files/document-w0X6lo2U3mFMxkuvMvwbniYZAwivdT.svg",
   heroGallery: { interval: 5200, order: [] },
   menuImages: {
     home: "assets/projects/pg-panormou/01.png",
@@ -650,6 +651,9 @@ function normaliseSiteSettings(site = {}) {
   return {
     ...DEFAULT_SITE_SETTINGS,
     ...site,
+    favicon: typeof site.favicon === "string" && site.favicon
+      ? site.favicon
+      : DEFAULT_SITE_SETTINGS.favicon,
     foot_big: site.foot_big || DEFAULT_SITE_SETTINGS.foot_big,
     foot_big_em: site.foot_big_em || DEFAULT_SITE_SETTINGS.foot_big_em,
     foot_copy_left: site.foot_copy_left || DEFAULT_SITE_SETTINGS.foot_copy_left,
@@ -826,9 +830,23 @@ function loadRemoteContent() {
     .catch(() => false); // no API (static preview), offline, or a bad response
 }
 
+function applySiteFavicon(site) {
+  const favicon = normaliseSiteSettings(site || {}).favicon;
+  try {
+    let faviconLink = document.querySelector('link[rel="icon"]');
+    if (!faviconLink) {
+      faviconLink = document.createElement("link");
+      faviconLink.rel = "icon";
+      document.head.appendChild(faviconLink);
+    }
+    faviconLink.href = favicon || DEFAULT_SITE_SETTINGS.favicon;
+  } catch (e) { /* document is unavailable outside the browser */ }
+}
+
 function applyP58ContentFromStore() {
   try {
     const source = readP58Store();
+    applySiteFavicon(source.site || {});
     if (Array.isArray(source.projects) && source.projects.length) {
       PROJECTS.splice(0, PROJECTS.length, ...sortByOrder(source.projects.map(normaliseProject)));
     }
@@ -915,4 +933,4 @@ const PROJECT_SORTS = {
 applyP58ContentFromStore();
 const P58_CONTENT_READY = loadRemoteContent();
 
-Object.assign(window, { P58_STORE_KEY, P58_CONTENT_READY, DEFAULT_SITE_SETTINGS, normaliseSiteSettings, projectSlugFromFields, applyP58ContentFromStore, readP58Store, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor, isProjectVisible, visibleProjects, isVideoSrc });
+Object.assign(window, { P58_STORE_KEY, P58_CONTENT_READY, DEFAULT_SITE_SETTINGS, normaliseSiteSettings, applySiteFavicon, projectSlugFromFields, applyP58ContentFromStore, readP58Store, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor, isProjectVisible, visibleProjects, isVideoSrc });
