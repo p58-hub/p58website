@@ -505,6 +505,8 @@ function ProjectsPage({ go, type, brand, sort }) {
       const navHeight = nav ? nav.getBoundingClientRect().height : 0;
       const coverIsActive = onPhone && list && list.getBoundingClientRect().top > navHeight + 1;
       document.body.classList.toggle(className, !!coverIsActive);
+      const theme = document.querySelector('meta[name="theme-color"]');
+      if (theme) theme.setAttribute("content", coverIsActive ? "#14130f" : "#f7f5f0");
     };
     const scheduleUpdate = () => {
       if (!frame) frame = requestAnimationFrame(update);
@@ -518,6 +520,8 @@ function ProjectsPage({ go, type, brand, sort }) {
       window.removeEventListener("scroll", scheduleUpdate);
       window.removeEventListener("resize", scheduleUpdate);
       document.body.classList.remove(className);
+      const theme = document.querySelector('meta[name="theme-color"]');
+      if (theme) theme.setAttribute("content", "#f7f5f0");
     };
   }, [!!showMobileCover]);
 
@@ -601,7 +605,7 @@ function ProjectsPage({ go, type, brand, sort }) {
           </div>
           <window.ProjectSort route={sheetRoute} go={go} />
         </div>
-        <div className="proj-list">
+        <div className={`proj-list ${showMobileCover && finalProject ? "proj-list-before-last" : ""}`}>
           {precedingProjects.map((p, i) =>
             <ProjListRow key={p.id} project={p} go={go} idx={i + 1} />
           )}

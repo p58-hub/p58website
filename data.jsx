@@ -609,6 +609,7 @@ TEAM.forEach((m, i) => { if (TEAM_GR[i]) Object.assign(m, TEAM_GR[i]); });
 TIMELINE.forEach((r, i) => { if (TIMELINE_GR[i]) Object.assign(r, TIMELINE_GR[i]); });
 
 const P58_STORE_KEY = "p58_data_v1";
+const P58_PROJECT_PREVIEW_PREFIX = "p58_project_preview_v1:";
 const DEFAULT_SITE_SETTINGS = {
   heroGallery: { interval: 5200, order: [] },
   menuImages: {
@@ -771,13 +772,43 @@ if (typeof window !== "undefined") {
   });
 }
 
-function readP58Store() {
-  if (!LOCAL_EDIT_WINS && REMOTE_CONTENT && typeof REMOTE_CONTENT === "object") return REMOTE_CONTENT;
+function readPreviewProject() {
+  if (typeof window === "undefined") return null;
+  const id = new URLSearchParams(location.search).get("preview");
+  if (!id) return null;
   try {
-    const stored = JSON.parse(localStorage.getItem(P58_STORE_KEY) || "null");
-    if (stored && typeof stored === "object") return stored;
-  } catch (e) { /* malformed — fall through to the defaults */ }
-  return BUNDLED_CONTENT;
+    const stored = JSON.parse(localStorage.getItem(P58_PROJECT_PREVIEW_PREFIX + id) || "null");
+    if (!stored || !stored.project || typeof stored.project !== "object") return null;
+    // Draft links are intentionally temporary. A stale bookmarked preview
+    // should never masquerade as the current editor state indefinitely.
+    if (stored.createdAt && Date.now() - stored.createdAt > 24 * 60 * 60 * 1000) {
+      localStorage.removeItem(P58_PROJECT_PREVIEW_PREFIX + id);
+      return null;
+    }
+    return stored.project;
+  } catch (e) { return null; }
+}
+
+function readP58Store() {
+  let source = null;
+  if (!LOCAL_EDIT_WINS && REMOTE_CONTENT && typeof REMOTE_CONTENT === "object") {
+    source = REMOTE_CONTENT;
+  } else {
+    try {
+      const stored = JSON.parse(localStorage.getItem(P58_STORE_KEY) || "null");
+      if (stored && typeof stored === "object") source = stored;
+    } catch (e) { /* malformed — fall through to the defaults */ }
+  }
+  if (!source) source = BUNDLED_CONTENT;
+
+  const preview = readPreviewProject();
+  if (!preview) return source;
+  const projects = Array.isArray(source.projects) ? source.projects.slice() : [];
+  const at = projects.findIndex((project) => project.id === preview.id);
+  const visiblePreview = { ...preview, visible: true };
+  if (at >= 0) projects[at] = visiblePreview;
+  else projects.unshift(visiblePreview);
+  return { ...source, projects };
 }
 
 /* Resolves once, whether or not the fetch worked: a site that cannot reach

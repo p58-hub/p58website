@@ -1347,6 +1347,12 @@ body.interiors-page .brand-head {
   .proj-list {
     padding: 0 var(--gutter) 64px;
   }
+  /* The final project moves into its own sticky container so Contact can
+     cover it. The preceding list must not keep its usual page-end padding,
+     otherwise that padding becomes an oversized gap between two projects. */
+  .proj-list-before-last {
+    padding-bottom: 0;
+  }
   .proj-list-row {
     grid-template-columns: 1fr;
     gap: 12px;

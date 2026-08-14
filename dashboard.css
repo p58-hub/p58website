@@ -573,6 +573,43 @@ a { color: inherit; }
   font-size: 11px;
   color: var(--ink-3);
 }
+.project-visibility-group { margin: 0 0 14px; }
+.project-visibility-group + .project-visibility-group { margin-top: 18px; }
+.project-visibility-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 5px 8px;
+}
+.project-visibility-head h4 {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.project-visibility-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #2f8458;
+  box-shadow: 0 0 0 3px color-mix(in oklab, #2f8458 15%, transparent);
+}
+.project-visibility-group.is-hidden .project-visibility-dot {
+  background: var(--ink-3);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink-3) 13%, transparent);
+}
+.project-visibility-group.is-hidden .project-visibility-head h4 { color: var(--ink-3); }
+.project-visibility-count {
+  min-width: 22px;
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  text-align: right;
+  color: var(--ink-3);
+}
+.category-visibility-groups { margin-top: 4px; }
 /* Sub-category editor inside the category sheet */
 .sheet-section-head { margin: 26px 0 12px; padding-top: 18px; border-top: 1px solid var(--rule); }
 .sheet-section-head h3 { margin: 0; font-family: var(--sans); font-size: 16px; font-weight: 500; }

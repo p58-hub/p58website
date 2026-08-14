@@ -1,0 +1,15 @@
+{
+  "name": "Project58 Architecture",
+  "short_name": "Project58",
+  "start_url": "/projects",
+  "display": "standalone",
+  "background_color": "#14130f",
+  "theme_color": "#14130f",
+  "icons": [
+    {
+      "src": "/assets/logo-black.png",
+      "sizes": "any",
+      "type": "image/png"
+    }
+  ]
+}

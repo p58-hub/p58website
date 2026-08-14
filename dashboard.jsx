@@ -17,6 +17,7 @@ const { useState, useEffect, useMemo, useRef, Fragment } = React;
 
 const STORE_KEY = "p58_data_v1";
 const INQUIRY_STORE_KEY = "p58_inquiries_v1";
+const PROJECT_PREVIEW_PREFIX = "p58_project_preview_v1:";
 const GALLERY_VIEW_KEY = "p58_gallery_view";
 
 /* ---------- Seed data (defaults from data.jsx) ---------- */
@@ -380,21 +381,64 @@ async function mediaFetch(url, options) {
   return body;
 }
 
+const MEDIA_INDEX_CACHE_KEY = "p58_media_index_cache_v1";
+let mediaMemoryItems = (() => {
+  try {
+    const cached = JSON.parse(localStorage.getItem(MEDIA_INDEX_CACHE_KEY) || "null");
+    return cached && Array.isArray(cached.items) ? cached.items : [];
+  } catch (err) { return []; }
+})();
+let mediaListPromise = null;
+
+function cachedMediaItems() {
+  return mediaMemoryItems.slice();
+}
+
+function cacheMediaItems(items) {
+  mediaMemoryItems = Array.isArray(items) ? items.slice() : [];
+  try {
+    localStorage.setItem(MEDIA_INDEX_CACHE_KEY, JSON.stringify({ items: mediaMemoryItems, savedAt: Date.now() }));
+  } catch (err) { /* the dashboard still works without the speed cache */ }
+  return mediaMemoryItems;
+}
+
+function listMedia(force) {
+  if (!force && mediaMemoryItems.length) return Promise.resolve({ items: cachedMediaItems(), cached: true });
+  if (mediaListPromise) return mediaListPromise;
+  mediaListPromise = mediaFetch("/api/media")
+    .then((body) => {
+      cacheMediaItems((body && body.items) || []);
+      return body;
+    })
+    .finally(() => { mediaListPromise = null; });
+  return mediaListPromise;
+}
+
 const mediaApi = {
-  list: () => mediaFetch("/api/media"),
+  list: (force) => listMedia(!!force),
   upload: (payload) =>
     mediaFetch("/api/media", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+    }).then((body) => {
+      if (body && body.item) cacheMediaItems([body.item, ...mediaMemoryItems.filter((item) => item.id !== body.item.id)]);
+      return body;
     }),
   update: (payload) =>
     mediaFetch("/api/media", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+    }).then((body) => {
+      if (body && body.item) cacheMediaItems(mediaMemoryItems.map((item) => item.id === body.item.id ? body.item : item));
+      return body;
     }),
-  remove: (id) => mediaFetch("/api/media?id=" + encodeURIComponent(id), { method: "DELETE" }),
+  remove: (id) => mediaFetch("/api/media?id=" + encodeURIComponent(id), { method: "DELETE" })
+    .then((body) => {
+      cacheMediaItems(mediaMemoryItems.filter((item) => item.id !== id));
+      return body;
+    }),
 };
 
 async function updateMediaWithRetry(payload, verify) {
@@ -501,6 +545,11 @@ function App({ session }) {
   const [publishedSnapshot, setPublishedSnapshot] = useState(null);
 
   const uploads = useUploads();
+
+  // Warm the small media index as soon as the dashboard opens. The Library
+  // picker can then paint instantly, while this request refreshes its cache
+  // in the background long before the user needs it.
+  useEffect(() => { mediaApi.list(true).catch(() => {}); }, []);
 
   const pendingIds = useMemo(() => {
     const projects = data.projects || [];
@@ -1101,10 +1150,28 @@ function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisi
       <span></span><span>Name</span><span>Location</span><span>Year · status</span><span>Code · flags</span><span></span>
     </div>
   );
+  const renderVisibilityGroups = (projects, keyPrefix) => [
+    { key: "live", label: "Live", projects: projects.filter((project) => project.visible !== false) },
+    { key: "hidden", label: "Hidden", projects: projects.filter((project) => project.visible === false) },
+  ].map((visibility) => (
+    <div className={`project-visibility-group is-${visibility.key}`} key={`${keyPrefix}-${visibility.key}`}>
+      <div className="project-visibility-head">
+        <span className="project-visibility-dot" aria-hidden="true"></span>
+        <h4>{visibility.label}</h4>
+        <span className="project-visibility-count">{visibility.projects.length}</span>
+      </div>
+      <div className="list">
+        {listHead}
+        {visibility.projects.length
+          ? visibility.projects.map(renderRow)
+          : <div className="empty-row">No {visibility.label.toLowerCase()} projects.</div>}
+      </div>
+    </div>
+  ));
 
   return (
     <>
-      <SectionHead eyebrow="/ Projects grouped by category" title="Projects" />
+      <SectionHead eyebrow="/ Category · sub-category · live / hidden" title="Projects" />
       {groups.map((group) => {
         // Build the ordered list of sub-category buckets (brands).
         const defined = (group.category.subcategories || []).map((s) => s.label);
@@ -1133,16 +1200,12 @@ function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisi
               buckets.map((bucket) => (
                 <div className="subgroup" key={bucket.key}>
                   <div className="subgroup-head"><span className="subgroup-kind">{subLabel}</span><h3>{bucket.label}</h3><span className="subgroup-count">{bucket.projects.length}</span></div>
-                  <div className="list">
-                    {listHead}
-                    {bucket.projects.map(renderRow)}
-                  </div>
+                  {renderVisibilityGroups(bucket.projects, `${group.category.id}-${bucket.key}`)}
                 </div>
               ))
             ) : (
-              <div className="list">
-                {listHead}
-                {group.projects.map(renderRow)}
+              <div className="category-visibility-groups">
+                {renderVisibilityGroups(group.projects, group.category.id)}
               </div>
             )}
           </div>
@@ -1743,6 +1806,22 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
   const valid = p.name && p.code;
   const finished = () => ({ ...p, slug: p.slug || suggestedSlug || p.id, typology: p.category || p.typology || "retail" });
   const save = () => valid && onSave(finished());
+  const previewHref = valid
+    ? `/index.html?preview=${encodeURIComponent(p.id)}#project/${encodeURIComponent(p.slug || suggestedSlug || p.id)}`
+    : "";
+  const preparePreview = (event) => {
+    if (!valid || uploadsActive) { event.preventDefault(); return; }
+    const draft = { ...finished(), visible: true };
+    try {
+      localStorage.setItem(
+        PROJECT_PREVIEW_PREFIX + draft.id,
+        JSON.stringify({ project: draft, createdAt: Date.now() })
+      );
+    } catch (err) {
+      event.preventDefault();
+      alert("Couldn't open the project preview.\n\n" + err.message);
+    }
+  };
 
   /* Publish sits beside Save and only turns up once this sheet holds something
      the site does not have yet. It stays on screen while images are still
@@ -2059,6 +2138,17 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
           </div>
           <div className="right">
             <button className="btn ghost" onClick={onClose}>Cancel</button>
+            {!valid || uploadsActive ? (
+              <button className="btn ghost" disabled title={uploadsActive ? "Waiting for images to finish uploading" : "Add a project name and code first"}>
+                <span className="ic">{Ic.external}</span>
+                <span>{uploadsActive ? "Uploading…" : "Preview"}</span>
+              </button>
+            ) : (
+              <a className="btn ghost" href={previewHref} target="_blank" rel="noopener" onClick={preparePreview} title="Preview this draft without publishing it">
+                <span className="ic">{Ic.external}</span>
+                <span>Preview</span>
+              </a>
+            )}
             <button className="btn primary" onClick={save} disabled={!valid}>Save project</button>
             {showPublish && (
               <button
@@ -2354,7 +2444,6 @@ function MediaPreview({ src, alt, className, lazy }) {
       alt={alt || ""}
       loading={lazy ? "lazy" : undefined}
       decoding="async"
-      fetchPriority={lazy ? "low" : undefined}
       draggable="false"
     />
   );
@@ -2675,8 +2764,9 @@ function groupMediaItems(items, projects, query, projectFilter, dateFrom, dateTo
 }
 
 function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
-  const [items, setItems] = useState([]);
-  const [status, setStatus] = useState("loading"); // loading | ready | error
+  const initialItems = useMemo(() => cachedMediaItems(), []);
+  const [items, setItems] = useState(initialItems);
+  const [status, setStatus] = useState(initialItems.length ? "ready" : "loading"); // loading | ready | error
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null);
   const [query, setQuery] = useState("");
@@ -2693,11 +2783,14 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
   const fileRef = useRef(null);
 
   const refresh = () => {
-    setStatus("loading");
+    if (!items.length) setStatus("loading");
     mediaApi
-      .list()
+      .list(true)
       .then((body) => { setItems((body && body.items) || []); setError(null); setStatus("ready"); })
-      .catch((err) => { setError(err); setStatus("error"); });
+      .catch((err) => {
+        setError(err);
+        if (!items.length) setStatus("error");
+      });
   };
 
   useEffect(() => { refresh(); }, []);
@@ -2783,6 +2876,7 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
     const previousIndex = items.findIndex((current) => current.id === item.id);
     setItems((current) => current.filter((x) => x.id !== item.id));
     setSelected((current) => current.filter((id) => id !== item.id));
+    cacheMediaItems(mediaMemoryItems.filter((current) => current.id !== item.id));
     mediaApi
       .remove(item.id)
       .then(() => onToast("Image deleted"))
@@ -2791,6 +2885,7 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
           if (current.some((x) => x.id === item.id)) return current;
           const restored = current.slice();
           restored.splice(Math.max(0, Math.min(previousIndex, restored.length)), 0, item);
+          cacheMediaItems(restored);
           return restored;
         });
         alert("Couldn't delete that image. It has been restored.\n\n" + err.message);
@@ -2833,6 +2928,7 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
     setBusy(`Deleting ${ids.length}…`);
     setItems((current) => current.filter((item) => !ids.includes(item.id)));
     setSelected([]);
+    cacheMediaItems(mediaMemoryItems.filter((item) => !ids.includes(item.id)));
     try {
       for (const id of ids) await mediaApi.remove(id);
       onToast(`${ids.length} file(s) deleted`);
@@ -2840,7 +2936,9 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
       alert("Couldn't delete all selected files.\n\n" + err.message);
       setItems((current) => {
         const present = new Set(current.map((item) => item.id));
-        return current.concat(removed.filter((item) => !present.has(item.id)));
+        const restored = current.concat(removed.filter((item) => !present.has(item.id)));
+        cacheMediaItems(restored);
+        return restored;
       });
       refresh();
     } finally {
@@ -3107,8 +3205,9 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
 /* Modal used by ImageInput so the editors can reuse an image that is
    already in the library instead of uploading a second copy of it. */
 function MediaPicker({ currentProjectId, onPick, onClose }) {
-  const [items, setItems] = useState([]);
-  const [status, setStatus] = useState("loading");
+  const initialItems = useMemo(() => cachedMediaItems(), []);
+  const [items, setItems] = useState(initialItems);
+  const [status, setStatus] = useState(initialItems.length ? "ready" : "loading");
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
@@ -3126,9 +3225,13 @@ function MediaPicker({ currentProjectId, onPick, onClose }) {
 
   useEffect(() => {
     mediaApi
-      .list()
+      .list(true)
       .then((body) => { setItems((body && body.items) || []); setStatus("ready"); })
-      .catch((err) => { setError(err); setStatus("error"); });
+      .catch((err) => {
+        // A cached index is still useful when a background refresh is slow or
+        // temporarily unavailable. Only block the picker when nothing can be shown.
+        if (!initialItems.length) { setError(err); setStatus("error"); }
+      });
   }, []);
 
   useEffect(() => {
