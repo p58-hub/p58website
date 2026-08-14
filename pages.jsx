@@ -73,7 +73,9 @@ function HomePage({ go }) {
   const pick = window.usePick();
   const isMobile = useHomeMobile();
 
-  const featured = useM(() => {
+  // PROJECTS is updated in place when dashboard content changes. Do not cache
+  // this list: an open home page must drop a newly hidden project immediately.
+  const featured = (() => {
     const visible = publicProjects();
     const picked = visible.filter((p) => p.featured);
     const list = (picked.length ? picked : visible).slice();
@@ -90,7 +92,7 @@ function HomePage({ go }) {
       list.sort((a, b) => at(a) - at(b));
     }
     return list.slice(0, 6);
-  }, []);
+  })();
 
   const heroIntervalMs = useM(() => {
     const s = window.readP58Store ? window.readP58Store() : null;
@@ -215,12 +217,13 @@ function HomePage({ go }) {
     }
   }, []);
 
-  const cur = featured[i];
+  const activeIndex = featured.length ? i % featured.length : 0;
+  const cur = featured[activeIndex];
   if (!cur) return null;
   const catOf = (p) => BRAND_KEY(p) === "pg" ? "Retail" : "Hospitality";
 
   if (isMobile) {
-    return <MobileHomePage go={go} featured={featured} active={i} setActive={setI} cur={cur} catOf={catOf} />;
+    return <MobileHomePage go={go} featured={featured} active={activeIndex} setActive={setI} cur={cur} catOf={catOf} />;
   }
 
   return (
@@ -233,7 +236,7 @@ function HomePage({ go }) {
         onMouseLeave={() => setPaused(false)}
         onClick={() => { sessionStorage.setItem("hzone_scroll", trackRef.current ? trackRef.current.scrollLeft : 0); go({ name: "project", id: cur.slug || cur.id, from: { name: "home" } }); }}>
         {featured.map((p, idx) =>
-        <div key={p.id} className={`vhome-slide ${idx === i ? "on" : ""}`}>
+        <div key={p.id} className={`vhome-slide ${idx === activeIndex ? "on" : ""}`}>
             <img src={p.hero} alt="" />
           </div>
         )}
@@ -253,7 +256,7 @@ function HomePage({ go }) {
           {featured.map((p, idx) =>
           <button
             key={p.id}
-            className={`vhome-dot ${idx === i ? "on" : ""}`}
+            className={`vhome-dot ${idx === activeIndex ? "on" : ""}`}
             onClick={() => setI(idx)}
             aria-label={`Project ${idx + 1}`} />
 
@@ -446,6 +449,7 @@ function InteriorsPage({ go, brand, sort }) {
 /* ================== PROJECTS — unified list with type filter ================== */
 function ProjectsPage({ go, type, brand, sort }) {
   const pick = window.usePick();
+  const t = window.useT();
   const normalisedType = type === "retail" || type === "residential" ? type : null;
   const normalisedBrand = normalisedType === "retail" && (brand === "pg" || brand === "dn") ? brand : null;
   const order = window.PROJECT_SORTS[sort] ? sort : window.PROJECT_SORT_DEFAULT;
@@ -458,17 +462,175 @@ function ProjectsPage({ go, type, brand, sort }) {
     if (category !== "retail") return false;
     return !normalisedBrand || BRAND_KEY(p) === normalisedBrand;
   }).sort(window.PROJECT_SORTS[order].compare(pick));
+  const coverGallery = (() => {
+    const visible = publicProjects();
+    const featured = visible.filter((p) => p.featured);
+    const gallery = (featured.length ? featured : visible).slice();
+    const stored = window.readP58Store ? window.readP58Store() : null;
+    const galleryOrder = Array.isArray(stored?.site?.heroGallery?.order) ? stored.site.heroGallery.order : [];
+    if (galleryOrder.length) {
+      const rank = new Map(galleryOrder.map((id, index) => [id, index]));
+      gallery.sort((a, b) => (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER));
+    }
+    return gallery.slice(0, 6);
+  })();
+  const [coverIndex, setCoverIndex] = useS(0);
+  const activeCoverIndex = coverGallery.length ? coverIndex % coverGallery.length : 0;
+  const coverProject = coverGallery[activeCoverIndex] || filtered[0];
+  const showMobileCover = !normalisedType && !normalisedBrand && coverProject;
+  const coverIntervalMs = (() => {
+    const stored = window.readP58Store ? window.readP58Store() : null;
+    return Math.max(2000, Number(stored?.site?.heroGallery?.interval) || 5200);
+  })();
+
+  useE(() => {
+    if (!showMobileCover || coverGallery.length < 2) return undefined;
+    const timer = setTimeout(() => setCoverIndex((index) => (index + 1) % coverGallery.length), coverIntervalMs);
+    return () => clearTimeout(timer);
+  }, [activeCoverIndex, coverGallery.length, coverIntervalMs, !!showMobileCover]);
+
+  useE(() => {
+    const className = "mobile-projects-cover-active";
+    if (!showMobileCover) {
+      document.body.classList.remove(className);
+      return undefined;
+    }
+
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const onPhone = window.matchMedia("(max-width: 720px)").matches;
+      const list = document.querySelector(".projects-sheet");
+      const nav = document.querySelector(".nav");
+      const navHeight = nav ? nav.getBoundingClientRect().height : 0;
+      const coverIsActive = onPhone && list && list.getBoundingClientRect().top > navHeight + 1;
+      document.body.classList.toggle(className, !!coverIsActive);
+    };
+    const scheduleUpdate = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+
+    update();
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+      document.body.classList.remove(className);
+    };
+  }, [!!showMobileCover]);
+
+  useE(() => {
+    const className = "projects-contact-active";
+    const headerClassName = "projects-contact-header-active";
+    const contactStage = document.querySelector(".projects-contact-parallax");
+    if (!contactStage || typeof IntersectionObserver === "undefined") return undefined;
+    const observer = new IntersectionObserver(([entry]) => {
+      document.body.classList.toggle(className, entry.intersectionRatio > 0.42);
+      document.body.classList.toggle(headerClassName, entry.intersectionRatio > 0.985);
+    }, { threshold: [0, 0.2, 0.42, 0.7, 0.985, 1] });
+    observer.observe(contactStage);
+    return () => {
+      observer.disconnect();
+      document.body.classList.remove(className);
+      document.body.classList.remove(headerClassName);
+    };
+  }, []);
+
+  const keepSort = (route) => (sort ? { ...route, sort } : route);
+  const sheetRoute = {
+    name: "projects",
+    ...(normalisedType ? { type: normalisedType } : {}),
+    ...(normalisedBrand ? { brand: normalisedBrand } : {}),
+    ...(sort ? { sort } : {}),
+  };
+  const finalProject = showMobileCover && filtered.length ? filtered[filtered.length - 1] : null;
+  const precedingProjects = finalProject ? filtered.slice(0, -1) : filtered;
 
   return (
     <div className="page-enter" key={`${normalisedType || "all"}:${normalisedBrand || "all"}:${order}`}>
-      <div className="proj-list">
-        {filtered.map((p, i) =>
-          <ProjListRow key={p.id} project={p} go={go} idx={i + 1} />
-        )}
-        {filtered.length === 0 && (
-          <div className="proj-list-empty">No projects in this category yet.</div>
-        )}
+      {showMobileCover ? (
+        <section className="mobile-projects-cover" aria-label={pick(coverProject, "name")}>
+          <div className="mobile-projects-cover-slides">
+            {coverGallery.map((project, index) => (
+              <div key={project.id} className={`mobile-projects-cover-slide ${index === activeCoverIndex ? "on" : ""}`}>
+                <SiteMedia src={project.hero} alt={pick(project, "name")} className="mobile-projects-cover-media" />
+              </div>
+            ))}
+          </div>
+          <div className="mobile-projects-cover-veil" aria-hidden="true" />
+          <div className="mobile-projects-cover-loc">{pick(coverProject, "location")}</div>
+          <div className="mobile-projects-cover-cue" aria-hidden="true">
+            <span>Scroll</span>
+            <svg viewBox="0 0 16 26" width="16" height="26" fill="none">
+              <path d="M8 1v22M3 18l5 5 5-5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <div className="mobile-projects-cover-dots">
+            {coverGallery.map((project, index) => (
+              <button
+                key={project.id}
+                type="button"
+                className={`mobile-projects-cover-dot ${index === activeCoverIndex ? "on" : ""}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setCoverIndex(index);
+                }}
+                aria-label={`Project ${index + 1}`} />
+            ))}
+          </div>
+        </section>
+      ) : null}
+      <div className="projects-sheet">
+        <div className="mobile-projects-sheet-head">
+          <div className="project-filter-groups">
+            <div className="interiors-filter">
+              <button className={`filter-btn ${!normalisedType ? "on" : ""}`} onClick={() => go(keepSort({ name: "projects" }))}>{t("all")}</button>
+              <button className={`filter-btn ${normalisedType === "retail" ? "on" : ""}`} onClick={() => go(keepSort({ name: "projects", type: "retail" }))}>{t("retail")}</button>
+              <button className={`filter-btn ${normalisedType === "residential" ? "on" : ""}`} onClick={() => go(keepSort({ name: "projects", type: "residential" }))}>{t("residential")}</button>
+            </div>
+            {normalisedType === "retail" ? (
+              <div className="interiors-filter brand-filter">
+                <button className={`filter-btn ${!normalisedBrand ? "on" : ""}`} onClick={() => go(keepSort({ name: "projects", type: "retail" }))}>{t("all_brands")}</button>
+                <button className={`filter-btn ${normalisedBrand === "pg" ? "on" : ""}`} onClick={() => go(keepSort({ name: "projects", type: "retail", brand: "pg" }))}>Protein Garden</button>
+                <button className={`filter-btn ${normalisedBrand === "dn" ? "on" : ""}`} onClick={() => go(keepSort({ name: "projects", type: "retail", brand: "dn" }))}>Dinas</button>
+              </div>
+            ) : null}
+          </div>
+          <window.ProjectSort route={sheetRoute} go={go} />
+        </div>
+        <div className="proj-list">
+          {precedingProjects.map((p, i) =>
+            <ProjListRow key={p.id} project={p} go={go} idx={i + 1} />
+          )}
+          {filtered.length === 0 && (
+            <div className="proj-list-empty">No projects in this category yet.</div>
+          )}
+        </div>
+        {showMobileCover ? (
+          <div className={`projects-contact-stack ${finalProject ? "has-project-backdrop" : ""}`}>
+            {finalProject ? (
+              <div className="proj-list proj-list-last">
+                <ProjListRow project={finalProject} go={go} idx={filtered.length} />
+              </div>
+            ) : null}
+            <section className="projects-contact-parallax" aria-label={t("contact")}>
+              <div className="projects-contact-parallax-inner">
+                <window.ContactPage go={go} />
+              </div>
+            </section>
+          </div>
+        ) : null}
       </div>
+      {!showMobileCover ? (
+        <section className="projects-contact-parallax" aria-label={t("contact")}>
+          <div className="projects-contact-parallax-inner">
+            <window.ContactPage go={go} />
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -574,11 +736,6 @@ function ProjectPage({ id, go, from, transitionDirection }) {
   }, [id]);
 
   const backRoute = from || { name: "projects" };
-  const backLabel = backRoute.name === "interiors" ? "← Retail"
-    : backRoute.name === "architecture" ? "← Architecture"
-    : backRoute.name === "agency" ? "← People"
-    : backRoute.name === "home" ? "← Home"
-    : "← Projects";
 
   const navigateProject = (target, direction) => {
     if (transitioning) return;
@@ -635,14 +792,6 @@ function ProjectPage({ id, go, from, transitionDirection }) {
         </div>,
         document.body
       ) : null}
-
-      {/* Fixed back button — sits just below the pinned nav */}
-      <button className="pd-back-fixed" onClick={() => go(backRoute)}>
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M9 2L4 7l5 5" />
-        </svg>
-        {backLabel.replace("← ", "")}
-      </button>
 
       {/* Fullscreen cover — still or clip */}
       <div className="pd-hero" onTouchStart={handleHeroTouchStart} onTouchEnd={handleHeroTouchEnd}>

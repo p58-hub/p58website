@@ -617,13 +617,9 @@ const DEFAULT_SITE_SETTINGS = {
     agency: "assets/projects/dn-kolonaki/01.png",
     contact: "assets/projects/dn-dousmani/01.png",
   },
-  // Badge shown beside each project in the indexes. A project inherits its
-  // brand's logo unless it carries its own `icon`; an empty brand logo falls
-  // back to the lettered monogram.
-  brandLogos: {
-    pg: "assets/proteingarden/Protein Garden New logo_final-03.png",
-    dn: "",
-  },
+  // Shared fallback badge. A project's own icon and its category/subcategory
+  // icon still take priority; this is used only when neither is set.
+  defaultProjectBadge: "assets/proteingarden/Protein Garden New logo_final-03.png",
   people: {
     title: "People",
     title_gr: "Άνθρωποι",
@@ -671,10 +667,13 @@ function normaliseSiteSettings(site = {}) {
       ...DEFAULT_SITE_SETTINGS.menuImages,
       ...(site.menuImages || {}),
     },
-    brandLogos: {
-      ...DEFAULT_SITE_SETTINGS.brandLogos,
-      ...(site.brandLogos || {}),
-    },
+    // Migrate old content automatically: the former PG brand badge was the
+    // only populated default in existing site settings.
+    defaultProjectBadge: typeof site.defaultProjectBadge === "string"
+      ? site.defaultProjectBadge
+      : (site.brandLogos && (site.brandLogos.pg || site.brandLogos.dn)) || DEFAULT_SITE_SETTINGS.defaultProjectBadge,
+    // Retire the former two-slot setting when normalized content is saved.
+    brandLogos: undefined,
     people: {
       ...DEFAULT_SITE_SETTINGS.people,
       ...(site.people || {}),
@@ -831,8 +830,8 @@ function isVideoSrc(src) {
   return /\.mp4$/i.test(src.split(/[?#]/)[0]);
 }
 
-/* The badge a project shows in the indexes: its own override when set,
-   otherwise whatever logo the brand carries. Empty means "use the monogram". */
+/* The badge a project shows in the indexes: project override, then category
+   icon, then the one shared site-wide default. */
 function projectIconFor(project, site, categories) {
   if (!project) return "";
   if (project.icon) return project.icon;
@@ -849,11 +848,7 @@ function projectIconFor(project, site, categories) {
     if (match && match.icon) return match.icon;
   }
 
-  // Before logos moved into the category, there were two fixed slots in
-  // Site settings. Kept so existing content keeps its badges until the
-  // logos are set on the sub-categories instead.
-  const key = project.brandKey || ((project.id || "").startsWith("dn-") || project.brand === "Dinas" ? "dn" : "pg");
-  return ((site && site.brandLogos) || DEFAULT_SITE_SETTINGS.brandLogos)[key] || "";
+  return (site && site.defaultProjectBadge) || DEFAULT_SITE_SETTINGS.defaultProjectBadge || "";
 }
 
 /* Sort orders offered on the projects index. `compare` is handed the language-aware

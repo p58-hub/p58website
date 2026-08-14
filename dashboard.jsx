@@ -633,11 +633,35 @@ function App({ session }) {
     update({ ...data, projects: projects.map((p, order) => ({ ...p, order })) });
   };
   const onToggleProjectVisibility = (id, visible) => {
-    update({
+    const project = data.projects.find((p) => p.id === id);
+    if (!project) return;
+    const nextProject = { ...project, visible };
+    const nextData = {
       ...data,
-      projects: data.projects.map((p) => (p.id === id ? { ...p, visible } : p)),
-    });
-    setToast(visible ? "Project set to visible" : "Project set to hidden");
+      projects: data.projects.map((p) => (p.id === id ? nextProject : p)),
+    };
+    update(nextData);
+    setToast(visible ? "Publishing project visibility…" : "Hiding project from the live site…");
+
+    // Publish only this project's visibility. Other local project edits stay
+    // pending instead of being pushed live as a side effect of this switch.
+    const live = publishedSnapshot && (publishedSnapshot.projects || []);
+    const payload = live
+      ? {
+          ...publishedSnapshot,
+          projects: live.some((p) => p.id === id)
+            ? live.map((p) => (p.id === id ? { ...p, visible } : p))
+            : [...live, nextProject],
+        }
+      : nextData;
+
+    runPublish(payload)
+      .then((result) => {
+        if (result === "published") {
+          setToast(visible ? "Project is visible on the live site" : "Project hidden from the live site");
+        }
+      })
+      .catch(() => { /* the persistent publish status shows the failure */ });
   };
   const onMoveTeam = (id, dir) => {
     const idx = data.team.findIndex((t) => t._id === id);
@@ -916,7 +940,7 @@ function App({ session }) {
         <ProjectSheet
           project={editing.id ? data.projects.find((p) => p.id === editing.id) : null}
           categories={data.categories}
-          brandLogos={normaliseSite(data.site || DEFAULT_SITE).brandLogos}
+          defaultProjectBadge={normaliseSite(data.site || DEFAULT_SITE).defaultProjectBadge}
           onSave={onSaveProject}
           onPublish={onSaveAndPublishProject}
           onClose={() => setEditing(null)}
@@ -1409,7 +1433,7 @@ function SiteSettings({ site, onSave }) {
   const setContact = (k, v) => setS((x) => ({ ...x, contact: { ...(x.contact || DEFAULT_SITE.contact), [k]: v } }));
   const setMenuImage = (k, v) => setS((x) => ({ ...x, menuImages: { ...(x.menuImages || DEFAULT_SITE.menuImages), [k]: v } }));
   const setPeopleField = (k, v) => setS((x) => ({ ...x, people: { ...(x.people || DEFAULT_SITE.people), [k]: v } }));
-  const setBrandLogo = (k, v) => setS((x) => ({ ...x, brandLogos: { ...(x.brandLogos || DEFAULT_SITE.brandLogos), [k]: v } }));
+  const setDefaultProjectBadge = (v) => setS((x) => ({ ...x, defaultProjectBadge: v }));
   const setField = (k, v) => setS((x) => ({ ...x, [k]: v }));
   const dirty = JSON.stringify(s) !== JSON.stringify(site);
   return (
@@ -1425,13 +1449,10 @@ function SiteSettings({ site, onSave }) {
           </div>
         </div>
         <div className="form-section">
-          <div className="form-section-title">Brand badges</div>
-          <div className="field-group">
-            <Field label="Protein Garden logo" hint="Shown beside every Protein Garden project unless that project overrides it.">
-              <ImageInput value={(s.brandLogos || DEFAULT_SITE.brandLogos).pg || ""} onChange={(v) => setBrandLogo("pg", v)} placeholder="Protein Garden logo · square" />
-            </Field>
-            <Field label="Dinas logo" hint="Leave empty to fall back to the lettered DN monogram.">
-              <ImageInput value={(s.brandLogos || DEFAULT_SITE.brandLogos).dn || ""} onChange={(v) => setBrandLogo("dn", v)} placeholder="Dinas logo · square" />
+          <div className="form-section-title">Default project badge</div>
+          <div className="field-group cols-1">
+            <Field label="Default badge" hint="Used for every project that does not have its own badge or a sub-category badge.">
+              <ImageInput value={s.defaultProjectBadge || ""} onChange={setDefaultProjectBadge} placeholder="Default project badge · square" />
             </Field>
           </div>
         </div>
@@ -1566,7 +1587,7 @@ const SPAN_OPTIONS = [
   { v: "gal-6",  l: "6 / 12" },
 ];
 
-function ProjectSheet({ project, categories, brandLogos, onSave, onPublish, onClose, uploadsActive, publishBusy }) {
+function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPublish, onClose, uploadsActive, publishBusy }) {
   const [p, setP] = useState(() => project ? JSON.parse(JSON.stringify(project)) : ({
     id: newId("pj"),
     slug: "",
@@ -1600,10 +1621,8 @@ function ProjectSheet({ project, categories, brandLogos, onSave, onPublish, onCl
   }));
   const set = (k, v) => setP((x) => ({ ...x, [k]: v }));
 
-  // badge falls back to the brand's logo whenever the project has no override
-  const brandKey = p.brand === "Dinas" || (p.id || "").startsWith("dn-") ? "dn" : "pg";
-  const brandName = brandKey === "dn" ? "Dinas" : "Protein Garden";
-  const brandLogo = (brandLogos || {})[brandKey] || "";
+  // Every project shares one site-wide fallback unless it has an override.
+  const fallbackBadge = defaultProjectBadge || "";
   const setGallery = (i, key, v) => setP((x) => ({ ...x, gallery: x.gallery.map((g, gi) => gi === i ? { ...g, [key]: v } : g) }));
   const addGallery = () => setP((x) => ({ ...x, gallery: [...x.gallery, { src: "", tag: "", span: "gal-6" }] }));
   const removeGallery = (i) => setP((x) => ({ ...x, gallery: x.gallery.filter((_, gi) => gi !== i) }));
@@ -1864,7 +1883,7 @@ function ProjectSheet({ project, categories, brandLogos, onSave, onPublish, onCl
           <div className="form-section">
             <div className="form-section-title">Badge</div>
             <ImageInput
-              value={p.icon || brandLogo}
+              value={p.icon || fallbackBadge}
               onChange={(v) => set("icon", v)}
               placeholder="Brand logo · square"
               uploadKey={p.id}
@@ -1873,14 +1892,14 @@ function ProjectSheet({ project, categories, brandLogos, onSave, onPublish, onCl
                   <span>
                     {p.icon
                       ? "Custom badge for this project only."
-                      : `Inherited from ${brandName}. Upload one to override it here.`}
+                      : "Using the default project badge. Upload one to override it here."}
                   </span>
                   <button
                     type="button"
                     className="btn"
                     disabled={!p.icon}
                     onClick={() => set("icon", "")}>
-                    Reset to brand logo
+                    Reset to default badge
                   </button>
                 </div>
               }
@@ -2570,6 +2589,7 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [collapsed, setCollapsed] = useState({});
+  const [groupView, setGroupView] = useState("all");
   const [selected, setSelected] = useState([]);
   const [bulkProject, setBulkProject] = useState("");
   const fileRef = useRef(null);
@@ -2823,14 +2843,29 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
     groups.backlog.length ? "backlog" : null,
     ...groups.byProject.map(({ project }) => project.id),
   ].filter(Boolean);
+  const groupNav = [
+    groups.logos.length ? { key: "logos", label: "Logos", count: groups.logos.length } : null,
+    groups.icons.length ? { key: "icons", label: "Icons", count: groups.icons.length } : null,
+    groups.backlog.length ? { key: "backlog", label: "Backlog", count: groups.backlog.length } : null,
+    ...groups.byProject.map(({ project, items: list }) => ({
+      key: project.id,
+      label: project.name || project.id,
+      count: list.length,
+    })),
+  ].filter(Boolean);
+  const activeGroupView = groupView === "all" || visibleGroupKeys.includes(groupView) ? groupView : "all";
   const allGroupsHidden = visibleGroupKeys.length > 0 && visibleGroupKeys.every((key) => collapsed[key]);
   const toggleAllGroups = () => {
     const next = { ...collapsed };
     visibleGroupKeys.forEach((key) => { next[key] = !allGroupsHidden; });
     setCollapsed(next);
+    // A global action must always return to the global view. Otherwise
+    // "Show all" expands every group but a previously selected sidebar
+    // filter still leaves only one of them visible.
+    setGroupView("all");
   };
-  const renderGroup = (key, title, note, list) => list.length > 0 && (
-    <div className="media-group" key={key}>
+  const renderGroup = (key, title, note, list) => list.length > 0 && (activeGroupView === "all" || activeGroupView === key) && (
+    <div className="media-group" id={`media-group-${key}`} key={key}>
       <button className="media-group-head" type="button" onClick={() => setCollapsed((x) => ({ ...x, [key]: !x[key] }))}>
         <b><span className="media-chevron">{collapsed[key] ? "▸" : "▾"}</span>{title}</b>
         <span>{list.length} {note}</span>
@@ -2915,10 +2950,33 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
         </div>
       )}
 
-      {renderGroup("logos", "Logos", "logo(s)", groups.logos)}
-      {renderGroup("icons", "Icons", "icon(s)", groups.icons)}
-      {renderGroup("backlog", "Backlog", "not assigned to a project", groups.backlog)}
-      {groups.byProject.map(({ project, items: list }) => renderGroup(project.id, project.name || project.id, "image(s)", list))}
+      <div className="media-layout">
+        <div className="media-groups">
+          {renderGroup("logos", "Logos", "logo(s)", groups.logos)}
+          {renderGroup("icons", "Icons", "icon(s)", groups.icons)}
+          {renderGroup("backlog", "Backlog", "not assigned to a project", groups.backlog)}
+          {groups.byProject.map(({ project, items: list }) => renderGroup(project.id, project.name || project.id, "image(s)", list))}
+        </div>
+        <aside className="media-group-nav" aria-label="Media groups">
+          <div className="media-group-nav-title">Groups</div>
+          <button className={activeGroupView === "all" ? "on" : ""} type="button" onClick={() => setGroupView("all")}>
+            <span>View all</span><b>{groups.count}</b>
+          </button>
+          {groupNav.map((group) => (
+            <button
+              className={activeGroupView === group.key ? "on" : ""}
+              type="button"
+              key={group.key}
+              onClick={() => {
+                setGroupView(group.key);
+                setCollapsed((current) => ({ ...current, [group.key]: false }));
+              }}
+            >
+              <span>{group.label}</span><b>{group.count}</b>
+            </button>
+          ))}
+        </aside>
+      </div>
     </div>
   );
 }

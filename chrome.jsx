@@ -40,7 +40,6 @@ function Nav({ route, go }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [atTop, setAtTop] = useState(true);
-  const [projectNavVisible, setProjectNavVisible] = useState(false);
   const [pastHero, setPastHero] = useState(false);
   const [menuPreviewKey, setMenuPreviewKey] = useState("home");
   const menuRef = useRef(null);
@@ -52,10 +51,7 @@ function Nav({ route, go }) {
   useEffect(() => {
     const isVertical = !isHome && !isProject;
     if (isProject) {
-      // Nav always visible on project pages (split layout). Once the hero has
-      // scrolled away the bar swaps the wordmark for the project name and a
-      // back button — see `showProjectBar` below.
-      setProjectNavVisible(true);
+      document.body.classList.remove("nav-scroll-hide");
       const onScroll = () => setPastHero(window.scrollY > window.innerHeight * 0.6);
       onScroll();
       window.addEventListener("scroll", onScroll, { passive: true });
@@ -190,9 +186,10 @@ function Nav({ route, go }) {
   const menuImageSrc = menuImages[menuPreviewKey] || (menuProject && menuProject.hero) || "";
   const menuPreviewLabel = menuPreviewKey === "projects" ? t("projects") : menuPreviewKey === "agency" ? t("agency") : menuPreviewKey === "contact" ? t("contact") : t("home");
 
-  // Past the project hero the bar becomes a reading header: back on the left,
-  // the project's name where the wordmark sits.
-  const showProjectBar = isProject && pastHero && projectForRoute;
+  // Project pages always keep the back control in the header. The centred
+  // wordmark changes to the project name only after the hero has scrolled.
+  const showProjectBar = isProject && projectForRoute;
+  const showProjectTitle = showProjectBar && pastHero;
   // A project opened from a deep link has no referrer — the index is the useful
   // way out, and on phones it is the only one.
   const backRoute = route.from || { name: "projects" };
@@ -208,12 +205,27 @@ function Nav({ route, go }) {
 
   // filters and sort order are independent — changing one keeps the other
   const keepSort = (r) => (route.sort ? { ...r, sort: route.sort } : r);
+  const goToProjectsContact = () => {
+    setMenuOpen(false);
+    const target = route.name === "projects"
+      ? {
+          name: "projects",
+          ...(route.type ? { type: route.type } : {}),
+          ...(route.brand ? { brand: route.brand } : {}),
+          ...(route.sort ? { sort: route.sort } : {}),
+        }
+      : { name: "projects" };
+    go(target, {
+      scrollTo: ".projects-contact-parallax",
+      overlayScroll: true,
+    });
+  };
 
   return (
     <React.Fragment>
-      <nav className={`nav ${homeTop ? "home-top" : ""} ${isHome && isMobile && atTop ? "mobile-home-top" : ""} ${isProject && !projectNavVisible ? "nav-hidden" : ""} ${showProjectBar ? "nav-project-bar" : ""}`} aria-label="Primary">
+      <nav className={`nav ${homeTop ? "home-top" : ""} ${isHome && isMobile && atTop ? "mobile-home-top" : ""} ${showProjectBar ? "nav-project-bar" : ""}`} aria-label="Primary">
         {showProjectBar ? (
-          <button className="nav-back" onClick={() => go(backRoute)}>
+          <button className="nav-back" onClick={() => go(backRoute, { restoreScroll: true })}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M9 2L4 7l5 5" />
             </svg>
@@ -227,7 +239,13 @@ function Nav({ route, go }) {
 
         <div className="nav-center">
           {showProjectBar ? (
-            <span className="nav-project-title">{pick(projectForRoute, "name")}</span>
+            showProjectTitle
+              ? <span className="nav-project-title">{pick(projectForRoute, "name")}</span>
+              : (
+                <button className="nav-project-home" onClick={() => go({ name: "home" })} aria-label="Project58 home">
+                  <img className="nav-project-logo" src="assets/logo-black.svg" alt="Project58" />
+                </button>
+              )
           ) : (
             <React.Fragment>
               <button
@@ -291,7 +309,7 @@ function Nav({ route, go }) {
                 role="menuitem"
                 onMouseEnter={() => setMenuPreviewKey("contact")}
                 onFocus={() => setMenuPreviewKey("contact")}
-                onClick={() => {setMenuOpen(false);go({ name: "contact" });}}>
+                onClick={goToProjectsContact}>
                   <span>{t("contact")}</span><span className="ar">↗</span>
                 </button>
                 <button
@@ -384,7 +402,7 @@ function Nav({ route, go }) {
           </button>
           <button
           className={`mobile-drawer-link ${isContact ? "on" : ""}`}
-          onClick={() => {setMenuOpen(false);go({ name: "contact" });}}>
+          onClick={goToProjectsContact}>
             <span>{t("contact")}</span><span className="ar">↗</span>
           </button>
           <div className="mobile-drawer-footer">
@@ -486,7 +504,9 @@ function SearchOverlay({ go, onClose }) {
 
   useEffect(() => {inputRef.current && inputRef.current.focus();}, []);
 
-  const all = React.useMemo(() => {
+  // The project array is mutated in place when dashboard content arrives, so
+  // memoising by language alone leaves hidden projects in an open search.
+  const all = (() => {
     const sourceProjects = window.visibleProjects ? window.visibleProjects() : (window.PROJECTS || []).filter((p) => p.visible !== false);
     const newestFirst = (a, b) =>
       (Number(b.year) || 0) - (Number(a.year) || 0) ||
@@ -510,7 +530,7 @@ function SearchOverlay({ go, onClose }) {
     ];
 
     return [...types, ...projects];
-  }, [pick, t]);
+  })();
 
   const filtered = React.useMemo(() => {
     if (!q.trim()) return all.slice(0, 8);
@@ -975,4 +995,4 @@ function StartProjectPage({ go }) {
   );
 }
 
-Object.assign(window, { Nav, Footer, StartProjectPage, ContactPage });
+Object.assign(window, { Nav, Footer, StartProjectPage, ContactPage, ProjectSort });

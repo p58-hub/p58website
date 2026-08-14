@@ -311,6 +311,7 @@ function App() {
         name: cur.name,
         ...(cur.brand ? { brand: cur.brand } : {}),
         ...(cur.type ? { type: cur.type } : {}),
+        ...(cur.sort ? { sort: cur.sort } : {}),
       };
     }
     const next = resolveRoute({ ...r, name, ...(from ? { from } : {}) });
@@ -329,18 +330,30 @@ function App() {
     if (nextPath !== currentPath || `${location.pathname}${location.search}${location.hash}` !== nextPath) {
       history.pushState({ route: nextPath }, "", nextPath);
     }
-    restoreRef.current = null;
+    restoreRef.current = opts.restoreScroll ? next : null;
     setRoute(next);
     if (name !== "project") {
       if (opts.scrollTo) {
         const sel = opts.scrollTo;
         const tryScroll = (n) => {
           const el = document.querySelector(sel);
-          if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-          else if (n > 0) requestAnimationFrame(() => tryScroll(n - 1));
+          if (el) {
+            if (opts.overlayScroll) {
+              const destination = window.scrollY + el.getBoundingClientRect().top;
+              const start = Math.max(0, destination - window.innerHeight);
+              window.scrollTo({ top: start, behavior: "instant" });
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  window.scrollTo({ top: destination, behavior: "smooth" });
+                });
+              });
+            } else {
+              el.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+          } else if (n > 0) requestAnimationFrame(() => tryScroll(n - 1));
         };
         requestAnimationFrame(() => tryScroll(30));
-      } else {
+      } else if (!opts.restoreScroll) {
         requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "instant" }));
       }
     }
@@ -356,7 +369,7 @@ function App() {
       if (hzone && saved) hzone.scrollLeft = saved.left || 0;
       window.scrollTo({ top: saved ? saved.top || 0 : 0, behavior: "instant" });
     });
-  }, [route.name, route.id, route.brand]);
+  }, [route.name, route.id, route.brand, route.type, route.sort]);
 
   aUseEffect(() => {
     const onStorage = (e) => {
