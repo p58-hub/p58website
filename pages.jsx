@@ -475,6 +475,7 @@ function ProjectsPage({ go, type, brand, sort }) {
     return gallery.slice(0, 6);
   })();
   const [coverIndex, setCoverIndex] = useS(0);
+  const coverGestureRef = useR({ start: null, ignoreClickUntil: 0 });
   const activeCoverIndex = coverGallery.length ? coverIndex % coverGallery.length : 0;
   const coverProject = coverGallery[activeCoverIndex] || filtered[0];
   const showMobileCover = !normalisedType && !normalisedBrand && coverProject;
@@ -551,11 +552,52 @@ function ProjectsPage({ go, type, brand, sort }) {
   };
   const finalProject = showMobileCover && filtered.length ? filtered[filtered.length - 1] : null;
   const precedingProjects = finalProject ? filtered.slice(0, -1) : filtered;
+  const openCoverProject = () => {
+    if (!coverProject) return;
+    go({ name: "project", id: coverProject.slug || coverProject.id, from: sheetRoute });
+  };
+  const handleCoverTouchStart = (event) => {
+    const touch = event.touches[0];
+    coverGestureRef.current.start = touch ? { x: touch.clientX, y: touch.clientY } : null;
+  };
+  const handleCoverTouchEnd = (event) => {
+    const start = coverGestureRef.current.start;
+    const touch = event.changedTouches[0];
+    coverGestureRef.current.start = null;
+    if (!start || !touch || coverGallery.length < 2) return;
+
+    const deltaX = touch.clientX - start.x;
+    const deltaY = touch.clientY - start.y;
+    if (Math.abs(deltaX) < 42 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.15) return;
+
+    coverGestureRef.current.ignoreClickUntil = Date.now() + 450;
+    setCoverIndex((index) => {
+      const direction = deltaX < 0 ? 1 : -1;
+      return (index + direction + coverGallery.length) % coverGallery.length;
+    });
+  };
 
   return (
     <div className="page-enter" key={`${normalisedType || "all"}:${normalisedBrand || "all"}:${order}`}>
       {showMobileCover ? (
-        <section className="mobile-projects-cover" aria-label={pick(coverProject, "name")}>
+        <section
+          className="mobile-projects-cover"
+          aria-label={pick(coverProject, "name")}
+          role="link"
+          tabIndex="0"
+          onClick={() => {
+            if (Date.now() < coverGestureRef.current.ignoreClickUntil) return;
+            openCoverProject();
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              openCoverProject();
+            }
+          }}
+          onTouchStart={handleCoverTouchStart}
+          onTouchEnd={handleCoverTouchEnd}
+          onTouchCancel={() => { coverGestureRef.current.start = null; }}>
           <div className="mobile-projects-cover-slides">
             {coverGallery.map((project, index) => (
               <div key={project.id} className={`mobile-projects-cover-slide ${index === activeCoverIndex ? "on" : ""}`}>

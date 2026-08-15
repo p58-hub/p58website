@@ -643,11 +643,68 @@ const DEFAULT_SITE_SETTINGS = {
     instagram_text: "Instagram → @project.58",
     instagram_url: "",
   },
+  inquiryForm: null,
 };
+
+const INQUIRY_FORM_GROUPS = [
+  { id: "planning", title: "What are you planning?" },
+  { id: "space", title: "About the space" },
+  { id: "details", title: "A few details" },
+  { id: "contact", title: "How can we reach you?" },
+];
+
+const DEFAULT_INQUIRY_FORM = {
+  questions: [
+    { id: "type", label: "Project type", type: "buttons", group: "planning", required: true, options: ["Retail", "Hospitality", "Residential", "Workplace", "Renovation", "Other"] },
+    { id: "location", label: "Location", type: "text", group: "space", required: false, placeholder: "City / neighbourhood" },
+    { id: "size", label: "Approximate size", type: "text", group: "space", required: false, placeholder: "e.g. 120 m²" },
+    { id: "timeline", label: "Timeline", type: "select", group: "space", required: false, options: ["As soon as possible", "Within 1–3 months", "Within 3–6 months", "Flexible / exploring"] },
+    { id: "budget", label: "Budget range", type: "select", group: "details", required: false, options: ["Not sure yet", "Under €50k", "€50k–€150k", "€150k–€400k", "€400k+"] },
+    { id: "message", label: "Tell us about the project", type: "textarea", group: "details", required: false, placeholder: "What you have in mind, the space, goals…" },
+    { id: "name", label: "Name", type: "text", group: "contact", required: true, placeholder: "Your name" },
+    { id: "email", label: "Email", type: "email", group: "contact", required: true, placeholder: "you@email.com" },
+    { id: "phone", label: "Phone", type: "tel", group: "contact", required: false, placeholder: "Optional" },
+    { id: "company", label: "Company", type: "text", group: "contact", required: false, placeholder: "Optional" },
+  ],
+};
+
+function normaliseInquiryForm(form) {
+  const source = form && Array.isArray(form.questions) ? form.questions : DEFAULT_INQUIRY_FORM.questions;
+  const validTypes = new Set(["text", "textarea", "email", "tel", "buttons", "select"]);
+  const validGroups = new Set(INQUIRY_FORM_GROUPS.map((group) => group.id));
+  return {
+    questions: source.map((question, order) => {
+      const rawId = String(question && question.id || `question-${order + 1}`);
+      const id = rawId.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `question-${order + 1}`;
+      const type = validTypes.has(question && question.type) ? question.type : "text";
+      return {
+        id,
+        label: String(question && question.label || `Question ${order + 1}`),
+        type,
+        group: validGroups.has(question && question.group) ? question.group : "details",
+        required: Boolean(question && question.required),
+        placeholder: String(question && question.placeholder || ""),
+        options: (type === "buttons" || type === "select")
+          ? (Array.isArray(question && question.options) ? question.options : []).map((option) => String(option)).filter(Boolean)
+          : [],
+      };
+    }),
+  };
+}
 
 function normaliseSiteSettings(site = {}) {
   const legacyAddress = site.athens_address || "";
   const firstLineAddress = legacyAddress ? legacyAddress.split("\n").filter(Boolean).slice(0, 2).join(" · ") : "";
+  const contact = site.contact && typeof site.contact === "object" ? site.contact : {};
+  const hasContact = (key) => Object.prototype.hasOwnProperty.call(contact, key);
+  const instagramUrl = hasContact("instagram_url") ? contact.instagram_url : site.instagram_url || "";
+  const normalisedInstagramUrl = (() => {
+    const value = String(instagramUrl || "").trim();
+    if (!value) return "";
+    if (value.startsWith("@")) return `https://instagram.com/${value.slice(1)}`;
+    if (/^[a-z][a-z\d+.-]*:/i.test(value)) return value;
+    return `https://${value.replace(/^\/\//, "")}`;
+  })();
   return {
     ...DEFAULT_SITE_SETTINGS,
     ...site,
@@ -686,17 +743,20 @@ function normaliseSiteSettings(site = {}) {
         ? DEFAULT_SITE_SETTINGS.people.hero
         : site.people.hero,
     },
+    inquiryForm: normaliseInquiryForm(site.inquiryForm),
     contact: {
       ...DEFAULT_SITE_SETTINGS.contact,
-      location_label: site.location_label || site.athens_label || site.contact && site.contact.location_label || DEFAULT_SITE_SETTINGS.contact.location_label,
-      address: site.address || firstLineAddress || site.contact && site.contact.address || DEFAULT_SITE_SETTINGS.contact.address,
-      address_url: site.address_url || site.contact && site.contact.address_url || "",
-      phone: site.phone || site.athens_phone || site.contact && site.contact.phone || DEFAULT_SITE_SETTINGS.contact.phone,
-      phone_url: site.phone_url || site.contact && site.contact.phone_url || (site.athens_phone ? `tel:${String(site.athens_phone).replace(/[^\d+]/g, "")}` : DEFAULT_SITE_SETTINGS.contact.phone_url),
-      email: site.email || site.contact && site.contact.email || DEFAULT_SITE_SETTINGS.contact.email,
-      email_url: site.email_url || site.contact && site.contact.email_url || (site.email ? `mailto:${site.email}` : DEFAULT_SITE_SETTINGS.contact.email_url),
-      instagram_text: site.instagram_text || site.instagram || site.contact && site.contact.instagram_text || DEFAULT_SITE_SETTINGS.contact.instagram_text,
-      instagram_url: site.instagram_url || site.contact && site.contact.instagram_url || "",
+      // The current nested settings always win, including an intentional empty
+      // value. Top-level fields are legacy fallbacks for older saved documents.
+      location_label: hasContact("location_label") ? contact.location_label : site.location_label || site.athens_label || DEFAULT_SITE_SETTINGS.contact.location_label,
+      address: hasContact("address") ? contact.address : site.address || firstLineAddress || DEFAULT_SITE_SETTINGS.contact.address,
+      address_url: hasContact("address_url") ? contact.address_url : site.address_url || "",
+      phone: hasContact("phone") ? contact.phone : site.phone || site.athens_phone || DEFAULT_SITE_SETTINGS.contact.phone,
+      phone_url: hasContact("phone_url") ? contact.phone_url : site.phone_url || (site.athens_phone ? `tel:${String(site.athens_phone).replace(/[^\d+]/g, "")}` : DEFAULT_SITE_SETTINGS.contact.phone_url),
+      email: hasContact("email") ? contact.email : site.email || DEFAULT_SITE_SETTINGS.contact.email,
+      email_url: hasContact("email_url") ? contact.email_url : site.email_url || (site.email ? `mailto:${site.email}` : DEFAULT_SITE_SETTINGS.contact.email_url),
+      instagram_text: hasContact("instagram_text") ? contact.instagram_text : site.instagram_text || site.instagram || DEFAULT_SITE_SETTINGS.contact.instagram_text,
+      instagram_url: normalisedInstagramUrl,
     },
   };
 }
@@ -819,7 +879,7 @@ function readP58Store() {
    its own API must still render, just with older content. */
 function loadRemoteContent() {
   if (typeof fetch !== "function") return Promise.resolve(false);
-  return fetch("/api/content", { credentials: "same-origin" })
+  return fetch("/api/content?t=" + Date.now(), { credentials: "same-origin", cache: "no-store" })
     .then((res) => (res.ok ? res.json() : null))
     .then((body) => {
       if (!body || !body.content || typeof body.content !== "object") return false;
@@ -933,4 +993,4 @@ const PROJECT_SORTS = {
 applyP58ContentFromStore();
 const P58_CONTENT_READY = loadRemoteContent();
 
-Object.assign(window, { P58_STORE_KEY, P58_CONTENT_READY, DEFAULT_SITE_SETTINGS, normaliseSiteSettings, applySiteFavicon, projectSlugFromFields, applyP58ContentFromStore, readP58Store, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor, isProjectVisible, visibleProjects, isVideoSrc });
+Object.assign(window, { P58_STORE_KEY, P58_CONTENT_READY, DEFAULT_SITE_SETTINGS, DEFAULT_INQUIRY_FORM, INQUIRY_FORM_GROUPS, normaliseInquiryForm, normaliseSiteSettings, applySiteFavicon, projectSlugFromFields, applyP58ContentFromStore, readP58Store, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor, isProjectVisible, visibleProjects, isVideoSrc });

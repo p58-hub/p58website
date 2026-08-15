@@ -697,24 +697,15 @@ function TabMoreIcon() {
   );
 }
 
-function TabLanguageIcon({ lang }) {
-  return <span className="mobile-tab-language-icon" aria-hidden="true">{lang === "gr" ? "GR" : "EN"}</span>;
-}
-
 function MobileTabBar({ route, go, onMore }) {
   const t = window.useT();
-  const { lang, setLang } = window.useLang();
   const isProjects = route.name === "projects" || route.name === "interiors" || route.name === "architecture";
   return (
     <nav className="mobile-tab-bar" aria-label="Mobile primary">
-      <button
-        className="mobile-tab"
-        aria-label={`Switch language to ${lang === "en" ? "Greek" : "English"}`}
-        onClick={() => setLang(lang === "en" ? "gr" : "en")}
-      >
-        <TabLanguageIcon lang={lang} />
-        <span>{lang === "en" ? "Greek" : "English"}</span>
-      </button>
+      <div className="mobile-tab mobile-tab-language">
+        <window.LangToggle compact />
+        <span>Language</span>
+      </div>
       <button className={`mobile-tab ${isProjects ? "on" : ""}`} aria-label={t("projects")} aria-current={isProjects ? "page" : undefined} onClick={() => go({ name: "projects" })}>
         <TabProjectsIcon on={isProjects} />
         <span>{t("projects")}</span>
@@ -880,6 +871,7 @@ async function notifyInquiry(inquiry) {
         email: inquiry.email,
         phone: inquiry.phone,
         company: inquiry.company,
+        custom_answers: Object.entries(inquiry.answers || {}).map(([key, value]) => `${(inquiry.questionLabels || {})[key] || key}: ${value}`).join("\n"),
         submitted_at: new Date(inquiry.createdAt).toLocaleString(),
       }, { publicKey: cfg.publicKey });
       return "sent";
@@ -888,42 +880,81 @@ async function notifyInquiry(inquiry) {
   return "skipped";
 }
 
-const INQUIRY_TYPES = ["Retail", "Hospitality", "Residential", "Workplace", "Renovation", "Other"];
-const INQUIRY_TIMELINES = ["As soon as possible", "Within 1–3 months", "Within 3–6 months", "Flexible / exploring"];
-const INQUIRY_BUDGETS = ["Not sure yet", "Under €50k", "€50k–€150k", "€150k–€400k", "€400k+"];
-
 function StartProjectPage({ go }) {
   const t = window.useT();
   const site = useSiteSettings();
+  const inquiryForm = window.normaliseInquiryForm
+    ? window.normaliseInquiryForm(site.inquiryForm)
+    : (site.inquiryForm || window.DEFAULT_INQUIRY_FORM || { questions: [] });
+  const questions = inquiryForm.questions || [];
+  const groupDefinitions = window.INQUIRY_FORM_GROUPS || [
+    { id: "planning", title: "What are you planning?" },
+    { id: "space", title: "About the space" },
+    { id: "details", title: "A few details" },
+    { id: "contact", title: "How can we reach you?" },
+  ];
   const phone = (site && site.contact && site.contact.phone) || "";
   const phoneUrl = (site && site.contact && site.contact.phone_url) || (phone ? `tel:${phone.replace(/[^\d+]/g, "")}` : "");
   const [step, setStep] = useState(0);
-  // "step 0": the why-we-ask screen, shown once before the four questions
   const [intro, setIntro] = useState(true);
   const [done, setDone] = useState(false);
   const [sending, setSending] = useState(false);
-  const [f, setF] = useState({ type: "", location: "", size: "", timeline: "", budget: "", message: "", name: "", email: "", phone: "", company: "" });
+  const [f, setF] = useState(() => Object.fromEntries(questions.map((question) => [question.id, ""])));
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
   const onClose = () => go({ name: "contact" });
 
-  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(f.email.trim());
-  const steps = [
-    { title: "What are you planning?", valid: !!f.type },
-    { title: "About the space", valid: true },
-    { title: "A few details", valid: true },
-    { title: "How can we reach you?", valid: f.name.trim() && emailValid },
-  ];
+  useEffect(() => {
+    setF((current) => ({ ...Object.fromEntries(questions.map((question) => [question.id, ""])), ...current }));
+  }, [JSON.stringify(questions.map((question) => question.id))]);
+
+  const questionValid = (question) => {
+    const value = String(f[question.id] || "").trim();
+    if (question.required && !value) return false;
+    if (question.type === "email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return false;
+    return true;
+  };
+  const steps = groupDefinitions
+    .map((group) => ({ ...group, questions: questions.filter((question) => question.group === group.id) }))
+    .filter((group) => group.questions.length)
+    .map((group) => ({ ...group, valid: group.questions.every(questionValid) }));
   const last = steps.length - 1;
-  const canNext = steps[step].valid;
+  const activeStep = steps[Math.min(step, Math.max(last, 0))];
+  const canNext = activeStep ? activeStep.valid : false;
 
   const submit = async () => {
     if (sending) return;
     setSending(true);
-    const inquiry = { id: "inq-" + Date.now().toString(36), createdAt: Date.now(), status: "new", ...f };
+    const inquiry = {
+      id: "inq-" + Date.now().toString(36), createdAt: Date.now(), status: "new", ...f,
+      answers: Object.fromEntries(questions.map((question) => [question.id, f[question.id] || ""])),
+      questionLabels: Object.fromEntries(questions.map((question) => [question.id, question.label])),
+    };
     saveInquiry(inquiry);
     await notifyInquiry(inquiry);
     setSending(false);
     setDone(true);
+  };
+
+  const renderQuestion = (question) => {
+    const value = f[question.id] || "";
+    const label = <span className="inquiry-question-label">{question.label}{question.required ? <b> *</b> : null}</span>;
+    if (question.type === "buttons") {
+      return (
+        <div className="inquiry-question" key={question.id}>
+          {label}
+          <div className="inquiry-types">
+            {(question.options || []).map((option) => <button type="button" key={option} className={`inquiry-type ${value === option ? "on" : ""}`} onClick={() => set(question.id, option)}>{option}</button>)}
+          </div>
+        </div>
+      );
+    }
+    if (question.type === "select") {
+      return <label key={question.id}>{label}<select value={value} required={question.required} onChange={(event) => set(question.id, event.target.value)}><option value="">Select…</option>{(question.options || []).map((option) => <option key={option} value={option}>{option}</option>)}</select></label>;
+    }
+    if (question.type === "textarea") {
+      return <label key={question.id}>{label}<textarea rows="4" value={value} required={question.required} onChange={(event) => set(question.id, event.target.value)} placeholder={question.placeholder || ""} /></label>;
+    }
+    return <label key={question.id}>{label}<input type={question.type === "email" ? "email" : question.type === "tel" ? "tel" : "text"} value={value} required={question.required} onChange={(event) => set(question.id, event.target.value)} placeholder={question.placeholder || ""} /></label>;
   };
 
   const body = done ? (
@@ -952,46 +983,8 @@ function StartProjectPage({ go }) {
         {steps.map((s, i) => <span key={i} className={`inquiry-dot ${i === step ? "on" : ""} ${i < step ? "done" : ""}`} />)}
       </div>
       <div className="inquiry-step-kind">Step {step + 1} of {steps.length}</div>
-      <h2 className="inquiry-title">{steps[step].title}</h2>
-
-      {step === 0 && (
-        <div className="inquiry-types">
-          {INQUIRY_TYPES.map((tp) => (
-            <button key={tp} className={`inquiry-type ${f.type === tp ? "on" : ""}`} onClick={() => { set("type", tp); }}>{tp}</button>
-          ))}
-        </div>
-      )}
-      {step === 1 && (
-        <div className="inquiry-fields">
-          <label>Location<input type="text" value={f.location} onChange={(e) => set("location", e.target.value)} placeholder="City / neighbourhood" /></label>
-          <label>Approximate size<input type="text" value={f.size} onChange={(e) => set("size", e.target.value)} placeholder="e.g. 120 m²" /></label>
-          <label>Timeline
-            <select value={f.timeline} onChange={(e) => set("timeline", e.target.value)}>
-              <option value="">Select…</option>
-              {INQUIRY_TIMELINES.map((tl) => <option key={tl} value={tl}>{tl}</option>)}
-            </select>
-          </label>
-        </div>
-      )}
-      {step === 2 && (
-        <div className="inquiry-fields">
-          <label>Budget range
-            <select value={f.budget} onChange={(e) => set("budget", e.target.value)}>
-              <option value="">Select…</option>
-              {INQUIRY_BUDGETS.map((b) => <option key={b} value={b}>{b}</option>)}
-            </select>
-          </label>
-          <label>Tell us about the project<textarea rows="4" value={f.message} onChange={(e) => set("message", e.target.value)} placeholder="What you have in mind, the space, goals…" /></label>
-        </div>
-      )}
-      {step === 3 && (
-        <div className="inquiry-fields">
-          <label>Name<input type="text" value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="Your name" /></label>
-          <label>Email<input type="email" value={f.email} onChange={(e) => set("email", e.target.value)} placeholder="you@email.com" /></label>
-          <label>Phone<input type="tel" value={f.phone} onChange={(e) => set("phone", e.target.value)} placeholder="Optional" /></label>
-          <label>Company<input type="text" value={f.company} onChange={(e) => set("company", e.target.value)} placeholder="Optional" /></label>
-        </div>
-      )}
+      <h2 className="inquiry-title">{activeStep ? activeStep.title : "Project inquiry"}</h2>
+      <div className="inquiry-fields inquiry-dynamic-fields">{activeStep ? activeStep.questions.map(renderQuestion) : <p>This form has no questions yet.</p>}</div>
 
       <div className="inquiry-nav">
         <button className="inquiry-btn ghost" onClick={() => (step > 0 ? setStep(step - 1) : setIntro(true))}>Back</button>

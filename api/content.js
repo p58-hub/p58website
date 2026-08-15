@@ -47,12 +47,12 @@ export default async function handler(req, res) {
    broken page because the dashboard has not saved anything yet. */
 
 function sendContent(res, content, updatedAt) {
-  // Cached at the edge, so an ordinary page view costs no function time.
-  // Kept short because an edit should appear on the site quickly — and
-  // stale-while-revalidate means the wait is never paid by a visitor.
+  // Content edits must be visible on the very next page load. Edge caching
+  // previously allowed a stale settings document to survive after Publish.
   res.statusCode = 200;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
-  res.setHeader("Cache-Control", "public, s-maxage=60, stale-while-revalidate=300");
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.setHeader("Vercel-CDN-Cache-Control", "no-store");
   res.end(JSON.stringify({ content: content || null, updatedAt: updatedAt || null }));
 }
 

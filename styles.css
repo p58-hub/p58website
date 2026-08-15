@@ -1048,6 +1048,8 @@ body.interiors-page .brand-head {
     margin-top: calc(-71px - env(safe-area-inset-top, 0px));
     overflow: hidden;
     background: var(--ink);
+    cursor: pointer;
+    touch-action: pan-y;
   }
   .mobile-projects-cover-slides {
     position: absolute;
@@ -3317,18 +3319,27 @@ main h3 em {
     letter-spacing: 0.06em;
     text-transform: uppercase;
   }
-  .mobile-tab .mobile-tab-language-icon {
-    width: 25px;
-    height: 25px;
-    display: grid;
-    place-items: center;
-    border: 1.5px solid currentColor;
-    border-radius: 50%;
-    font-family: var(--mono);
-    font-size: 8px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    line-height: 1;
+  .mobile-tab-language {
+    min-width: 92px;
+    padding-inline: 7px;
+  }
+  .mobile-tab-language .lang-toggle {
+    margin: 0;
+    padding: 2px;
+    background: transparent;
+    border-color: rgba(20, 19, 15, 0.18);
+  }
+  .mobile-tab-language .lang-toggle button {
+    padding: 4px 7px;
+  }
+  [data-paper="dark"] .mobile-tab-language .lang-toggle,
+  body.contact-page-active .mobile-tab-language .lang-toggle {
+    border-color: rgba(255, 255, 255, 0.2);
+  }
+  [data-paper="dark"] .mobile-tab-language .lang-toggle button.on,
+  body.contact-page-active .mobile-tab-language .lang-toggle button.on {
+    color: var(--ink);
+    background: var(--paper);
   }
   .mobile-tab.on { color: var(--ink); background: var(--paper-2); transform: scale(1.04); }
   body.contact-page-active .mobile-tab.on { background: rgba(255, 255, 255, 0.12); }
@@ -4473,6 +4484,17 @@ body[data-route="home"].hz-at-hero .nav {
 .inquiry-type:hover { border-color: var(--ink); }
 .inquiry-type.on { border-color: var(--clay); background: var(--clay-soft); color: var(--ink); }
 .inquiry-fields { display: flex; flex-direction: column; gap: 16px; }
+.inquiry-dynamic-fields { gap: 20px; }
+.inquiry-question { display: grid; gap: 8px; }
+.inquiry-question-label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-3, #6b6961);
+}
+.inquiry-question-label b { color: var(--clay); font-weight: 500; }
 .inquiry-fields label { display: flex; flex-direction: column; gap: 7px; font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3, #6b6961); }
 .inquiry-fields input,
 .inquiry-fields select,

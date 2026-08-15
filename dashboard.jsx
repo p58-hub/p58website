@@ -140,7 +140,7 @@ const load = () => {
 /* What the site is currently showing everyone. Resolves null when there is
    nothing published yet, no Blob store, or no API at all. */
 const fetchPublished = () =>
-  fetch("/api/content", { credentials: "same-origin" })
+  fetch("/api/content?t=" + Date.now(), { credentials: "same-origin", cache: "no-store" })
     .then((res) => (res.ok ? res.json() : null))
     .then((body) => (body && body.content ? normaliseStored(body.content) : null))
     .catch(() => null);
@@ -523,8 +523,31 @@ function App({ session }) {
   const [inquiries, setInquiries] = useState(() => { try { return JSON.parse(localStorage.getItem(INQUIRY_STORE_KEY) || "[]"); } catch (e) { return []; } });
   const [viewInquiry, setViewInquiry] = useState(null);
   const [sideOpen, setSideOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const accountRef = useRef(null);
   const goSection = (s) => { setSection(s); setSideOpen(false); };
   const goProjectTexts = (id = "all") => { setTextsProject(id); setEditing(null); goSection("texts"); };
+
+  useEffect(() => {
+    if (!accountOpen) return undefined;
+
+    const closeAccount = (event) => {
+      if (event.type === "keydown" && event.key === "Escape") {
+        setAccountOpen(false);
+        return;
+      }
+      if (event.type === "mousedown" && accountRef.current && !accountRef.current.contains(event.target)) {
+        setAccountOpen(false);
+      }
+    };
+
+    document.addEventListener("mousedown", closeAccount);
+    document.addEventListener("keydown", closeAccount);
+    return () => {
+      document.removeEventListener("mousedown", closeAccount);
+      document.removeEventListener("keydown", closeAccount);
+    };
+  }, [accountOpen]);
 
   /* Adopt whatever is published before anything can be edited. Without this,
      opening the dashboard on a second computer would start from that
@@ -828,6 +851,12 @@ function App({ session }) {
     setToast("Hero gallery saved");
   };
 
+  const onSaveInquiryForm = (inquiryForm) => {
+    const site = normaliseSite({ ...(data.site || DEFAULT_SITE), inquiryForm });
+    update({ ...data, site });
+    setToast("Inquiry questions saved — ready to publish");
+  };
+
   /* The gallery is driven by each project's `featured` flag, so this is the
      same switch as "Show on home rail" in the project editor — just reachable
      from the one screen that shows the whole selection at once. */
@@ -856,7 +885,7 @@ function App({ session }) {
 
   // If a section is off-limits for this role, fall back to Projects
   // rather than rendering an empty panel.
-  const SECTION_CAPABILITY = { site: "siteSettings", hero: "heroGallery" };
+  const SECTION_CAPABILITY = { site: "siteSettings", hero: "heroGallery", "inquiry-form": "siteSettings" };
   useEffect(() => {
     const needed = SECTION_CAPABILITY[section];
     if (needed && !can(needed)) setSection("projects");
@@ -900,6 +929,11 @@ function App({ session }) {
           <span>Inquiries</span><span className={`count ${unreadInquiries ? "count-alert" : ""}`}>{unreadInquiries ? unreadInquiries : counts.inquiries}</span>
         </button>
         {can("siteSettings") && (
+          <button className={`side-btn side-sub-btn ${section === "inquiry-form" ? "on" : ""}`} onClick={() => goSection("inquiry-form")}>
+            <span>Form questions</span><span className="count">?</span>
+          </button>
+        )}
+        {can("siteSettings") && (
           <button className={`side-btn ${section === "site" ? "on" : ""}`} onClick={() => goSection("site")}>
             <span>Site settings</span><span className="count">⚙</span>
           </button>
@@ -917,19 +951,6 @@ function App({ session }) {
           <a className="side-link" href="mobile.html" target="_blank" rel="noopener">
             <span>Mobile preview</span><span>↗</span>
           </a>
-
-          <div className="side-user">
-            <div className="side-user-id">
-              <span className="side-user-avatar" aria-hidden="true">{initials(user.name)}</span>
-              <span className="side-user-text">
-                <b title={user.name}>{user.name}</b>
-                <span className={`side-user-role role-${user.role}`}>
-                  {window.P58Auth.ROLE_LABELS[user.role] || user.role}
-                </span>
-              </span>
-            </div>
-            <button className="side-signout" onClick={() => window.P58Auth.logout()}>Sign out</button>
-          </div>
 
           <div className="side-meta">localStorage · v1</div>
         </div>
@@ -973,9 +994,35 @@ function App({ session }) {
                 <span className="ic">{Ic.reset}</span><span>Reset</span>
               </button>
             )}
-            <button className="btn primary" style={(section === "texts" || section === "site" || section === "hero" || section === "inquiries" || section === "media") ? { display: "none" } : null} onClick={() => setEditing({ kind: section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news" : "team", id: null })}>
+            <button className="btn primary new-content-btn" style={(section === "texts" || section === "site" || section === "hero" || section === "inquiries" || section === "inquiry-form" || section === "media") ? { display: "none" } : null} onClick={() => setEditing({ kind: section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news" : "team", id: null })}>
               <span className="ic">{Ic.plus}</span><span>New {section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news item" : section === "site" ? "—" : "person"}</span>
             </button>
+          </div>
+          <div className={"topbar-user" + (accountOpen ? " open" : "")} ref={accountRef}>
+            <button
+              className="topbar-user-trigger"
+              type="button"
+              aria-label="Open account menu"
+              aria-haspopup="menu"
+              aria-expanded={accountOpen}
+              onClick={() => setAccountOpen((open) => !open)}
+            >
+              <span className="topbar-user-avatar" aria-hidden="true">{initials(user.name)}</span>
+            </button>
+            {accountOpen && (
+              <div className="topbar-account-popover" role="menu" aria-label="Account menu">
+                <div className="topbar-account-head">
+                  <span className="topbar-account-avatar" aria-hidden="true">{initials(user.name)}</span>
+                  <span>
+                    <b title={user.name}>{user.name}</b>
+                    <small>{window.P58Auth.ROLE_LABELS[user.role] || user.role}</small>
+                  </span>
+                </div>
+                <button className="topbar-account-signout" type="button" role="menuitem" onClick={() => window.P58Auth.logout()}>
+                  Sign out
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1016,6 +1063,9 @@ function App({ session }) {
           {section === "inquiries" && (
             <InquiriesList data={inquiries} onView={(id) => { setViewInquiry(id); setInquiryStatus(id, "read"); }} onDelete={deleteInquiry} />
           )}
+          {section === "inquiry-form" && can("siteSettings") && (
+            <InquiryFormSettings inquiryForm={normaliseSite(data.site || DEFAULT_SITE).inquiryForm} onSave={onSaveInquiryForm} />
+          )}
           {section === "site" && can("siteSettings") && (
             <SiteSettings site={normaliseSite(data.site || DEFAULT_SITE)} onSave={onSaveSite} />
           )}
@@ -1032,9 +1082,11 @@ function App({ session }) {
       </main>
 
       <nav className="mobile-bottom-nav" aria-label="Primary dashboard navigation">
-        <button className={(section === "projects" || section === "texts") ? "on" : ""} type="button" onClick={() => goSection("projects")}>Projects</button>
+        <button className={section === "projects" ? "on" : ""} type="button" onClick={() => goSection("projects")}>Projects</button>
+        <button className={section === "media" ? "on" : ""} type="button" onClick={() => goSection("media")}>Media</button>
+        <button className="mobile-create-project" type="button" aria-label="Create new project" onClick={() => { goSection("projects"); setEditing({ kind: "project", id: null }); }}><span aria-hidden="true">+</span></button>
         <button className={(section === "site" || section === "hero") ? "on" : ""} type="button" disabled={!can("siteSettings")} onClick={() => can("siteSettings") && goSection("site")}>Settings</button>
-        <button className={(sideOpen || !["projects", "texts", "site", "hero"].includes(section)) ? "on" : ""} type="button" onClick={() => setSideOpen(true)}>More{unreadInquiries ? ` · ${unreadInquiries}` : ""}</button>
+        <button className={(sideOpen || !["projects", "media", "site", "hero"].includes(section)) ? "on" : ""} type="button" onClick={() => setSideOpen(true)}>More{unreadInquiries ? ` · ${unreadInquiries}` : ""}</button>
       </nav>
 
       {editing && editing.kind === "project" && (
@@ -1539,6 +1591,139 @@ function formatInquiryDate(ts) {
   catch (e) { return "—"; }
 }
 
+function InquiryFormSettings({ inquiryForm, onSave }) {
+  const normalise = window.normaliseInquiryForm || ((form) => form);
+  const groups = window.INQUIRY_FORM_GROUPS || [
+    { id: "planning", title: "What are you planning?" },
+    { id: "space", title: "About the space" },
+    { id: "details", title: "A few details" },
+    { id: "contact", title: "How can we reach you?" },
+  ];
+  const [form, setForm] = useState(() => JSON.parse(JSON.stringify(normalise(inquiryForm || {}))));
+
+  useEffect(() => {
+    setForm(JSON.parse(JSON.stringify(normalise(inquiryForm || {}))));
+  }, [inquiryForm]);
+
+  const questions = form.questions || [];
+  const changed = JSON.stringify(normalise(form)) !== JSON.stringify(normalise(inquiryForm || {}));
+  const valid = questions.length > 0 && questions.every((question) => question.label.trim() && (
+    !["buttons", "select"].includes(question.type) || (question.options || []).some((option) => String(option).trim())
+  ));
+  const updateQuestion = (index, patch) => setForm((current) => ({
+    ...current,
+    questions: current.questions.map((question, i) => i === index ? { ...question, ...patch } : question),
+  }));
+  const moveQuestion = (index, direction) => setForm((current) => {
+    const next = current.questions.slice();
+    const target = index + direction;
+    if (target < 0 || target >= next.length) return current;
+    [next[index], next[target]] = [next[target], next[index]];
+    return { ...current, questions: next };
+  });
+  const removeQuestion = (index) => {
+    if (!confirm("Remove this question from the inquiry form? Existing inquiries will keep their saved answer.")) return;
+    setForm((current) => ({ ...current, questions: current.questions.filter((_, i) => i !== index) }));
+  };
+  const addQuestion = () => setForm((current) => ({
+    ...current,
+    questions: [...current.questions, {
+      id: newId("question"),
+      label: "New question",
+      type: "text",
+      group: "details",
+      required: false,
+      placeholder: "",
+      options: [],
+    }],
+  }));
+  const updateOption = (questionIndex, optionIndex, value) => {
+    const options = [...(questions[questionIndex].options || [])];
+    options[optionIndex] = value;
+    updateQuestion(questionIndex, { options });
+  };
+  const addOption = (questionIndex) => updateQuestion(questionIndex, { options: [...(questions[questionIndex].options || []), "New answer"] });
+  const removeOption = (questionIndex, optionIndex) => updateQuestion(questionIndex, { options: (questions[questionIndex].options || []).filter((_, i) => i !== optionIndex) });
+
+  return (
+    <>
+      <SectionHead eyebrow="/ Questions · answers · required fields" title="Form questions" />
+      <div className="settings-card inquiry-form-settings">
+        <div className="inquiry-builder-intro">
+          <div><h2>Project inquiry form</h2><p>Edit the questions visitors answer. Choice and dropdown fields can have any number of answers.</p></div>
+          <button className="btn primary" type="button" onClick={addQuestion}><span className="ic">{Ic.plus}</span>Add question</button>
+        </div>
+
+        <div className="inquiry-builder-list">
+          {questions.map((question, index) => {
+            const hasOptions = question.type === "buttons" || question.type === "select";
+            return (
+              <section className="inquiry-question-card" key={question.id}>
+                <div className="inquiry-question-head">
+                  <span className="inquiry-question-number">{String(index + 1).padStart(2, "0")}</span>
+                  <strong>{question.label || "Untitled question"}</strong>
+                  {question.required && <span className="inquiry-required-badge">Required</span>}
+                  <div className="inquiry-question-actions">
+                    <button type="button" onClick={() => moveQuestion(index, -1)} disabled={index === 0} title="Move up">↑</button>
+                    <button type="button" onClick={() => moveQuestion(index, 1)} disabled={index === questions.length - 1} title="Move down">↓</button>
+                    <button type="button" className="danger" onClick={() => removeQuestion(index)} title="Remove question">{Ic.trash}</button>
+                  </div>
+                </div>
+                <div className="inquiry-question-grid">
+                  <Field label="Question">
+                    <input type="text" value={question.label} onChange={(event) => updateQuestion(index, { label: event.target.value })} />
+                  </Field>
+                  <Field label="Answer type">
+                    <select value={question.type} onChange={(event) => updateQuestion(index, { type: event.target.value, options: ["buttons", "select"].includes(event.target.value) ? (question.options.length ? question.options : ["Answer 1"]) : [] })}>
+                      <option value="text">Short text</option>
+                      <option value="textarea">Long text</option>
+                      <option value="email">Email</option>
+                      <option value="tel">Phone</option>
+                      <option value="buttons">Choice buttons</option>
+                      <option value="select">Dropdown</option>
+                    </select>
+                  </Field>
+                  <Field label="Form step">
+                    <select value={question.group} onChange={(event) => updateQuestion(index, { group: event.target.value })}>
+                      {groups.map((group) => <option key={group.id} value={group.id}>{group.title}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Placeholder">
+                    <input type="text" value={question.placeholder || ""} onChange={(event) => updateQuestion(index, { placeholder: event.target.value })} placeholder="Optional hint" />
+                  </Field>
+                </div>
+                <label className="inquiry-required-toggle">
+                  <input type="checkbox" checked={question.required} onChange={(event) => updateQuestion(index, { required: event.target.checked })} />
+                  <span>Mandatory question</span>
+                </label>
+
+                {hasOptions && (
+                  <div className="inquiry-options-editor">
+                    <div className="inquiry-options-title"><span>Answers</span><button type="button" onClick={() => addOption(index)}>{Ic.plus} Add answer</button></div>
+                    {(question.options || []).map((option, optionIndex) => (
+                      <div className="inquiry-option-row" key={optionIndex}>
+                        <span>{optionIndex + 1}</span>
+                        <input type="text" value={option} onChange={(event) => updateOption(index, optionIndex, event.target.value)} />
+                        <button type="button" onClick={() => removeOption(index, optionIndex)} title="Remove answer">{Ic.trash}</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })}
+          {!questions.length && <div className="empty-row">No questions. Add one to rebuild the inquiry form.</div>}
+        </div>
+
+        <div className="settings-foot">
+          <span className="muted">{questions.length} questions · {questions.filter((question) => question.required).length} mandatory</span>
+          <button className="btn primary" type="button" disabled={!changed || !valid} onClick={() => onSave(normalise(form))}>Save questions</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function InquiriesList({ data, onView, onDelete }) {
   if (!data.length) {
     return (
@@ -1584,7 +1769,7 @@ function InquirySheet({ inquiry, onDelete, onClose }) {
   }, []);
   if (!inquiry) return null;
   const q = inquiry;
-  const rows = [
+  const legacyRows = [
     ["Project type", q.type],
     ["Location", q.location],
     ["Approx. size", q.size],
@@ -1592,6 +1777,11 @@ function InquirySheet({ inquiry, onDelete, onClose }) {
     ["Budget", q.budget],
     ["Company", q.company],
   ].filter(([, v]) => v);
+  const rows = q.answers && typeof q.answers === "object"
+    ? Object.entries(q.answers)
+      .filter(([key, value]) => value && !["name", "email", "phone", "message"].includes(key))
+      .map(([key, value]) => [(q.questionLabels || {})[key] || key, value])
+    : legacyRows;
   const mailHref = q.email ? `mailto:${q.email}?subject=${encodeURIComponent("Re: your Project58 inquiry")}` : null;
   return (
     <div className="sheet-wrap" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
