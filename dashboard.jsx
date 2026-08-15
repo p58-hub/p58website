@@ -1116,14 +1116,6 @@ function projectTextRows(project) {
     gr: project[field.greek] || "",
   }));
 
-  const bodyCount = Math.max((project.body || []).length, (project.body_gr || []).length);
-  for (let i = 0; i < bodyCount; i += 1) {
-    const en = (project.body || [])[i] || ["", ""];
-    const gr = (project.body_gr || [])[i] || ["", ""];
-    rows.push({ id: `body-${i}-title`, kind: "body", index: i, part: 0, label: `Section ${i + 1} · heading`, compact: true, en: en[0] || "", gr: gr[0] || "" });
-    rows.push({ id: `body-${i}-text`, kind: "body", index: i, part: 1, label: `Section ${i + 1} · text`, en: en[1] || "", gr: gr[1] || "" });
-  }
-
   (project.gallery || []).forEach((image, i) => {
     rows.push({ id: `gallery-${i}`, kind: "gallery", index: i, label: `Image ${i + 1} · caption`, compact: true, en: image.tag || "", gr: image.tag_gr || "" });
   });
@@ -1166,13 +1158,6 @@ function ProjectTextsSheet({ projects, initialProject = "all", onSave, onOpenPro
       if (project.id !== projectId) return project;
       if (row.kind === "field") {
         return { ...project, [lang === "en" ? row.key : row.greekKey]: value };
-      }
-      if (row.kind === "body") {
-        const key = lang === "en" ? "body" : "body_gr";
-        const sections = (project[key] || []).map((section) => [...section]);
-        while (sections.length <= row.index) sections.push(["", ""]);
-        sections[row.index][row.part] = value;
-        return { ...project, [key]: sections };
       }
       const gallery = (project.gallery || []).map((image) => ({ ...image }));
       if (gallery[row.index]) gallery[row.index][lang === "en" ? "tag" : "tag_gr"] = value;

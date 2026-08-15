@@ -800,20 +800,6 @@ function ProjectPage({ id, go, from, transitionDirection }) {
       {/* Fullscreen cover — still or clip */}
       <div className="pd-hero" onTouchStart={handleHeroTouchStart} onTouchEnd={handleHeroTouchEnd}>
         <SiteMedia src={p.hero} alt={pick(p, "name")} />
-        <button
-          className="pd-hero-nav pd-hero-nav--prev"
-          aria-label={`Previous project: ${pick(prev, "name")}`}
-          onClick={() => navigateProject(prev, "prev")}>
-          <span className="pd-hero-nav-preview" aria-hidden="true"><img src={prev.hero} alt="" /></span>
-          <span className="pd-hero-nav-arrow" aria-hidden="true">←</span>
-        </button>
-        <button
-          className="pd-hero-nav pd-hero-nav--next"
-          aria-label={`Next project: ${pick(next, "name")}`}
-          onClick={() => navigateProject(next, "next")}>
-          <span className="pd-hero-nav-preview" aria-hidden="true"><img src={next.hero} alt="" /></span>
-          <span className="pd-hero-nav-arrow" aria-hidden="true">→</span>
-        </button>
       </div>
 
       {/* Info + gallery in a centered container */}
