@@ -647,29 +647,30 @@ const DEFAULT_SITE_SETTINGS = {
 };
 
 const INQUIRY_FORM_GROUPS = [
-  { id: "planning", title: "What are you planning?" },
-  { id: "space", title: "About the space" },
-  { id: "details", title: "A few details" },
-  { id: "contact", title: "How can we reach you?" },
+  { id: "planning", title: "What are you planning?", title_gr: "Τι σχεδιάζετε;" },
+  { id: "space", title: "About the space", title_gr: "Σχετικά με τον χώρο" },
+  { id: "details", title: "A few details", title_gr: "Μερικές λεπτομέρειες" },
+  { id: "contact", title: "How can we reach you?", title_gr: "Πώς μπορούμε να επικοινωνήσουμε;" },
 ];
 
 const DEFAULT_INQUIRY_FORM = {
   questions: [
-    { id: "type", label: "Project type", type: "buttons", group: "planning", required: true, options: ["Retail", "Hospitality", "Residential", "Workplace", "Renovation", "Other"] },
-    { id: "location", label: "Location", type: "text", group: "space", required: false, placeholder: "City / neighbourhood" },
-    { id: "size", label: "Approximate size", type: "text", group: "space", required: false, placeholder: "e.g. 120 m²" },
-    { id: "timeline", label: "Timeline", type: "select", group: "space", required: false, options: ["As soon as possible", "Within 1–3 months", "Within 3–6 months", "Flexible / exploring"] },
-    { id: "budget", label: "Budget range", type: "select", group: "details", required: false, options: ["Not sure yet", "Under €50k", "€50k–€150k", "€150k–€400k", "€400k+"] },
-    { id: "message", label: "Tell us about the project", type: "textarea", group: "details", required: false, placeholder: "What you have in mind, the space, goals…" },
-    { id: "name", label: "Name", type: "text", group: "contact", required: true, placeholder: "Your name" },
-    { id: "email", label: "Email", type: "email", group: "contact", required: true, placeholder: "you@email.com" },
-    { id: "phone", label: "Phone", type: "tel", group: "contact", required: false, placeholder: "Optional" },
-    { id: "company", label: "Company", type: "text", group: "contact", required: false, placeholder: "Optional" },
+    { id: "type", label: "Project type", label_gr: "Τύπος έργου", type: "buttons", group: "planning", required: true, options: ["Retail", "Hospitality", "Residential", "Workplace", "Renovation", "Other"], options_gr: ["Λιανική", "Φιλοξενία", "Κατοικία", "Χώρος εργασίας", "Ανακαίνιση", "Άλλο"] },
+    { id: "location", label: "Location", label_gr: "Τοποθεσία", type: "text", group: "space", required: false, placeholder: "City / neighbourhood", placeholder_gr: "Πόλη / περιοχή" },
+    { id: "size", label: "Approximate size", label_gr: "Κατά προσέγγιση μέγεθος", type: "text", group: "space", required: false, placeholder: "e.g. 120 m²", placeholder_gr: "π.χ. 120 m²" },
+    { id: "timeline", label: "Timeline", label_gr: "Χρονοδιάγραμμα", type: "select", group: "space", required: false, options: ["As soon as possible", "Within 1–3 months", "Within 3–6 months", "Flexible / exploring"], options_gr: ["Το συντομότερο δυνατό", "Μέσα σε 1–3 μήνες", "Μέσα σε 3–6 μήνες", "Ευέλικτο / διερεύνηση"] },
+    { id: "budget", label: "Budget range", label_gr: "Εύρος προϋπολογισμού", type: "select", group: "details", required: false, options: ["Not sure yet", "Under €50k", "€50k–€150k", "€150k–€400k", "€400k+"], options_gr: ["Δεν είμαι σίγουρος ακόμα", "Κάτω από €50k", "€50k–€150k", "€150k–€400k", "€400k+"] },
+    { id: "message", label: "Tell us about the project", label_gr: "Πείτε μας για το έργο", type: "textarea", group: "details", required: false, placeholder: "What you have in mind, the space, goals…", placeholder_gr: "Η ιδέα σας, ο χώρος και οι στόχοι…" },
+    { id: "name", label: "Name", label_gr: "Όνομα", type: "text", group: "contact", required: true, placeholder: "Your name", placeholder_gr: "Το όνομά σας" },
+    { id: "email", label: "Email", label_gr: "Email", type: "email", group: "contact", required: true, placeholder: "you@email.com", placeholder_gr: "you@email.com" },
+    { id: "phone", label: "Phone", label_gr: "Τηλέφωνο", type: "tel", group: "contact", required: false, placeholder: "Optional", placeholder_gr: "Προαιρετικό" },
+    { id: "company", label: "Company", label_gr: "Εταιρεία", type: "text", group: "contact", required: false, placeholder: "Optional", placeholder_gr: "Προαιρετικό" },
   ],
 };
 
 function normaliseInquiryForm(form) {
   const source = form && Array.isArray(form.questions) ? form.questions : DEFAULT_INQUIRY_FORM.questions;
+  const defaultsById = Object.fromEntries(DEFAULT_INQUIRY_FORM.questions.map((question) => [question.id, question]));
   const validTypes = new Set(["text", "textarea", "email", "tel", "buttons", "select"]);
   const validGroups = new Set(INQUIRY_FORM_GROUPS.map((group) => group.id));
   return {
@@ -677,16 +678,24 @@ function normaliseInquiryForm(form) {
       const rawId = String(question && question.id || `question-${order + 1}`);
       const id = rawId.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `question-${order + 1}`;
       const type = validTypes.has(question && question.type) ? question.type : "text";
+      const defaults = defaultsById[id] || {};
+      const options = (type === "buttons" || type === "select")
+        ? (Array.isArray(question && question.options) ? question.options : []).map((option) => String(option)).filter(Boolean)
+        : [];
+      const sourceGreekOptions = Array.isArray(question && question.options_gr)
+        ? question.options_gr
+        : (Array.isArray(defaults.options_gr) ? defaults.options_gr : []);
       return {
         id,
         label: String(question && question.label || `Question ${order + 1}`),
+        label_gr: String(question && question.label_gr || defaults.label_gr || question && question.label || `Ερώτηση ${order + 1}`),
         type,
         group: validGroups.has(question && question.group) ? question.group : "details",
         required: Boolean(question && question.required),
         placeholder: String(question && question.placeholder || ""),
-        options: (type === "buttons" || type === "select")
-          ? (Array.isArray(question && question.options) ? question.options : []).map((option) => String(option)).filter(Boolean)
-          : [],
+        placeholder_gr: String(question && question.placeholder_gr || defaults.placeholder_gr || question && question.placeholder || ""),
+        options,
+        options_gr: options.map((option, index) => String(sourceGreekOptions[index] || option)),
       };
     }),
   };

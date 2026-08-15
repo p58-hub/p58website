@@ -525,6 +525,7 @@ function App({ session }) {
   const [sideOpen, setSideOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef(null);
+  const sideAccountRef = useRef(null);
   const goSection = (s) => { setSection(s); setSideOpen(false); };
   const goProjectTexts = (id = "all") => { setTextsProject(id); setEditing(null); goSection("texts"); };
 
@@ -536,7 +537,7 @@ function App({ session }) {
         setAccountOpen(false);
         return;
       }
-      if (event.type === "mousedown" && accountRef.current && !accountRef.current.contains(event.target)) {
+      if (event.type === "mousedown" && !accountRef.current?.contains(event.target) && !sideAccountRef.current?.contains(event.target)) {
         setAccountOpen(false);
       }
     };
@@ -857,6 +858,12 @@ function App({ session }) {
     setToast("Inquiry questions saved — ready to publish");
   };
 
+  const onSaveWebsiteTexts = (websiteTexts) => {
+    const site = normaliseSite({ ...(data.site || DEFAULT_SITE), websiteTexts });
+    update({ ...data, site });
+    setToast("Website texts saved — ready to publish");
+  };
+
   /* The gallery is driven by each project's `featured` flag, so this is the
      same switch as "Show on home rail" in the project editor — just reachable
      from the one screen that shows the whole selection at once. */
@@ -885,7 +892,7 @@ function App({ session }) {
 
   // If a section is off-limits for this role, fall back to Projects
   // rather than rendering an empty panel.
-  const SECTION_CAPABILITY = { site: "siteSettings", hero: "heroGallery", "inquiry-form": "siteSettings" };
+  const SECTION_CAPABILITY = { site: "siteSettings", "website-texts": "siteSettings", hero: "heroGallery", "inquiry-form": "siteSettings" };
   useEffect(() => {
     const needed = SECTION_CAPABILITY[section];
     if (needed && !can(needed)) setSection("projects");
@@ -938,6 +945,11 @@ function App({ session }) {
             <span>Site settings</span><span className="count">⚙</span>
           </button>
         )}
+        {can("siteSettings") && (
+          <button className={`side-btn side-sub-btn ${section === "website-texts" ? "on" : ""}`} onClick={() => goSection("website-texts")}>
+            <span>Website texts</span><span className="count">Aa</span>
+          </button>
+        )}
         {can("heroGallery") && (
           <button className={`side-btn ${section === "hero" ? "on" : ""}`} onClick={() => goSection("hero")}>
             <span>Hero gallery</span><span className="count">▶</span>
@@ -953,6 +965,18 @@ function App({ session }) {
           </a>
 
           <div className="side-meta">localStorage · v1</div>
+          <div className={"side-account" + (accountOpen ? " open" : "")} ref={sideAccountRef}>
+            <button className="side-account-trigger" type="button" aria-label="Open account menu" aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((open) => !open)}>
+              <span className="side-account-avatar" aria-hidden="true">{initials(user.name)}</span>
+              <span className="side-account-copy"><b>{user.name}</b><small>{window.P58Auth.ROLE_LABELS[user.role] || user.role}</small></span>
+            </button>
+            {accountOpen && (
+              <div className="topbar-account-popover side-account-popover" role="menu" aria-label="Account menu">
+                <div className="topbar-account-head"><span className="topbar-account-avatar" aria-hidden="true">{initials(user.name)}</span><span><b title={user.name}>{user.name}</b><small>{window.P58Auth.ROLE_LABELS[user.role] || user.role}</small></span></div>
+                <button className="topbar-account-signout" type="button" role="menuitem" onClick={() => window.P58Auth.logout()}>Sign out</button>
+              </div>
+            )}
+          </div>
         </div>
       </aside>
 
@@ -994,7 +1018,7 @@ function App({ session }) {
                 <span className="ic">{Ic.reset}</span><span>Reset</span>
               </button>
             )}
-            <button className="btn primary new-content-btn" style={(section === "texts" || section === "site" || section === "hero" || section === "inquiries" || section === "inquiry-form" || section === "media") ? { display: "none" } : null} onClick={() => setEditing({ kind: section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news" : "team", id: null })}>
+            <button className="btn primary new-content-btn" style={(section === "texts" || section === "site" || section === "website-texts" || section === "hero" || section === "inquiries" || section === "inquiry-form" || section === "media") ? { display: "none" } : null} onClick={() => setEditing({ kind: section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news" : "team", id: null })}>
               <span className="ic">{Ic.plus}</span><span>New {section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news item" : section === "site" ? "—" : "person"}</span>
             </button>
           </div>
@@ -1069,6 +1093,9 @@ function App({ session }) {
           {section === "site" && can("siteSettings") && (
             <SiteSettings site={normaliseSite(data.site || DEFAULT_SITE)} onSave={onSaveSite} />
           )}
+          {section === "website-texts" && can("siteSettings") && (
+            <WebsiteTextsSettings site={normaliseSite(data.site || DEFAULT_SITE)} onSave={onSaveWebsiteTexts} />
+          )}
           {section === "hero" && can("heroGallery") && (
             <HeroGallerySettings
               heroGallery={normaliseSite(data.site || DEFAULT_SITE).heroGallery}
@@ -1082,11 +1109,11 @@ function App({ session }) {
       </main>
 
       <nav className="mobile-bottom-nav" aria-label="Primary dashboard navigation">
-        <button className={section === "projects" ? "on" : ""} type="button" onClick={() => goSection("projects")}>Projects</button>
-        <button className={section === "media" ? "on" : ""} type="button" onClick={() => goSection("media")}>Media</button>
+        <button className={section === "projects" ? "on" : ""} type="button" onClick={() => goSection("projects")}><span className="mobile-nav-icon" aria-hidden="true">▤</span><span>Projects</span></button>
+        <button className={section === "media" ? "on" : ""} type="button" onClick={() => goSection("media")}><span className="mobile-nav-icon" aria-hidden="true">▦</span><span>Media</span></button>
         <button className="mobile-create-project" type="button" aria-label="Create new project" onClick={() => { goSection("projects"); setEditing({ kind: "project", id: null }); }}><span aria-hidden="true">+</span></button>
-        <button className={(section === "site" || section === "hero") ? "on" : ""} type="button" disabled={!can("siteSettings")} onClick={() => can("siteSettings") && goSection("site")}>Settings</button>
-        <button className={(sideOpen || !["projects", "media", "site", "hero"].includes(section)) ? "on" : ""} type="button" onClick={() => setSideOpen(true)}>More{unreadInquiries ? ` · ${unreadInquiries}` : ""}</button>
+        <button className={(section === "site" || section === "website-texts" || section === "hero") ? "on" : ""} type="button" disabled={!can("siteSettings")} onClick={() => can("siteSettings") && goSection("site")}><span className="mobile-nav-icon" aria-hidden="true">⚙</span><span>Settings</span></button>
+        <button className={(sideOpen || !["projects", "media", "site", "website-texts", "hero"].includes(section)) ? "on" : ""} type="button" onClick={() => setSideOpen(true)}><span className="mobile-nav-icon mobile-nav-more" aria-hidden="true">•••</span><span>More{unreadInquiries ? ` · ${unreadInquiries}` : ""}</span></button>
       </nav>
 
       {editing && editing.kind === "project" && (
@@ -1594,21 +1621,31 @@ function formatInquiryDate(ts) {
 function InquiryFormSettings({ inquiryForm, onSave }) {
   const normalise = window.normaliseInquiryForm || ((form) => form);
   const groups = window.INQUIRY_FORM_GROUPS || [
-    { id: "planning", title: "What are you planning?" },
-    { id: "space", title: "About the space" },
-    { id: "details", title: "A few details" },
-    { id: "contact", title: "How can we reach you?" },
+    { id: "planning", title: "What are you planning?", title_gr: "Τι σχεδιάζετε;" },
+    { id: "space", title: "About the space", title_gr: "Σχετικά με τον χώρο" },
+    { id: "details", title: "A few details", title_gr: "Μερικές λεπτομέρειες" },
+    { id: "contact", title: "How can we reach you?", title_gr: "Πώς μπορούμε να επικοινωνήσουμε;" },
   ];
   const [form, setForm] = useState(() => JSON.parse(JSON.stringify(normalise(inquiryForm || {}))));
+  const [selectedId, setSelectedId] = useState(() => normalise(inquiryForm || {}).questions?.[0]?.id || null);
+  const [selectedGroup, setSelectedGroup] = useState(groups[0]?.id || "planning");
+  const [adding, setAdding] = useState(false);
+  const [preview, setPreview] = useState(false);
+  const [previewLang, setPreviewLang] = useState("en");
+  const [draft, setDraft] = useState({ label: "", label_gr: "", type: "text", group: "details", required: false });
 
   useEffect(() => {
-    setForm(JSON.parse(JSON.stringify(normalise(inquiryForm || {}))));
+    const next = JSON.parse(JSON.stringify(normalise(inquiryForm || {})));
+    setForm(next);
+    setSelectedId((current) => next.questions.some((question) => question.id === current) ? current : next.questions[0]?.id || null);
   }, [inquiryForm]);
 
   const questions = form.questions || [];
+  const stepQuestions = questions.filter((question) => question.group === selectedGroup);
+  const selectedIndex = questions.findIndex((question) => question.id === selectedId);
   const changed = JSON.stringify(normalise(form)) !== JSON.stringify(normalise(inquiryForm || {}));
-  const valid = questions.length > 0 && questions.every((question) => question.label.trim() && (
-    !["buttons", "select"].includes(question.type) || (question.options || []).some((option) => String(option).trim())
+  const valid = questions.length > 0 && questions.every((question) => question.label.trim() && question.label_gr.trim() && (
+    !["buttons", "select"].includes(question.type) || ((question.options || []).some((option) => String(option).trim()) && (question.options_gr || []).some((option) => String(option).trim()))
   ));
   const updateQuestion = (index, patch) => setForm((current) => ({
     ...current,
@@ -1616,46 +1653,84 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
   }));
   const moveQuestion = (index, direction) => setForm((current) => {
     const next = current.questions.slice();
-    const target = index + direction;
-    if (target < 0 || target >= next.length) return current;
+    const stepIndexes = next.map((question, questionIndex) => question.group === next[index].group ? questionIndex : -1).filter((questionIndex) => questionIndex >= 0);
+    const position = stepIndexes.indexOf(index);
+    const target = stepIndexes[position + direction];
+    if (target == null) return current;
     [next[index], next[target]] = [next[target], next[index]];
     return { ...current, questions: next };
   });
   const removeQuestion = (index) => {
-    if (!confirm("Remove this question from the inquiry form? Existing inquiries will keep their saved answer.")) return;
-    setForm((current) => ({ ...current, questions: current.questions.filter((_, i) => i !== index) }));
+    if (!confirm("Remove this sub-section from the inquiry form? Existing inquiries will keep their saved answer.")) return;
+    const remaining = questions.filter((_, i) => i !== index);
+    setForm((current) => ({ ...current, questions: remaining }));
+    setSelectedId(remaining[Math.min(index, remaining.length - 1)]?.id || null);
   };
-  const addQuestion = () => setForm((current) => ({
-    ...current,
-    questions: [...current.questions, {
+  const openAddQuestion = () => {
+    setDraft({ label: "", label_gr: "", type: "text", group: selectedGroup, required: false });
+    setAdding(true);
+  };
+  const addQuestion = () => {
+    if (!draft.label.trim() || !draft.label_gr.trim()) return;
+    const question = {
       id: newId("question"),
-      label: "New question",
-      type: "text",
-      group: "details",
-      required: false,
+      label: draft.label.trim(),
+      label_gr: draft.label_gr.trim(),
+      type: draft.type,
+      group: draft.group,
+      required: draft.required,
       placeholder: "",
-      options: [],
-    }],
-  }));
-  const updateOption = (questionIndex, optionIndex, value) => {
-    const options = [...(questions[questionIndex].options || [])];
-    options[optionIndex] = value;
-    updateQuestion(questionIndex, { options });
+      placeholder_gr: "",
+      options: ["buttons", "select"].includes(draft.type) ? ["Answer 1"] : [],
+      options_gr: ["buttons", "select"].includes(draft.type) ? ["Απάντηση 1"] : [],
+    };
+    setForm((current) => ({ ...current, questions: [...current.questions, question] }));
+    setSelectedGroup(question.group);
+    setSelectedId(question.id);
+    setAdding(false);
   };
-  const addOption = (questionIndex) => updateQuestion(questionIndex, { options: [...(questions[questionIndex].options || []), "New answer"] });
-  const removeOption = (questionIndex, optionIndex) => updateQuestion(questionIndex, { options: (questions[questionIndex].options || []).filter((_, i) => i !== optionIndex) });
+  const updateOption = (questionIndex, optionIndex, value, lang = "en") => {
+    const key = lang === "gr" ? "options_gr" : "options";
+    const options = [...(questions[questionIndex][key] || [])];
+    options[optionIndex] = value;
+    updateQuestion(questionIndex, { [key]: options });
+  };
+  const addOption = (questionIndex) => updateQuestion(questionIndex, { options: [...(questions[questionIndex].options || []), "New answer"], options_gr: [...(questions[questionIndex].options_gr || []), "Νέα απάντηση"] });
+  const removeOption = (questionIndex, optionIndex) => updateQuestion(questionIndex, { options: (questions[questionIndex].options || []).filter((_, i) => i !== optionIndex), options_gr: (questions[questionIndex].options_gr || []).filter((_, i) => i !== optionIndex) });
+  const previewText = (item, field) => previewLang === "gr" ? (item[`${field}_gr`] || item[field] || "") : (item[field] || "");
+  const previewField = (question) => {
+    const options = previewLang === "gr" ? (question.options_gr || question.options || []) : (question.options || []);
+    if (question.type === "buttons") return <div className="inquiry-preview-choices">{options.map((option) => <button type="button" key={option}>{option}</button>)}</div>;
+    if (question.type === "select") return <select disabled><option>{previewLang === "gr" ? "Επιλέξτε…" : "Select…"}</option>{options.map((option) => <option key={option}>{option}</option>)}</select>;
+    if (question.type === "textarea") return <textarea rows="3" disabled placeholder={previewText(question, "placeholder")} />;
+    return <input disabled type={question.type === "email" ? "email" : question.type === "tel" ? "tel" : "text"} placeholder={previewText(question, "placeholder")} />;
+  };
 
   return (
     <>
-      <SectionHead eyebrow="/ Questions · answers · required fields" title="Form questions" />
+      <SectionHead eyebrow="/ English · Greek · answers · required fields" title="Form questions" />
       <div className="settings-card inquiry-form-settings">
         <div className="inquiry-builder-intro">
-          <div><h2>Project inquiry form</h2><p>Edit the questions visitors answer. Choice and dropdown fields can have any number of answers.</p></div>
-          <button className="btn primary" type="button" onClick={addQuestion}><span className="ic">{Ic.plus}</span>Add question</button>
+          <div><h2>Project inquiry form</h2><p>Select a step, then organise the sub-sections shown inside it.</p></div>
+          <div className="inquiry-builder-buttons"><button className="btn ghost" type="button" onClick={() => setPreview(true)}>Preview</button><button className="btn primary" type="button" onClick={openAddQuestion}><span className="ic">{Ic.plus}</span>Add sub-section</button></div>
         </div>
 
-        <div className="inquiry-builder-list">
-          {questions.map((question, index) => {
+        <div className="inquiry-builder-workspace">
+          <label className="inquiry-question-select">
+            <span>Select step</span>
+            <select value={selectedGroup} onChange={(event) => setSelectedGroup(event.target.value)}>
+              {groups.map((group, index) => <option value={group.id} key={group.id}>Step {String(index + 1).padStart(2, "0")} · {group.title} / {group.title_gr}</option>)}
+            </select>
+          </label>
+          <nav className="inquiry-question-menu inquiry-step-menu" aria-label="Form steps">
+            {groups.map((group, index) => {
+              const count = questions.filter((question) => question.group === group.id).length;
+              return <button className={group.id === selectedGroup ? "on" : ""} type="button" key={group.id} onClick={() => setSelectedGroup(group.id)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{group.title}</strong><small>{group.title_gr}</small><i>{count} fields</i></button>;
+            })}
+          </nav>
+          <div className="inquiry-builder-list">
+          <div className="inquiry-step-heading"><div><span>Step {String(groups.findIndex((group) => group.id === selectedGroup) + 1).padStart(2, "0")}</span><h3>{groups.find((group) => group.id === selectedGroup)?.title}</h3><small>{groups.find((group) => group.id === selectedGroup)?.title_gr}</small></div><button className="btn ghost" type="button" onClick={openAddQuestion}><span className="ic">{Ic.plus}</span>Add sub-section</button></div>
+          {questions.map((question, index) => ({ question, index })).filter((item) => item.question.group === selectedGroup).map(({ question, index }, stepIndex) => {
             const hasOptions = question.type === "buttons" || question.type === "select";
             return (
               <section className="inquiry-question-card" key={question.id}>
@@ -1664,17 +1739,18 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
                   <strong>{question.label || "Untitled question"}</strong>
                   {question.required && <span className="inquiry-required-badge">Required</span>}
                   <div className="inquiry-question-actions">
-                    <button type="button" onClick={() => moveQuestion(index, -1)} disabled={index === 0} title="Move up">↑</button>
-                    <button type="button" onClick={() => moveQuestion(index, 1)} disabled={index === questions.length - 1} title="Move down">↓</button>
+                    <button type="button" onClick={() => moveQuestion(index, -1)} disabled={stepIndex === 0} title="Move up">↑</button>
+                    <button type="button" onClick={() => moveQuestion(index, 1)} disabled={stepIndex === stepQuestions.length - 1} title="Move down">↓</button>
                     <button type="button" className="danger" onClick={() => removeQuestion(index)} title="Remove question">{Ic.trash}</button>
                   </div>
                 </div>
-                <div className="inquiry-question-grid">
-                  <Field label="Question">
-                    <input type="text" value={question.label} onChange={(event) => updateQuestion(index, { label: event.target.value })} />
-                  </Field>
+                <div className="inquiry-language-grid">
+                  <div className="inquiry-language-panel"><div className="inquiry-language-title"><b>EN</b><span>English</span></div><Field label="Question"><input type="text" value={question.label} onChange={(event) => updateQuestion(index, { label: event.target.value })} /></Field><Field label="Placeholder"><input type="text" value={question.placeholder || ""} onChange={(event) => updateQuestion(index, { placeholder: event.target.value })} placeholder="Optional hint" /></Field></div>
+                  <div className="inquiry-language-panel"><div className="inquiry-language-title"><b>GR</b><span>Ελληνικά</span></div><Field label="Ερώτηση"><input type="text" value={question.label_gr || ""} onChange={(event) => updateQuestion(index, { label_gr: event.target.value })} /></Field><Field label="Placeholder"><input type="text" value={question.placeholder_gr || ""} onChange={(event) => updateQuestion(index, { placeholder_gr: event.target.value })} placeholder="Προαιρετική υπόδειξη" /></Field></div>
+                </div>
+                <div className="inquiry-question-grid inquiry-question-settings-grid">
                   <Field label="Answer type">
-                    <select value={question.type} onChange={(event) => updateQuestion(index, { type: event.target.value, options: ["buttons", "select"].includes(event.target.value) ? (question.options.length ? question.options : ["Answer 1"]) : [] })}>
+                    <select value={question.type} onChange={(event) => { const choice = ["buttons", "select"].includes(event.target.value); updateQuestion(index, { type: event.target.value, options: choice ? (question.options.length ? question.options : ["Answer 1"]) : [], options_gr: choice ? (question.options_gr.length ? question.options_gr : ["Απάντηση 1"]) : [] }); }}>
                       <option value="text">Short text</option>
                       <option value="textarea">Long text</option>
                       <option value="email">Email</option>
@@ -1688,9 +1764,6 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
                       {groups.map((group) => <option key={group.id} value={group.id}>{group.title}</option>)}
                     </select>
                   </Field>
-                  <Field label="Placeholder">
-                    <input type="text" value={question.placeholder || ""} onChange={(event) => updateQuestion(index, { placeholder: event.target.value })} placeholder="Optional hint" />
-                  </Field>
                 </div>
                 <label className="inquiry-required-toggle">
                   <input type="checkbox" checked={question.required} onChange={(event) => updateQuestion(index, { required: event.target.checked })} />
@@ -1699,11 +1772,12 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
 
                 {hasOptions && (
                   <div className="inquiry-options-editor">
-                    <div className="inquiry-options-title"><span>Answers</span><button type="button" onClick={() => addOption(index)}>{Ic.plus} Add answer</button></div>
+                    <div className="inquiry-options-title"><span>Answers · English / Greek</span><button type="button" onClick={() => addOption(index)}>{Ic.plus} Add answer</button></div>
                     {(question.options || []).map((option, optionIndex) => (
-                      <div className="inquiry-option-row" key={optionIndex}>
+                      <div className="inquiry-option-row inquiry-option-row-bilingual" key={optionIndex}>
                         <span>{optionIndex + 1}</span>
-                        <input type="text" value={option} onChange={(event) => updateOption(index, optionIndex, event.target.value)} />
+                        <input aria-label={`English answer ${optionIndex + 1}`} type="text" value={option} onChange={(event) => updateOption(index, optionIndex, event.target.value, "en")} />
+                        <input aria-label={`Greek answer ${optionIndex + 1}`} type="text" value={(question.options_gr || [])[optionIndex] || ""} onChange={(event) => updateOption(index, optionIndex, event.target.value, "gr")} />
                         <button type="button" onClick={() => removeOption(index, optionIndex)} title="Remove answer">{Ic.trash}</button>
                       </div>
                     ))}
@@ -1712,14 +1786,49 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
               </section>
             );
           })}
-          {!questions.length && <div className="empty-row">No questions. Add one to rebuild the inquiry form.</div>}
+          {!stepQuestions.length && <div className="empty-row">This step has no sub-sections yet.</div>}
+          </div>
         </div>
 
         <div className="settings-foot">
-          <span className="muted">{questions.length} questions · {questions.filter((question) => question.required).length} mandatory</span>
-          <button className="btn primary" type="button" disabled={!changed || !valid} onClick={() => onSave(normalise(form))}>Save questions</button>
+          <span className="muted">{groups.length} steps · {questions.length} sub-sections · {questions.filter((question) => question.required).length} mandatory</span>
+          <button className="btn primary" type="button" disabled={!changed || !valid} onClick={() => onSave(normalise(form))}>Save form</button>
         </div>
       </div>
+      {adding && (
+        <div className="sheet-wrap inquiry-builder-modal" onMouseDown={(event) => event.target === event.currentTarget && setAdding(false)}>
+          <div className="sheet inquiry-builder-dialog" role="dialog" aria-modal="true" aria-labelledby="add-question-title">
+            <div className="sheet-head"><div><div className="eyebrow">/ Step sub-section</div><h2 id="add-question-title">Add sub-section</h2></div><button className="icon-btn" type="button" aria-label="Close" onClick={() => setAdding(false)}>{Ic.close}</button></div>
+            <div className="sheet-body">
+              <div className="inquiry-language-grid">
+                <div className="inquiry-language-panel"><div className="inquiry-language-title"><b>EN</b><span>English</span></div><Field label="Question" required><input autoFocus type="text" value={draft.label} onChange={(event) => setDraft({ ...draft, label: event.target.value })} /></Field></div>
+                <div className="inquiry-language-panel"><div className="inquiry-language-title"><b>GR</b><span>Ελληνικά</span></div><Field label="Ερώτηση" required><input type="text" value={draft.label_gr} onChange={(event) => setDraft({ ...draft, label_gr: event.target.value })} /></Field></div>
+              </div>
+              <div className="inquiry-question-grid inquiry-question-settings-grid">
+                <Field label="Answer type"><select value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value })}><option value="text">Short text</option><option value="textarea">Long text</option><option value="email">Email</option><option value="tel">Phone</option><option value="buttons">Choice buttons</option><option value="select">Dropdown</option></select></Field>
+                <Field label="Form step"><select value={draft.group} onChange={(event) => setDraft({ ...draft, group: event.target.value })}>{groups.map((group) => <option key={group.id} value={group.id}>{group.title}</option>)}</select></Field>
+              </div>
+              <label className="inquiry-required-toggle"><input type="checkbox" checked={draft.required} onChange={(event) => setDraft({ ...draft, required: event.target.checked })} /><span>Mandatory question</span></label>
+            </div>
+            <div className="sheet-foot"><span className="muted">Added to {groups.find((group) => group.id === draft.group)?.title}</span><div className="right"><button className="btn ghost" type="button" onClick={() => setAdding(false)}>Cancel</button><button className="btn primary" type="button" disabled={!draft.label.trim() || !draft.label_gr.trim()} onClick={addQuestion}>Add sub-section</button></div></div>
+          </div>
+        </div>
+      )}
+      {preview && (
+        <div className="sheet-wrap inquiry-builder-modal" onMouseDown={(event) => event.target === event.currentTarget && setPreview(false)}>
+          <div className="sheet inquiry-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="form-preview-title">
+            <div className="sheet-head"><div><div className="eyebrow">/ Visitor view</div><h2 id="form-preview-title">Form preview</h2></div><div className="controls"><div className="inquiry-preview-language"><button className={previewLang === "en" ? "on" : ""} type="button" onClick={() => setPreviewLang("en")}>EN</button><button className={previewLang === "gr" ? "on" : ""} type="button" onClick={() => setPreviewLang("gr")}>GR</button></div><button className="icon-btn" type="button" aria-label="Close" onClick={() => setPreview(false)}>{Ic.close}</button></div></div>
+            <div className="sheet-body inquiry-form-preview">
+              {groups.map((group) => {
+                const inGroup = questions.filter((question) => question.group === group.id);
+                if (!inGroup.length) return null;
+                return <section key={group.id}><span className="inquiry-preview-step">{previewText(group, "title")}</span>{inGroup.map((question) => <label key={question.id}><b>{previewText(question, "label")}{question.required ? " *" : ""}</b>{previewField(question)}</label>)}</section>;
+              })}
+            </div>
+            <div className="sheet-foot"><span className="muted">Preview only — answers are not submitted</span><div className="right"><button className="btn primary" type="button" onClick={() => setPreview(false)}>Close preview</button></div></div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
@@ -1833,6 +1942,88 @@ function SectionHead({ eyebrow, title, children }) {
       </div>
       {children ? <div className="section-head-actions">{children}</div> : null}
     </div>
+  );
+}
+
+const WEBSITE_TEXT_GROUPS = [
+  { id: "navigation", label: "Navigation", route: "home" },
+  { id: "home", label: "Home", route: "home" },
+  { id: "projects", label: "Project indexes", route: "projects" },
+  { id: "architecture", label: "Architecture & services", route: "architecture" },
+  { id: "studio", label: "People & studio", route: "agency" },
+  { id: "project-ui", label: "Project interface", route: "projects" },
+  { id: "footer", label: "Footer & contact", route: "contact" },
+  { id: "inquiry", label: "Inquiry introduction", route: "start" },
+  { id: "general", label: "General labels", route: "home" },
+];
+
+function websiteTextGroup(key) {
+  if (["retail", "residential", "agency", "contact", "home", "menu", "more", "search_placeholder", "no_results", "nav", "open_kbd", "close_kbd", "retail_brands", "project_types", "projects", "all", "all_brands", "sort", "sort_date", "sort_region", "menu_eyebrow", "studio_location"].includes(key)) return "navigation";
+  if (key.startsWith("home_") || ["see_more_projects", "see_all_projects", "all_rooms_cta", "view_project", "location", "year", "size", "status"].includes(key)) return "home";
+  if (key.startsWith("interiors_") || ["two_operators", "rooms_plus_rooms", "proj_word", "pg_rollout", "dn_rollout"].includes(key)) return "projects";
+  if (key.startsWith("arch_") || key.startsWith("svc_") || key === "work_with_us" || key === "cta_2026") return "architecture";
+  if (key.startsWith("agency_") || ["team_eyebrow", "team_h", "headcount", "headcount_unit", "studios", "updated_label", "practice_eyebrow", "short_history", "news_eyebrow", "recently"].includes(key)) return "studio";
+  if (key.startsWith("pd_") || ["next_project", "view"].includes(key)) return "project-ui";
+  if (key.startsWith("foot_")) return "footer";
+  if (key.startsWith("inquiry_")) return "inquiry";
+  return "general";
+}
+
+function WebsiteTextsSettings({ site, onSave }) {
+  const dictionaries = window.DICT_I18N || { en: {}, gr: {} };
+  const makeDraft = (settings) => ({
+    en: Object.fromEntries(Object.keys(dictionaries.en || {}).map((key) => [key, Array.isArray((settings.websiteTexts?.en || {})[key] ?? dictionaries.en[key]) ? ((settings.websiteTexts?.en || {})[key] ?? dictionaries.en[key]).join("\n") : String((settings.websiteTexts?.en || {})[key] ?? dictionaries.en[key] ?? "")])),
+    gr: Object.fromEntries(Object.keys(dictionaries.en || {}).map((key) => [key, Array.isArray((settings.websiteTexts?.gr || {})[key] ?? dictionaries.gr?.[key] ?? dictionaries.en[key]) ? ((settings.websiteTexts?.gr || {})[key] ?? dictionaries.gr?.[key] ?? dictionaries.en[key]).join("\n") : String((settings.websiteTexts?.gr || {})[key] ?? dictionaries.gr?.[key] ?? dictionaries.en[key] ?? "")])),
+  });
+  const [draft, setDraft] = useState(() => makeDraft(site));
+  const [group, setGroup] = useState("navigation");
+  const [query, setQuery] = useState("");
+  const [previewLang, setPreviewLang] = useState("en");
+
+  useEffect(() => { setDraft(makeDraft(site)); }, [site]);
+
+  const keys = Object.keys(dictionaries.en || {}).filter((key) => websiteTextGroup(key) === group && (!query || `${key} ${draft.en[key]} ${draft.gr[key]}`.toLowerCase().includes(query.toLowerCase())));
+  const serialise = () => ({
+    en: Object.fromEntries(Object.keys(draft.en).map((key) => [key, Array.isArray(dictionaries.en[key]) ? draft.en[key].split("\n").map((line) => line.trim()).filter(Boolean) : draft.en[key]])),
+    gr: Object.fromEntries(Object.keys(draft.gr).map((key) => [key, Array.isArray(dictionaries.gr?.[key] || dictionaries.en[key]) ? draft.gr[key].split("\n").map((line) => line.trim()).filter(Boolean) : draft.gr[key]])),
+  });
+  const changed = JSON.stringify(serialise()) !== JSON.stringify({
+    en: { ...dictionaries.en, ...(site.websiteTexts?.en || {}) },
+    gr: { ...dictionaries.gr, ...(site.websiteTexts?.gr || {}) },
+  });
+  const updateText = (lang, key, value) => setDraft((current) => ({ ...current, [lang]: { ...current[lang], [key]: value } }));
+  const previewText = (key) => {
+    const section = WEBSITE_TEXT_GROUPS.find((item) => item.id === websiteTextGroup(key));
+    const base = dictionaries[previewLang]?.[key] ?? dictionaries.en?.[key];
+    const value = Array.isArray(base)
+      ? draft[previewLang][key].split("\n").map((line) => line.trim()).filter(Boolean)
+      : draft[previewLang][key];
+    try { localStorage.setItem("p58_website_text_preview", JSON.stringify({ key, lang: previewLang, value, createdAt: Date.now() })); } catch (error) {}
+    const href = `index.html?textPreview=${encodeURIComponent(key)}&previewLang=${previewLang}#${section?.route || "home"}`;
+    window.open(href, "_blank", "noopener");
+  };
+
+  return (
+    <>
+      <SectionHead eyebrow="/ All website copy · English + Greek" title="Website texts">
+        <div className="website-text-preview-lang" aria-label="Preview language"><button className={previewLang === "en" ? "on" : ""} onClick={() => setPreviewLang("en")}>EN</button><button className={previewLang === "gr" ? "on" : ""} onClick={() => setPreviewLang("gr")}>GR</button></div>
+      </SectionHead>
+      <div className="website-texts-toolbar"><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search website texts…" /><span>{Object.keys(dictionaries.en || {}).length} texts · projects excluded</span></div>
+      <div className="website-texts-workspace">
+        <nav className="website-texts-menu" aria-label="Website text sections">
+          {WEBSITE_TEXT_GROUPS.map((item) => {
+            const count = Object.keys(dictionaries.en || {}).filter((key) => websiteTextGroup(key) === item.id).length;
+            return <button className={group === item.id ? "on" : ""} type="button" key={item.id} onClick={() => setGroup(item.id)}><span>{item.label}</span><small>{count}</small></button>;
+          })}
+        </nav>
+        <div className="website-texts-sheet">
+          <div className="website-texts-head"><span>Text key</span><span>English</span><span>Ελληνικά</span><span>Location</span></div>
+          {keys.map((key) => <div className="website-text-row" key={key}><code>{key.replaceAll("_", " ")}</code><textarea rows={Array.isArray(dictionaries.en[key]) ? 4 : 2} value={draft.en[key] || ""} onChange={(event) => updateText("en", key, event.target.value)} /><textarea rows={Array.isArray(dictionaries.gr?.[key] || dictionaries.en[key]) ? 4 : 2} value={draft.gr[key] || ""} onChange={(event) => updateText("gr", key, event.target.value)} /><button className="btn ghost" type="button" onClick={() => previewText(key)}>Preview {previewLang.toUpperCase()} ↗</button></div>)}
+          {!keys.length && <div className="empty-row">No website texts match this search.</div>}
+          <div className="settings-foot"><span className="muted">Changes appear after Save and Publish</span><button className="btn primary" type="button" disabled={!changed} onClick={() => onSave(serialise())}>Save website texts</button></div>
+        </div>
+      </div>
+    </>
   );
 }
 

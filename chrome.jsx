@@ -410,7 +410,7 @@ function Nav({ route, go }) {
             <span>{t("contact")}</span><span className="ar">↗</span>
           </button>
           <div className="mobile-drawer-footer">
-            <span>{t("two_cities")}</span>
+            <span>{t("studio_location")}</span>
             <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
               <window.LangToggle compact />
               <span>v1.0</span>
@@ -774,14 +774,16 @@ function ContactItem({ href, children }) {
 
 function Footer({ go }) {
   const t = window.useT();
+  const { lang } = window.useLang();
   const site = useSiteSettings();
   const contact = site.contact || {};
+  const siteCopy = (key) => site.websiteTexts?.[lang]?.[key] || site[key] || t(key);
   return (
     <footer className="foot">
       <div className="foot-top foot-top-2col" style={{ padding: "0px", textAlign: "left" }}>
         <div className="foot-big">
           <img src="assets/logo-black.svg" alt="Project58" className="foot-logo" style={{ height: 28, marginBottom: 24, display: "block", filter: "invert(1)" }} />
-          {site.foot_big || t("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }}>{site.foot_big_em || t("foot_big_em")}</em>
+          {siteCopy("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }}>{siteCopy("foot_big_em")}</em>
           <div className="foot-cta foot-cta-center">
             <button className="foot-start-btn" onClick={() => go({ name: "start" })}>Let’s meet!<span className="ar">→</span></button>
           </div>
@@ -799,8 +801,8 @@ function Footer({ go }) {
         </div>
       </div>
       <div className="foot-bot foot-bot-2">
-        <span>{site.foot_copy_left || t("foot_copy_left")}</span>
-        <span className="right">{site.foot_copy_right || t("foot_copy_right")}</span>
+        <span>{siteCopy("foot_copy_left")}</span>
+        <span className="right">{siteCopy("foot_copy_right")}</span>
       </div>
     </footer>);
 
@@ -809,13 +811,15 @@ function Footer({ go }) {
 /* ===== Contact page — same content/design as the footer, as its own destination ===== */
 function ContactPage({ go }) {
   const t = window.useT();
+  const { lang } = window.useLang();
   const site = useSiteSettings();
   const contact = site.contact || {};
+  const siteCopy = (key) => site.websiteTexts?.[lang]?.[key] || site[key] || t(key);
   return (
     <div className="contact-page page-enter">
       <div className="foot-top foot-top-2col" style={{ padding: "0px", textAlign: "left" }}>
         <div className="foot-big">
-          {site.foot_big || t("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }}>{site.foot_big_em || t("foot_big_em")}</em>
+          {siteCopy("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }}>{siteCopy("foot_big_em")}</em>
           <div className="foot-cta foot-cta-center">
             <button className="foot-start-btn" onClick={() => go({ name: "start" })}>Let’s meet!<span className="ar">→</span></button>
           </div>
@@ -833,8 +837,8 @@ function ContactPage({ go }) {
         </div>
       </div>
       <div className="foot-bot foot-bot-2">
-        <span>{site.foot_copy_left || t("foot_copy_left")}</span>
-        <span className="right">{site.foot_copy_right || t("foot_copy_right")}</span>
+        <span>{siteCopy("foot_copy_left")}</span>
+        <span className="right">{siteCopy("foot_copy_right")}</span>
       </div>
     </div>);
 
@@ -882,6 +886,7 @@ async function notifyInquiry(inquiry) {
 
 function StartProjectPage({ go }) {
   const t = window.useT();
+  const { lang } = window.useLang();
   const site = useSiteSettings();
   const inquiryForm = window.normaliseInquiryForm
     ? window.normaliseInquiryForm(site.inquiryForm)
@@ -902,6 +907,7 @@ function StartProjectPage({ go }) {
   const [f, setF] = useState(() => Object.fromEntries(questions.map((question) => [question.id, ""])));
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
   const onClose = () => go({ name: "contact" });
+  const localText = (item, field) => lang === "gr" ? (item[`${field}_gr`] || item[field] || "") : (item[field] || "");
 
   useEffect(() => {
     setF((current) => ({ ...Object.fromEntries(questions.map((question) => [question.id, ""])), ...current }));
@@ -914,7 +920,7 @@ function StartProjectPage({ go }) {
     return true;
   };
   const steps = groupDefinitions
-    .map((group) => ({ ...group, questions: questions.filter((question) => question.group === group.id) }))
+    .map((group) => ({ ...group, title: localText(group, "title"), questions: questions.filter((question) => question.group === group.id) }))
     .filter((group) => group.questions.length)
     .map((group) => ({ ...group, valid: group.questions.every(questionValid) }));
   const last = steps.length - 1;
@@ -927,7 +933,7 @@ function StartProjectPage({ go }) {
     const inquiry = {
       id: "inq-" + Date.now().toString(36), createdAt: Date.now(), status: "new", ...f,
       answers: Object.fromEntries(questions.map((question) => [question.id, f[question.id] || ""])),
-      questionLabels: Object.fromEntries(questions.map((question) => [question.id, question.label])),
+      questionLabels: Object.fromEntries(questions.map((question) => [question.id, localText(question, "label")])),
     };
     saveInquiry(inquiry);
     await notifyInquiry(inquiry);
@@ -937,24 +943,27 @@ function StartProjectPage({ go }) {
 
   const renderQuestion = (question) => {
     const value = f[question.id] || "";
-    const label = <span className="inquiry-question-label">{question.label}{question.required ? <b> *</b> : null}</span>;
+    const questionLabel = localText(question, "label");
+    const questionPlaceholder = localText(question, "placeholder");
+    const questionOptions = lang === "gr" ? (question.options_gr || question.options || []) : (question.options || []);
+    const label = <span className="inquiry-question-label">{questionLabel}{question.required ? <b> *</b> : null}</span>;
     if (question.type === "buttons") {
       return (
         <div className="inquiry-question" key={question.id}>
           {label}
           <div className="inquiry-types">
-            {(question.options || []).map((option) => <button type="button" key={option} className={`inquiry-type ${value === option ? "on" : ""}`} onClick={() => set(question.id, option)}>{option}</button>)}
+            {questionOptions.map((option) => <button type="button" key={option} className={`inquiry-type ${value === option ? "on" : ""}`} onClick={() => set(question.id, option)}>{option}</button>)}
           </div>
         </div>
       );
     }
     if (question.type === "select") {
-      return <label key={question.id}>{label}<select value={value} required={question.required} onChange={(event) => set(question.id, event.target.value)}><option value="">Select…</option>{(question.options || []).map((option) => <option key={option} value={option}>{option}</option>)}</select></label>;
+      return <label key={question.id}>{label}<select value={value} required={question.required} onChange={(event) => set(question.id, event.target.value)}><option value="">{lang === "gr" ? "Επιλέξτε…" : "Select…"}</option>{questionOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>;
     }
     if (question.type === "textarea") {
-      return <label key={question.id}>{label}<textarea rows="4" value={value} required={question.required} onChange={(event) => set(question.id, event.target.value)} placeholder={question.placeholder || ""} /></label>;
+      return <label key={question.id}>{label}<textarea rows="4" value={value} required={question.required} onChange={(event) => set(question.id, event.target.value)} placeholder={questionPlaceholder} /></label>;
     }
-    return <label key={question.id}>{label}<input type={question.type === "email" ? "email" : question.type === "tel" ? "tel" : "text"} value={value} required={question.required} onChange={(event) => set(question.id, event.target.value)} placeholder={question.placeholder || ""} /></label>;
+    return <label key={question.id}>{label}<input type={question.type === "email" ? "email" : question.type === "tel" ? "tel" : "text"} value={value} required={question.required} onChange={(event) => set(question.id, event.target.value)} placeholder={questionPlaceholder} /></label>;
   };
 
   const body = done ? (

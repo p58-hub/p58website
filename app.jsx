@@ -381,6 +381,39 @@ function App() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
+  aUseEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const key = params.get("textPreview");
+    if (!key) return undefined;
+    const lang = params.get("previewLang") === "gr" ? "gr" : "en";
+    const stored = window.readP58Store ? window.readP58Store() : null;
+    let previewValue = null;
+    try {
+      const preview = JSON.parse(localStorage.getItem("p58_website_text_preview") || "null");
+      if (preview && preview.key === key && preview.lang === lang && Date.now() - preview.createdAt < 60 * 60 * 1000) previewValue = preview.value;
+    } catch (error) {}
+    const custom = previewValue ?? stored?.site?.websiteTexts?.[lang]?.[key];
+    const fallback = window.DICT_I18N?.[lang]?.[key] ?? window.DICT_I18N?.en?.[key];
+    const value = custom != null && custom !== "" ? custom : fallback;
+    const needle = String(Array.isArray(value) ? value[0] || "" : value || "").trim();
+    if (!needle) return undefined;
+    const timer = setTimeout(() => {
+      const root = document.body;
+      if (!root) return;
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        if (!String(node.nodeValue || "").includes(needle)) continue;
+        const element = node.parentElement;
+        if (!element) continue;
+        element.classList.add("text-preview-highlight");
+        element.scrollIntoView({ behavior: "smooth", block: "center", inline: "center" });
+        break;
+      }
+    }, 450);
+    return () => clearTimeout(timer);
+  }, [route.name, contentVersion]);
+
   // A hidden project must not remain reachable through an old bookmark or a
   // previously shared URL. Replace that route with the public project index.
   aUseEffect(() => {

@@ -14,7 +14,10 @@ const LangContext = React.createContext(null);
 
 function LangProvider({ children }) {
   const [lang, setLangState] = React.useState(() => {
-    try { return localStorage.getItem(I18N_KEY) || "en"; } catch (e) { return "en"; }
+    try {
+      const previewLang = new URLSearchParams(location.search).get("previewLang");
+      return previewLang === "gr" || previewLang === "en" ? previewLang : localStorage.getItem(I18N_KEY) || "en";
+    } catch (e) { return "en"; }
   });
   const setLang = React.useCallback((l) => {
     setLangState(l);
@@ -38,12 +41,24 @@ function useLang() {
 
 function useT() {
   const { lang } = useLang();
+  let textPreview = null;
+  try {
+    const previewKey = new URLSearchParams(location.search).get("textPreview");
+    const storedPreview = JSON.parse(localStorage.getItem("p58_website_text_preview") || "null");
+    if (previewKey && storedPreview && storedPreview.key === previewKey && storedPreview.lang === lang && Date.now() - storedPreview.createdAt < 60 * 60 * 1000) textPreview = storedPreview;
+  } catch (error) {}
+  const stored = window.readP58Store ? window.readP58Store() : null;
+  const websiteTexts = stored && stored.site && stored.site.websiteTexts && stored.site.websiteTexts[lang]
+    ? stored.site.websiteTexts[lang]
+    : {};
   return React.useCallback((key) => {
+    if (textPreview && textPreview.key === key) return textPreview.value;
+    if (websiteTexts[key] != null && websiteTexts[key] !== "") return websiteTexts[key];
     const dict = DICT[lang] || DICT.en;
     if (dict[key] != null) return dict[key];
     if (DICT.en[key] != null) return DICT.en[key];
     return key;
-  }, [lang]);
+  }, [lang, JSON.stringify(websiteTexts), JSON.stringify(textPreview)]);
 }
 
 // pick a localised content field: pick(project, "name") → project.name_gr if lang=gr & set, else project.name
@@ -105,7 +120,7 @@ const DICT = {
 
     // mobile drawer
     menu_eyebrow: "Project58 · Menu",
-    two_cities: "Thessaloniki · Athens",
+    studio_location: "Athens",
 
     // home
     home_strip_eyebrow: "/01 — Interiors · Multi-site retail across Athens & Piraeus",
@@ -267,7 +282,7 @@ const DICT = {
 
     // mobile drawer
     menu_eyebrow: "Project58 · Μενού",
-    two_cities: "Θεσσαλονίκη · Αθήνα",
+    studio_location: "Αθήνα",
 
     // home
     home_strip_eyebrow: "/01 — Εσωτερικοί χώροι · Λιανική σε πολλαπλά σημεία στην Αθήνα και τον Πειραιά",

@@ -936,7 +936,9 @@ function AgencyPage() {
               aria-label={`View profile: ${person.name}`}
               onClick={() => setSelectedPerson(person)}
               onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedPerson(person); }}>
-              {image ? <img src={image} alt={person.name} /> : <span className="people-mosaic-initials">{initials}</span>}
+              <div className="people-mosaic-media">
+                {image ? <img src={image} alt={person.name} /> : <span className="people-mosaic-initials">{initials}</span>}
+              </div>
               <div className="people-mosaic-caption">
                 <p>{pick(person, "role")}</p>
                 <h2>{person.name}</h2>
@@ -948,13 +950,22 @@ function AgencyPage() {
       {selectedPerson ? ReactDOM.createPortal(
         <div className="people-profile-modal" role="dialog" aria-modal="true" aria-labelledby="people-profile-name" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedPerson(null); }}>
           <div className="people-profile-modal-card">
-            <button className="people-profile-modal-close" aria-label="Close profile" onClick={() => setSelectedPerson(null)}>×</button>
+            <header className="people-profile-modal-nav">
+              <button className="people-profile-modal-back" aria-label="Back to People" onClick={() => setSelectedPerson(null)}>
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M10.5 2.5L5 8l5.5 5.5" />
+                </svg>
+                <span>Back</span>
+              </button>
+              <img className="people-profile-modal-logo" src="assets/logo-black.svg" alt="Project58" />
+              <span aria-hidden="true" />
+            </header>
             <div className="people-profile-modal-image">
-              {selectedPerson.portrait ? <img src={selectedPerson.portrait} alt="" /> : null}
+              {(selectedPerson.portrait || peopleSettings.hero) ? <img src={selectedPerson.portrait || peopleSettings.hero} alt="" /> : null}
             </div>
             <div className="people-profile-modal-copy">
-              <p>{pick(selectedPerson, "role")}</p>
               <h2 id="people-profile-name">{selectedPerson.name}</h2>
+              <p>{pick(selectedPerson, "role")}</p>
               <div>{pick(selectedPerson, "note") || "—"}</div>
             </div>
           </div>
@@ -1002,7 +1013,7 @@ function LegacyAgencyPage({ go }) {
         <div className="hero-meta-row" style={{ borderBottom: 0, marginTop: 24 }}>
           <div><span>{t("team_eyebrow")}</span><span className="v">{t("team_h")}</span></div>
           <div><span>{t("headcount")}</span><span className="v">{TEAM.length} {t("headcount_unit")}</span></div>
-          <div><span>{t("studios")}</span><span className="v">{t("two_cities")}</span></div>
+          <div><span>{t("studios")}</span><span className="v">{t("studio_location")}</span></div>
           <div style={{ justifyContent: "flex-end" }}><span className="muted mono" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.14em" }}>{t("updated_label")}</span></div>
         </div>
 
