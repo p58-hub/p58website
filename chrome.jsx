@@ -697,11 +697,24 @@ function TabMoreIcon() {
   );
 }
 
+function TabLanguageIcon({ lang }) {
+  return <span className="mobile-tab-language-icon" aria-hidden="true">{lang === "gr" ? "GR" : "EN"}</span>;
+}
+
 function MobileTabBar({ route, go, onMore }) {
   const t = window.useT();
+  const { lang, setLang } = window.useLang();
   const isProjects = route.name === "projects" || route.name === "interiors" || route.name === "architecture";
   return (
     <nav className="mobile-tab-bar" aria-label="Mobile primary">
+      <button
+        className="mobile-tab"
+        aria-label={`Switch language to ${lang === "en" ? "Greek" : "English"}`}
+        onClick={() => setLang(lang === "en" ? "gr" : "en")}
+      >
+        <TabLanguageIcon lang={lang} />
+        <span>{lang === "en" ? "Greek" : "English"}</span>
+      </button>
       <button className={`mobile-tab ${isProjects ? "on" : ""}`} aria-label={t("projects")} aria-current={isProjects ? "page" : undefined} onClick={() => go({ name: "projects" })}>
         <TabProjectsIcon on={isProjects} />
         <span>{t("projects")}</span>

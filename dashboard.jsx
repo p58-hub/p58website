@@ -881,7 +881,7 @@ function App({ session }) {
         <button className={`side-btn ${section === "projects" ? "on" : ""}`} onClick={() => goSection("projects")}>
           <span>Projects</span><span className="count">{counts.projects}</span>
         </button>
-        <button className={`side-btn ${section === "texts" ? "on" : ""}`} onClick={() => goSection("texts")}>
+        <button className={`side-btn side-sub-btn ${section === "texts" ? "on" : ""}`} onClick={() => goSection("texts")}>
           <span>Project texts</span><span className="count">{counts.projects}</span>
         </button>
         <button className={`side-btn ${section === "categories" ? "on" : ""}`} onClick={() => goSection("categories")}>
@@ -937,16 +937,6 @@ function App({ session }) {
 
       <main className="main">
         <div className="topbar">
-          <button className="side-burger" aria-label="Open menu" onClick={() => setSideOpen(true)}>
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><line x1="3" y1="6" x2="17" y2="6"/><line x1="3" y1="10" x2="17" y2="10"/><line x1="3" y1="14" x2="17" y2="14"/></svg>
-          </button>
-          <div className="crumbs">
-            <span>Project58</span>
-            <span className="sep">/</span>
-            <span>Dashboard</span>
-            <span className="sep">/</span>
-            <b>{section === "projects" ? "Projects" : section === "texts" ? "Project texts" : section === "categories" ? "Categories" : section === "news" ? "News" : section === "site" ? "Site settings" : section === "hero" ? "Hero gallery" : section === "inquiries" ? "Inquiries" : section === "media" ? "Media" : "Team"}</b>
-          </div>
           <div className="actions">
             {showPublish && (
             <button
@@ -991,7 +981,7 @@ function App({ session }) {
 
         <div className="content">
           {section === "projects" && (
-            <ProjectsList data={data.projects} categories={data.categories} onEdit={(id) => setEditing({ kind: "project", id })} onDelete={(id) => onDelete("project", id)} onMove={onMoveProject} onToggleVisibility={onToggleProjectVisibility} onNew={() => setEditing({ kind: "project", id: null })} onTexts={() => goProjectTexts("all")} pendingIds={pendingIds} uploads={uploads} onPublishOne={(id) => publishOneProject(id).catch(() => { /* shown in the header */ })} publishBusy={publishState.status === "busy"} />
+            <ProjectsList data={data.projects} categories={data.categories} onEdit={(id) => setEditing({ kind: "project", id })} onDelete={(id) => onDelete("project", id)} onMove={onMoveProject} onToggleVisibility={onToggleProjectVisibility} onNew={() => setEditing({ kind: "project", id: null })} pendingIds={pendingIds} uploads={uploads} onPublishOne={(id) => publishOneProject(id).catch(() => { /* shown in the header */ })} publishBusy={publishState.status === "busy"} />
           )}
           {section === "texts" && (
             <ProjectTextsSheet
@@ -1040,6 +1030,12 @@ function App({ session }) {
           )}
         </div>
       </main>
+
+      <nav className="mobile-bottom-nav" aria-label="Primary dashboard navigation">
+        <button className={(section === "projects" || section === "texts") ? "on" : ""} type="button" onClick={() => goSection("projects")}>Projects</button>
+        <button className={(section === "site" || section === "hero") ? "on" : ""} type="button" disabled={!can("siteSettings")} onClick={() => can("siteSettings") && goSection("site")}>Settings</button>
+        <button className={(sideOpen || !["projects", "texts", "site", "hero"].includes(section)) ? "on" : ""} type="button" onClick={() => setSideOpen(true)}>More{unreadInquiries ? ` · ${unreadInquiries}` : ""}</button>
+      </nav>
 
       {editing && editing.kind === "project" && (
         <ProjectSheet
@@ -1313,7 +1309,7 @@ function categoryLabel(categories, id) {
   return cat ? cat.label : id || "Uncategorised";
 }
 
-function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisibility, onNew, onTexts, pendingIds, uploads, onPublishOne, publishBusy }) {
+function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisibility, onNew, pendingIds, uploads, onPublishOne, publishBusy }) {
   if (!data.length) return <Empty kind="projects" onNew={onNew} />;
   const groups = categories.map((cat) => ({
     category: cat,
@@ -1406,9 +1402,7 @@ function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisi
 
   return (
     <>
-      <SectionHead eyebrow="/ Category · sub-category · live / hidden" title="Projects">
-        <button className="btn ghost" type="button" onClick={onTexts}>Project texts →</button>
-      </SectionHead>
+      <SectionHead title="Projects" />
       {groups.map((group) => {
         // Build the ordered list of sub-category buckets (brands).
         const defined = (group.category.subcategories || []).map((s) => s.label);
@@ -1644,7 +1638,7 @@ function SectionHead({ eyebrow, title, children }) {
   return (
     <div className="section-head">
       <div>
-        <div className="eyebrow">{eyebrow}</div>
+        {eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}
         <h1>{title}</h1>
       </div>
       {children ? <div className="section-head-actions">{children}</div> : null}
