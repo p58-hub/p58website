@@ -977,6 +977,9 @@ function App({ session }) {
               </div>
             )}
           </div>
+          <a className="side-footer-logo" href="index.html" target="_blank" rel="noopener" aria-label="Open Project58 website">
+            <img src="assets/logo-black.svg" alt="Project58" />
+          </a>
         </div>
       </aside>
 
@@ -1057,6 +1060,7 @@ function App({ session }) {
           {section === "texts" && (
             <ProjectTextsSheet
               projects={data.projects}
+              categories={data.categories}
               initialProject={textsProject}
               onSave={(projects) => {
                 update({ ...data, projects });
@@ -1197,12 +1201,15 @@ function projectTextRows(project) {
   return rows;
 }
 
-function ProjectTextsSheet({ projects, initialProject = "all", onSave, onOpenProject, onToast }) {
+function ProjectTextsSheet({ projects, categories = [], initialProject = "all", onSave, onOpenProject, onToast }) {
   const [draft, setDraft] = useState(() => projects.map((project) => ({ ...project })));
   const [query, setQuery] = useState("");
   const [selectedProject, setSelectedProject] = useState(initialProject);
   const [expandedProjects, setExpandedProjects] = useState(() => new Set());
   const [language, setLanguage] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [brandFilter, setBrandFilter] = useState("all");
+  const [visibilityFilter, setVisibilityFilter] = useState("all");
 
   useEffect(() => {
     setDraft(projects.map((project) => ({ ...project })));
@@ -1214,14 +1221,36 @@ function ProjectTextsSheet({ projects, initialProject = "all", onSave, onOpenPro
 
   const changed = JSON.stringify(draft) !== JSON.stringify(projects);
   const normalisedQuery = query.trim().toLocaleLowerCase();
-  const groups = useMemo(() => draft.map((project) => {
+  const categoryProjects = useMemo(() => draft.filter((project) => {
+    if (categoryFilter === "all") return true;
+    const projectCategory = project.category || project.typology || "retail";
+    if (categoryFilter === "uncategorised") return !categories.some((category) => category.id === projectCategory);
+    return projectCategory === categoryFilter;
+  }), [draft, categories, categoryFilter]);
+  const brandOptions = useMemo(() => [...new Set(categoryProjects.map((project) => (project.brand || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [categoryProjects]);
+  const filteredProjects = useMemo(() => categoryProjects.filter((project) => {
+    if (brandFilter !== "all" && (project.brand || "").trim() !== brandFilter) return false;
+    if (visibilityFilter === "live" && project.visible === false) return false;
+    if (visibilityFilter === "hidden" && project.visible !== false) return false;
+    return true;
+  }), [categoryProjects, brandFilter, visibilityFilter]);
+  const filtersActive = categoryFilter !== "all" || brandFilter !== "all" || visibilityFilter !== "all";
+  const groups = useMemo(() => filteredProjects.map((project) => {
     const allRows = projectTextRows(project);
     const projectHaystack = [project.name, project.name_gr, project.brand, project.code, project.location].join(" ").toLocaleLowerCase();
     const rows = normalisedQuery
       ? allRows.filter((row) => `${row.label} ${row.en} ${row.gr} ${projectHaystack}`.toLocaleLowerCase().includes(normalisedQuery))
       : allRows;
     return { project, rows };
-  }).filter(({ project, rows }) => (selectedProject === "all" || project.id === selectedProject) && rows.length), [draft, selectedProject, normalisedQuery]);
+  }).filter(({ project, rows }) => (selectedProject === "all" || project.id === selectedProject) && rows.length), [filteredProjects, selectedProject, normalisedQuery]);
+
+  useEffect(() => {
+    if (brandFilter !== "all" && !brandOptions.includes(brandFilter)) setBrandFilter("all");
+  }, [brandFilter, brandOptions]);
+
+  useEffect(() => {
+    if (selectedProject !== "all" && !filteredProjects.some((project) => project.id === selectedProject)) setSelectedProject("all");
+  }, [selectedProject, filteredProjects]);
 
   const dirtyProjectIds = useMemo(() => {
     const original = new Map(projects.map((project) => [project.id, JSON.stringify(project)]));
@@ -1317,19 +1346,27 @@ function ProjectTextsSheet({ projects, initialProject = "all", onSave, onOpenPro
         </div>
       </div>
 
+      <div className="texts-filters" aria-label="Project filters">
+        <label><span>Category</span><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="all">All categories</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}{draft.some((project) => !categories.some((category) => category.id === (project.category || project.typology || "retail"))) && <option value="uncategorised">Uncategorised</option>}</select></label>
+        <label><span>Sub-category / brand</span><select value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)}><option value="all">All brands</option>{brandOptions.map((brand) => <option key={brand} value={brand}>{brand}</option>)}</select></label>
+        <label><span>Visibility</span><select value={visibilityFilter} onChange={(event) => setVisibilityFilter(event.target.value)}><option value="all">Live + hidden</option><option value="live">Live</option><option value="hidden">Hidden</option></select></label>
+        <button className="btn ghost" type="button" disabled={!filtersActive} onClick={() => { setCategoryFilter("all"); setBrandFilter("all"); setVisibilityFilter("all"); }}>Clear filters</button>
+      </div>
+
       <div className="texts-workspace">
         <nav className="texts-project-menu" aria-label="Projects">
           <button type="button" className={selectedProject === "all" ? "on" : ""} onClick={() => chooseProject("all")}>
-            <span><strong>All projects</strong><small>Collapsed overview</small></span>
-            <b>{draft.length}</b>
+            <span><strong>All projects</strong><small>{filtersActive ? "Filtered overview" : "Collapsed overview"}</small></span>
+            <b>{filteredProjects.length}</b>
           </button>
           <div className="texts-project-menu-list">
-            {draft.map((project) => (
+            {filteredProjects.map((project) => (
               <button key={project.id} type="button" className={selectedProject === project.id ? "on" : ""} onClick={() => chooseProject(project.id)}>
                 <span><strong>{project.name || "Untitled"}</strong><small>{project.code} · {project.brand || "No brand"}</small></span>
                 {dirtyProjectIds.has(project.id) && <i title="Unsaved changes" aria-label="Unsaved changes"></i>}
               </button>
             ))}
+            {!filteredProjects.length && <div className="texts-project-menu-empty">No projects match these filters.</div>}
           </div>
         </nav>
 
@@ -1632,6 +1669,7 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
   const [adding, setAdding] = useState(false);
   const [addingStep, setAddingStep] = useState(false);
   const [stepDraft, setStepDraft] = useState({ title: "", title_gr: "" });
+  const [editorLang, setEditorLang] = useState("en");
   const [preview, setPreview] = useState(false);
   const [previewLang, setPreviewLang] = useState("en");
   const [draft, setDraft] = useState({ label: "", label_gr: "", type: "text", group: "details", required: false });
@@ -1664,6 +1702,14 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
     if (target == null) return current;
     [next[index], next[target]] = [next[target], next[index]];
     return { ...current, questions: next };
+  });
+  const moveStep = (id, direction) => setForm((current) => {
+    const next = current.groups.slice();
+    const index = next.findIndex((group) => group.id === id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= next.length) return current;
+    [next[index], next[target]] = [next[target], next[index]];
+    return { ...current, groups: next };
   });
   const removeQuestion = (index) => {
     if (!confirm("Remove this sub-section from the inquiry form? Existing inquiries will keep their saved answer.")) return;
@@ -1720,6 +1766,7 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
   };
   const addOption = (questionIndex) => updateQuestion(questionIndex, { options: [...(questions[questionIndex].options || []), "New answer"], options_gr: [...(questions[questionIndex].options_gr || []), "Νέα απάντηση"] });
   const removeOption = (questionIndex, optionIndex) => updateQuestion(questionIndex, { options: (questions[questionIndex].options || []).filter((_, i) => i !== optionIndex), options_gr: (questions[questionIndex].options_gr || []).filter((_, i) => i !== optionIndex) });
+  const editorText = (item, field) => editorLang === "gr" ? (item[`${field}_gr`] || "") : (item[field] || "");
   const previewText = (item, field) => previewLang === "gr" ? (item[`${field}_gr`] || item[field] || "") : (item[field] || "");
   const previewField = (question) => {
     const options = previewLang === "gr" ? (question.options_gr || question.options || []) : (question.options || []);
@@ -1738,22 +1785,27 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
           <div className="inquiry-builder-buttons"><button className="btn ghost" type="button" onClick={() => setPreview(true)}>Preview</button><button className="btn ghost" type="button" onClick={openAddStep}><span className="ic">{Ic.plus}</span>Add step</button><button className="btn primary" type="button" onClick={openAddQuestion}><span className="ic">{Ic.plus}</span>Add sub-section</button></div>
         </div>
 
+        <div className="inquiry-editor-toolbar">
+          <div><strong>Content language</strong><span>Edit one language at a time for a clearer, wider workspace.</span></div>
+          <div className="inquiry-editor-language" role="group" aria-label="Content editing language"><button className={editorLang === "en" ? "on" : ""} type="button" aria-pressed={editorLang === "en"} onClick={() => setEditorLang("en")}>EN</button><button className={editorLang === "gr" ? "on" : ""} type="button" aria-pressed={editorLang === "gr"} onClick={() => setEditorLang("gr")}>GR</button></div>
+        </div>
+
         <div className="inquiry-builder-workspace">
           <label className="inquiry-question-select">
             <span>Select step</span>
             <select value={selectedGroup} onChange={(event) => setSelectedGroup(event.target.value)}>
-              {groups.map((group, index) => <option value={group.id} key={group.id}>Step {String(index + 1).padStart(2, "0")} · {group.title} / {group.title_gr}</option>)}
+              {groups.map((group, index) => <option value={group.id} key={group.id}>Step {String(index + 1).padStart(2, "0")} · {editorText(group, "title")}</option>)}
             </select>
           </label>
           <nav className="inquiry-question-menu inquiry-step-menu" aria-label="Form steps">
             {groups.map((group, index) => {
               const count = questions.filter((question) => question.group === group.id).length;
-              return <button className={group.id === selectedGroup ? "on" : ""} type="button" key={group.id} onClick={() => setSelectedGroup(group.id)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{group.title}</strong><small>{group.title_gr}</small><i>{count} fields</i></button>;
+              return <div className={`inquiry-step-menu-item ${group.id === selectedGroup ? "on" : ""}`} key={group.id}><button className={`inquiry-step-select ${group.id === selectedGroup ? "on" : ""}`} type="button" onClick={() => setSelectedGroup(group.id)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{editorText(group, "title")}</strong><small>{editorLang === "gr" ? "Ελληνικά" : "English"}</small><i>{count} fields</i></button><div className="inquiry-step-reorder" aria-label={`Reorder ${editorText(group, "title")}`}><button type="button" disabled={index === 0} aria-label={`Move ${editorText(group, "title")} up`} title="Move step up" onClick={() => moveStep(group.id, -1)}>↑</button><button type="button" disabled={index === groups.length - 1} aria-label={`Move ${editorText(group, "title")} down`} title="Move step down" onClick={() => moveStep(group.id, 1)}>↓</button></div></div>;
             })}
           </nav>
           <div className="inquiry-builder-list">
           <div className="inquiry-step-heading">
-            <div className="inquiry-step-title-editor"><span>Step {String(groups.findIndex((group) => group.id === selectedGroup) + 1).padStart(2, "0")}</span><label><small>EN</small><input value={activeStep?.title || ""} onChange={(event) => updateStep(selectedGroup, { title: event.target.value })} /></label><label><small>GR</small><input value={activeStep?.title_gr || ""} onChange={(event) => updateStep(selectedGroup, { title_gr: event.target.value })} /></label></div>
+            <div className="inquiry-step-title-editor"><span>Step {String(groups.findIndex((group) => group.id === selectedGroup) + 1).padStart(2, "0")} · {editorLang === "gr" ? "Ελληνικά" : "English"}</span><label><small>{editorLang.toUpperCase()}</small><input aria-label={`${editorLang === "gr" ? "Greek" : "English"} step question`} value={editorText(activeStep || {}, "title")} onChange={(event) => updateStep(selectedGroup, { [editorLang === "gr" ? "title_gr" : "title"]: event.target.value })} /></label></div>
             <div className="inquiry-step-heading-actions"><button className="btn ghost" type="button" onClick={openAddQuestion}><span className="ic">{Ic.plus}</span>Add sub-section</button><button className="btn danger" type="button" disabled={groups.length <= 1} onClick={() => removeStep(selectedGroup)}>{Ic.trash} Remove step</button></div>
           </div>
           {questions.map((question, index) => ({ question, index })).filter((item) => item.question.group === selectedGroup).map(({ question, index }, stepIndex) => {
@@ -1762,7 +1814,7 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
               <section className="inquiry-question-card" key={question.id}>
                 <div className="inquiry-question-head">
                   <span className="inquiry-question-number">{String(index + 1).padStart(2, "0")}</span>
-                  <strong>{question.label || "Untitled question"}</strong>
+                  <strong>{editorText(question, "label") || "Untitled question"}</strong>
                   {question.required && <span className="inquiry-required-badge">Required</span>}
                   <div className="inquiry-question-actions">
                     <button type="button" onClick={() => moveQuestion(index, -1)} disabled={stepIndex === 0} title="Move up">↑</button>
@@ -1770,9 +1822,8 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
                     <button type="button" className="danger" onClick={() => removeQuestion(index)} title="Remove question">{Ic.trash}</button>
                   </div>
                 </div>
-                <div className="inquiry-language-grid">
-                  <div className="inquiry-language-panel"><div className="inquiry-language-title"><b>EN</b><span>English</span></div><Field label="Question"><input type="text" value={question.label} onChange={(event) => updateQuestion(index, { label: event.target.value })} /></Field><Field label="Placeholder"><input type="text" value={question.placeholder || ""} onChange={(event) => updateQuestion(index, { placeholder: event.target.value })} placeholder="Optional hint" /></Field></div>
-                  <div className="inquiry-language-panel"><div className="inquiry-language-title"><b>GR</b><span>Ελληνικά</span></div><Field label="Ερώτηση"><input type="text" value={question.label_gr || ""} onChange={(event) => updateQuestion(index, { label_gr: event.target.value })} /></Field><Field label="Placeholder"><input type="text" value={question.placeholder_gr || ""} onChange={(event) => updateQuestion(index, { placeholder_gr: event.target.value })} placeholder="Προαιρετική υπόδειξη" /></Field></div>
+                <div className="inquiry-language-grid inquiry-language-grid-single">
+                  {editorLang === "en" ? <div className="inquiry-language-panel"><div className="inquiry-language-title"><b>EN</b><span>English</span></div><Field label="Question"><input type="text" value={question.label} onChange={(event) => updateQuestion(index, { label: event.target.value })} /></Field><Field label="Placeholder"><input type="text" value={question.placeholder || ""} onChange={(event) => updateQuestion(index, { placeholder: event.target.value })} placeholder="Optional hint" /></Field></div> : <div className="inquiry-language-panel"><div className="inquiry-language-title"><b>GR</b><span>Ελληνικά</span></div><Field label="Ερώτηση"><input type="text" value={question.label_gr || ""} onChange={(event) => updateQuestion(index, { label_gr: event.target.value })} /></Field><Field label="Placeholder"><input type="text" value={question.placeholder_gr || ""} onChange={(event) => updateQuestion(index, { placeholder_gr: event.target.value })} placeholder="Προαιρετική υπόδειξη" /></Field></div>}
                 </div>
                 <div className="inquiry-question-grid inquiry-question-settings-grid">
                   <Field label="Answer type">
@@ -1787,7 +1838,7 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
                   </Field>
                   <Field label="Form step">
                     <select value={question.group} onChange={(event) => updateQuestion(index, { group: event.target.value })}>
-                      {groups.map((group) => <option key={group.id} value={group.id}>{group.title}</option>)}
+                      {groups.map((group) => <option key={group.id} value={group.id}>{editorText(group, "title")}</option>)}
                     </select>
                   </Field>
                 </div>
@@ -1798,12 +1849,11 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
 
                 {hasOptions && (
                   <div className="inquiry-options-editor">
-                    <div className="inquiry-options-title"><span>Answers · English / Greek</span><button type="button" onClick={() => addOption(index)}>{Ic.plus} Add answer</button></div>
-                    {(question.options || []).map((option, optionIndex) => (
-                      <div className="inquiry-option-row inquiry-option-row-bilingual" key={optionIndex}>
+                    <div className="inquiry-options-title"><span>Answers · {editorLang === "gr" ? "Greek" : "English"}</span><button type="button" onClick={() => addOption(index)}>{Ic.plus} Add answer</button></div>
+                    {(editorLang === "gr" ? (question.options_gr || []) : (question.options || [])).map((option, optionIndex) => (
+                      <div className="inquiry-option-row" key={optionIndex}>
                         <span>{optionIndex + 1}</span>
-                        <input aria-label={`English answer ${optionIndex + 1}`} type="text" value={option} onChange={(event) => updateOption(index, optionIndex, event.target.value, "en")} />
-                        <input aria-label={`Greek answer ${optionIndex + 1}`} type="text" value={(question.options_gr || [])[optionIndex] || ""} onChange={(event) => updateOption(index, optionIndex, event.target.value, "gr")} />
+                        <input aria-label={`${editorLang === "gr" ? "Greek" : "English"} answer ${optionIndex + 1}`} type="text" value={option} onChange={(event) => updateOption(index, optionIndex, event.target.value, editorLang)} />
                         <button type="button" onClick={() => removeOption(index, optionIndex)} title="Remove answer">{Ic.trash}</button>
                       </div>
                     ))}
@@ -1841,11 +1891,11 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
               </div>
               <div className="inquiry-question-grid inquiry-question-settings-grid">
                 <Field label="Answer type"><select value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value })}><option value="text">Short text</option><option value="textarea">Long text</option><option value="email">Email</option><option value="tel">Phone</option><option value="buttons">Choice buttons</option><option value="select">Dropdown</option></select></Field>
-                <Field label="Form step"><select value={draft.group} onChange={(event) => setDraft({ ...draft, group: event.target.value })}>{groups.map((group) => <option key={group.id} value={group.id}>{group.title}</option>)}</select></Field>
+                <Field label="Form step"><select value={draft.group} onChange={(event) => setDraft({ ...draft, group: event.target.value })}>{groups.map((group) => <option key={group.id} value={group.id}>{editorText(group, "title")}</option>)}</select></Field>
               </div>
               <label className="inquiry-required-toggle"><input type="checkbox" checked={draft.required} onChange={(event) => setDraft({ ...draft, required: event.target.checked })} /><span>Mandatory question</span></label>
             </div>
-            <div className="sheet-foot"><span className="muted">Added to {groups.find((group) => group.id === draft.group)?.title}</span><div className="right"><button className="btn ghost" type="button" onClick={() => setAdding(false)}>Cancel</button><button className="btn primary" type="button" disabled={!draft.label.trim() || !draft.label_gr.trim()} onClick={addQuestion}>Add sub-section</button></div></div>
+            <div className="sheet-foot"><span className="muted">Added to {editorText(groups.find((group) => group.id === draft.group) || {}, "title")}</span><div className="right"><button className="btn ghost" type="button" onClick={() => setAdding(false)}>Cancel</button><button className="btn primary" type="button" disabled={!draft.label.trim() || !draft.label_gr.trim()} onClick={addQuestion}>Add sub-section</button></div></div>
           </div>
         </div>
       )}
@@ -2014,6 +2064,7 @@ function WebsiteTextsSettings({ site, onSave }) {
   const [group, setGroup] = useState("navigation");
   const [query, setQuery] = useState("");
   const [previewLang, setPreviewLang] = useState("en");
+  const [pagePreview, setPagePreview] = useState(null);
 
   useEffect(() => { setDraft(makeDraft(site)); }, [site]);
 
@@ -2034,8 +2085,8 @@ function WebsiteTextsSettings({ site, onSave }) {
       ? draft[previewLang][key].split("\n").map((line) => line.trim()).filter(Boolean)
       : draft[previewLang][key];
     try { localStorage.setItem("p58_website_text_preview", JSON.stringify({ key, lang: previewLang, value, createdAt: Date.now() })); } catch (error) {}
-    const href = `index.html?textPreview=${encodeURIComponent(key)}&previewLang=${previewLang}#${section?.route || "home"}`;
-    window.open(href, "_blank", "noopener");
+    const href = `index.html?textPreview=${encodeURIComponent(key)}&previewLang=${previewLang}&snapshot=${Date.now()}#${section?.route || "home"}`;
+    setPagePreview({ href, key, section: section?.label || "Website", lang: previewLang });
   };
 
   return (
@@ -2052,12 +2103,25 @@ function WebsiteTextsSettings({ site, onSave }) {
           })}
         </nav>
         <div className="website-texts-sheet">
-          <div className="website-texts-head"><span>Text key</span><span>English</span><span>Ελληνικά</span><span>Location</span></div>
-          {keys.map((key) => <div className="website-text-row" key={key}><code>{key.replaceAll("_", " ")}</code><textarea rows={Array.isArray(dictionaries.en[key]) ? 4 : 2} value={draft.en[key] || ""} onChange={(event) => updateText("en", key, event.target.value)} /><textarea rows={Array.isArray(dictionaries.gr?.[key] || dictionaries.en[key]) ? 4 : 2} value={draft.gr[key] || ""} onChange={(event) => updateText("gr", key, event.target.value)} /><button className="btn ghost" type="button" onClick={() => previewText(key)}>Preview {previewLang.toUpperCase()} ↗</button></div>)}
-          {!keys.length && <div className="empty-row">No website texts match this search.</div>}
+          <div className="website-texts-table-scroll" tabIndex="0" aria-label="Scrollable website texts table">
+            <div className="website-texts-table">
+              <div className="website-texts-head"><span>Text key</span><span>English</span><span>Ελληνικά</span><span>Location</span></div>
+              {keys.map((key) => <div className="website-text-row" key={key}><code>{key.replaceAll("_", " ")}</code><textarea rows={Array.isArray(dictionaries.en[key]) ? 4 : 2} value={draft.en[key] || ""} onChange={(event) => updateText("en", key, event.target.value)} /><textarea rows={Array.isArray(dictionaries.gr?.[key] || dictionaries.en[key]) ? 4 : 2} value={draft.gr[key] || ""} onChange={(event) => updateText("gr", key, event.target.value)} /><button className="btn ghost" type="button" onClick={() => previewText(key)}>Preview {previewLang.toUpperCase()}</button></div>)}
+              {!keys.length && <div className="empty-row">No website texts match this search.</div>}
+            </div>
+          </div>
           <div className="settings-foot"><span className="muted">Changes appear after Save and Publish</span><button className="btn primary" type="button" disabled={!changed} onClick={() => onSave(serialise())}>Save website texts</button></div>
         </div>
       </div>
+      {pagePreview && (
+        <div className="sheet-wrap website-text-preview-modal" onMouseDown={(event) => event.target === event.currentTarget && setPagePreview(null)}>
+          <div className="sheet website-text-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="website-preview-title">
+            <div className="sheet-head"><div><div className="eyebrow">/ Page snapshot · {pagePreview.lang.toUpperCase()}</div><h2 id="website-preview-title">{pagePreview.section}</h2></div><button className="icon-btn" type="button" aria-label="Close page preview" onClick={() => setPagePreview(null)}>{Ic.close}</button></div>
+            <div className="sheet-body website-text-preview-body"><div className="website-text-preview-browser"><div className="website-text-preview-browser-bar"><span></span><span></span><span></span><code>{pagePreview.key.replaceAll("_", " ")}</code></div><iframe key={pagePreview.href} src={pagePreview.href} title={`${pagePreview.section} page snapshot`} tabIndex="-1" /></div></div>
+            <div className="sheet-foot"><span className="muted">Snapshot of where this text appears</span><div className="right"><a className="btn ghost" href={pagePreview.href} target="_blank" rel="noopener">Open full page ↗</a><button className="btn primary" type="button" onClick={() => setPagePreview(null)}>Close</button></div></div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

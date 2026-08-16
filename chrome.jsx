@@ -699,13 +699,22 @@ function TabMoreIcon() {
 
 function MobileTabBar({ route, go, onMore }) {
   const t = window.useT();
+  const { lang, setLang } = window.useLang();
   const isProjects = route.name === "projects" || route.name === "interiors" || route.name === "architecture";
   return (
     <nav className="mobile-tab-bar" aria-label="Mobile primary">
-      <div className="mobile-tab mobile-tab-language">
-        <window.LangToggle compact />
+      <button
+        className="mobile-tab mobile-tab-language"
+        type="button"
+        aria-label={`Language: ${lang === "en" ? "English" : "Greek"}. Switch to ${lang === "en" ? "Greek" : "English"}`}
+        onClick={() => setLang(lang === "en" ? "gr" : "en")}>
+        <span className="mobile-language-value" aria-hidden="true">
+          <b className={lang === "en" ? "on" : ""}>EN</b>
+          <i>/</i>
+          <b className={lang === "gr" ? "on" : ""}>GR</b>
+        </span>
         <span>Language</span>
-      </div>
+      </button>
       <button className={`mobile-tab ${isProjects ? "on" : ""}`} aria-label={t("projects")} aria-current={isProjects ? "page" : undefined} onClick={() => go({ name: "projects" })}>
         <TabProjectsIcon on={isProjects} />
         <span>{t("projects")}</span>

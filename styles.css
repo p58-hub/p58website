@@ -3343,23 +3343,27 @@ main h3 em {
     min-width: 92px;
     padding-inline: 7px;
   }
-  .mobile-tab-language .lang-toggle {
-    margin: 0;
-    padding: 2px;
-    background: transparent;
-    border-color: rgba(20, 19, 15, 0.18);
+  .mobile-tab-language .mobile-language-value {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    min-height: 22px;
+    padding: 3px 8px;
+    border: 1px solid rgba(20, 19, 15, 0.18);
+    border-radius: 7px;
   }
-  .mobile-tab-language .lang-toggle button {
-    padding: 4px 7px;
+  .mobile-language-value b,
+  .mobile-language-value i {
+    font: inherit;
+    font-style: normal;
+    font-weight: 500;
+    opacity: 0.42;
   }
-  [data-paper="dark"] .mobile-tab-language .lang-toggle,
-  body.contact-page-active .mobile-tab-language .lang-toggle {
+  .mobile-language-value b.on { opacity: 1; }
+  [data-paper="dark"] .mobile-language-value,
+  body.contact-page-active .mobile-language-value {
     border-color: rgba(255, 255, 255, 0.2);
-  }
-  [data-paper="dark"] .mobile-tab-language .lang-toggle button.on,
-  body.contact-page-active .mobile-tab-language .lang-toggle button.on {
-    color: var(--ink);
-    background: var(--paper);
   }
   .mobile-tab.on { color: var(--ink); background: var(--paper-2); transform: scale(1.04); }
   body.contact-page-active .mobile-tab.on { background: rgba(255, 255, 255, 0.12); }
