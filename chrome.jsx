@@ -892,7 +892,7 @@ function StartProjectPage({ go }) {
     ? window.normaliseInquiryForm(site.inquiryForm)
     : (site.inquiryForm || window.DEFAULT_INQUIRY_FORM || { questions: [] });
   const questions = inquiryForm.questions || [];
-  const groupDefinitions = window.INQUIRY_FORM_GROUPS || [
+  const groupDefinitions = inquiryForm.groups || window.INQUIRY_FORM_GROUPS || [
     { id: "planning", title: "What are you planning?" },
     { id: "space", title: "About the space" },
     { id: "details", title: "A few details" },

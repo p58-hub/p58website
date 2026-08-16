@@ -1861,10 +1861,40 @@ a { color: inherit; }
   gap: 16px;
   padding: 3px 2px 10px;
 }
-.inquiry-step-heading > div { display: grid; gap: 2px; }
 .inquiry-step-heading span,
 .inquiry-step-heading small { font-family: var(--mono); font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); }
-.inquiry-step-heading h3 { margin: 0; font-size: 21px; font-weight: 500; letter-spacing: -0.025em; }
+.inquiry-step-title-editor {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) minmax(170px, 1fr);
+  gap: 7px 10px;
+  flex: 1;
+  min-width: 0;
+}
+.inquiry-step-title-editor > span { grid-column: 1 / -1; }
+.inquiry-step-title-editor label {
+  display: grid;
+  grid-template-columns: 25px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+.inquiry-step-title-editor input {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 7px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  outline: none;
+}
+.inquiry-step-title-editor input:focus { border-color: var(--ink); }
+.inquiry-step-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
 .inquiry-question-card {
   overflow: hidden;
   border: 1px solid var(--rule-strong);
@@ -1997,7 +2027,10 @@ a { color: inherit; }
   .inquiry-question-select select { width: 100%; min-height: 46px; padding: 9px 38px 9px 12px; border: 1px solid var(--rule-strong); border-radius: 9px; background: var(--paper); font-size: 13px; outline: none; }
   .inquiry-question-select select:focus { border-color: var(--ink); }
   .inquiry-step-heading { align-items: stretch; flex-direction: column; }
-  .inquiry-step-heading .btn { justify-content: center; }
+  .inquiry-step-title-editor { grid-template-columns: 1fr; }
+  .inquiry-step-title-editor > span { grid-column: auto; }
+  .inquiry-step-heading-actions { width: 100%; }
+  .inquiry-step-heading-actions .btn { flex: 1; justify-content: center; }
   .inquiry-language-grid { grid-template-columns: 1fr; }
   .inquiry-option-row-bilingual { grid-template-columns: 22px 1fr 28px; }
   .inquiry-option-row-bilingual input:nth-of-type(2) { grid-column: 2; }

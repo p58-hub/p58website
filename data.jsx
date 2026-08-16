@@ -654,6 +654,7 @@ const INQUIRY_FORM_GROUPS = [
 ];
 
 const DEFAULT_INQUIRY_FORM = {
+  groups: INQUIRY_FORM_GROUPS,
   questions: [
     { id: "type", label: "Project type", label_gr: "Τύπος έργου", type: "buttons", group: "planning", required: true, options: ["Retail", "Hospitality", "Residential", "Workplace", "Renovation", "Other"], options_gr: ["Λιανική", "Φιλοξενία", "Κατοικία", "Χώρος εργασίας", "Ανακαίνιση", "Άλλο"] },
     { id: "location", label: "Location", label_gr: "Τοποθεσία", type: "text", group: "space", required: false, placeholder: "City / neighbourhood", placeholder_gr: "Πόλη / περιοχή" },
@@ -670,10 +671,20 @@ const DEFAULT_INQUIRY_FORM = {
 
 function normaliseInquiryForm(form) {
   const source = form && Array.isArray(form.questions) ? form.questions : DEFAULT_INQUIRY_FORM.questions;
+  const rawGroups = form && Array.isArray(form.groups) && form.groups.length ? form.groups : INQUIRY_FORM_GROUPS;
+  const seenGroups = new Set();
+  const groups = rawGroups.map((group, order) => {
+    const rawId = String(group && group.id || `step-${order + 1}`);
+    let id = rawId.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `step-${order + 1}`;
+    while (seenGroups.has(id)) id = `${id}-${order + 1}`;
+    seenGroups.add(id);
+    return { id, title: String(group && group.title || `Step ${order + 1}`), title_gr: String(group && group.title_gr || group && group.title || `Βήμα ${order + 1}`) };
+  });
   const defaultsById = Object.fromEntries(DEFAULT_INQUIRY_FORM.questions.map((question) => [question.id, question]));
   const validTypes = new Set(["text", "textarea", "email", "tel", "buttons", "select"]);
-  const validGroups = new Set(INQUIRY_FORM_GROUPS.map((group) => group.id));
+  const validGroups = new Set(groups.map((group) => group.id));
   return {
+    groups,
     questions: source.map((question, order) => {
       const rawId = String(question && question.id || `question-${order + 1}`);
       const id = rawId.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || `question-${order + 1}`;
@@ -690,7 +701,7 @@ function normaliseInquiryForm(form) {
         label: String(question && question.label || `Question ${order + 1}`),
         label_gr: String(question && question.label_gr || defaults.label_gr || question && question.label || `Ερώτηση ${order + 1}`),
         type,
-        group: validGroups.has(question && question.group) ? question.group : "details",
+        group: validGroups.has(question && question.group) ? question.group : groups[0].id,
         required: Boolean(question && question.required),
         placeholder: String(question && question.placeholder || ""),
         placeholder_gr: String(question && question.placeholder_gr || defaults.placeholder_gr || question && question.placeholder || ""),

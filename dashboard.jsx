@@ -1620,7 +1620,7 @@ function formatInquiryDate(ts) {
 
 function InquiryFormSettings({ inquiryForm, onSave }) {
   const normalise = window.normaliseInquiryForm || ((form) => form);
-  const groups = window.INQUIRY_FORM_GROUPS || [
+  const fallbackGroups = window.INQUIRY_FORM_GROUPS || [
     { id: "planning", title: "What are you planning?", title_gr: "Τι σχεδιάζετε;" },
     { id: "space", title: "About the space", title_gr: "Σχετικά με τον χώρο" },
     { id: "details", title: "A few details", title_gr: "Μερικές λεπτομέρειες" },
@@ -1628,8 +1628,10 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
   ];
   const [form, setForm] = useState(() => JSON.parse(JSON.stringify(normalise(inquiryForm || {}))));
   const [selectedId, setSelectedId] = useState(() => normalise(inquiryForm || {}).questions?.[0]?.id || null);
-  const [selectedGroup, setSelectedGroup] = useState(groups[0]?.id || "planning");
+  const [selectedGroup, setSelectedGroup] = useState(() => normalise(inquiryForm || {}).groups?.[0]?.id || "planning");
   const [adding, setAdding] = useState(false);
+  const [addingStep, setAddingStep] = useState(false);
+  const [stepDraft, setStepDraft] = useState({ title: "", title_gr: "" });
   const [preview, setPreview] = useState(false);
   const [previewLang, setPreviewLang] = useState("en");
   const [draft, setDraft] = useState({ label: "", label_gr: "", type: "text", group: "details", required: false });
@@ -1638,13 +1640,16 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
     const next = JSON.parse(JSON.stringify(normalise(inquiryForm || {})));
     setForm(next);
     setSelectedId((current) => next.questions.some((question) => question.id === current) ? current : next.questions[0]?.id || null);
+    setSelectedGroup((current) => next.groups.some((group) => group.id === current) ? current : next.groups[0]?.id || "");
   }, [inquiryForm]);
 
   const questions = form.questions || [];
+  const groups = form.groups?.length ? form.groups : fallbackGroups;
+  const activeStep = groups.find((group) => group.id === selectedGroup) || groups[0];
   const stepQuestions = questions.filter((question) => question.group === selectedGroup);
   const selectedIndex = questions.findIndex((question) => question.id === selectedId);
   const changed = JSON.stringify(normalise(form)) !== JSON.stringify(normalise(inquiryForm || {}));
-  const valid = questions.length > 0 && questions.every((question) => question.label.trim() && question.label_gr.trim() && (
+  const valid = groups.length > 0 && groups.every((group) => group.title.trim() && group.title_gr.trim()) && questions.length > 0 && questions.every((question) => question.label.trim() && question.label_gr.trim() && (
     !["buttons", "select"].includes(question.type) || ((question.options || []).some((option) => String(option).trim()) && (question.options_gr || []).some((option) => String(option).trim()))
   ));
   const updateQuestion = (index, patch) => setForm((current) => ({
@@ -1665,6 +1670,24 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
     const remaining = questions.filter((_, i) => i !== index);
     setForm((current) => ({ ...current, questions: remaining }));
     setSelectedId(remaining[Math.min(index, remaining.length - 1)]?.id || null);
+  };
+  const updateStep = (id, patch) => setForm((current) => ({ ...current, groups: current.groups.map((group) => group.id === id ? { ...group, ...patch } : group) }));
+  const openAddStep = () => { setStepDraft({ title: "", title_gr: "" }); setAddingStep(true); };
+  const addStep = () => {
+    if (!stepDraft.title.trim() || !stepDraft.title_gr.trim()) return;
+    const step = { id: newId("step"), title: stepDraft.title.trim(), title_gr: stepDraft.title_gr.trim() };
+    setForm((current) => ({ ...current, groups: [...current.groups, step] }));
+    setSelectedGroup(step.id);
+    setAddingStep(false);
+  };
+  const removeStep = (id) => {
+    if (groups.length <= 1) return;
+    const step = groups.find((group) => group.id === id);
+    const fieldCount = questions.filter((question) => question.group === id).length;
+    if (!confirm(`Remove “${step?.title || "this step"}”${fieldCount ? ` and its ${fieldCount} sub-section${fieldCount === 1 ? "" : "s"}` : ""}? Existing inquiries will keep their saved answers.`)) return;
+    const remainingGroups = groups.filter((group) => group.id !== id);
+    setForm((current) => ({ ...current, groups: remainingGroups, questions: current.questions.filter((question) => question.group !== id) }));
+    setSelectedGroup(remainingGroups[0]?.id || "");
   };
   const openAddQuestion = () => {
     setDraft({ label: "", label_gr: "", type: "text", group: selectedGroup, required: false });
@@ -1712,7 +1735,7 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
       <div className="settings-card inquiry-form-settings">
         <div className="inquiry-builder-intro">
           <div><h2>Project inquiry form</h2><p>Select a step, then organise the sub-sections shown inside it.</p></div>
-          <div className="inquiry-builder-buttons"><button className="btn ghost" type="button" onClick={() => setPreview(true)}>Preview</button><button className="btn primary" type="button" onClick={openAddQuestion}><span className="ic">{Ic.plus}</span>Add sub-section</button></div>
+          <div className="inquiry-builder-buttons"><button className="btn ghost" type="button" onClick={() => setPreview(true)}>Preview</button><button className="btn ghost" type="button" onClick={openAddStep}><span className="ic">{Ic.plus}</span>Add step</button><button className="btn primary" type="button" onClick={openAddQuestion}><span className="ic">{Ic.plus}</span>Add sub-section</button></div>
         </div>
 
         <div className="inquiry-builder-workspace">
@@ -1729,7 +1752,10 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
             })}
           </nav>
           <div className="inquiry-builder-list">
-          <div className="inquiry-step-heading"><div><span>Step {String(groups.findIndex((group) => group.id === selectedGroup) + 1).padStart(2, "0")}</span><h3>{groups.find((group) => group.id === selectedGroup)?.title}</h3><small>{groups.find((group) => group.id === selectedGroup)?.title_gr}</small></div><button className="btn ghost" type="button" onClick={openAddQuestion}><span className="ic">{Ic.plus}</span>Add sub-section</button></div>
+          <div className="inquiry-step-heading">
+            <div className="inquiry-step-title-editor"><span>Step {String(groups.findIndex((group) => group.id === selectedGroup) + 1).padStart(2, "0")}</span><label><small>EN</small><input value={activeStep?.title || ""} onChange={(event) => updateStep(selectedGroup, { title: event.target.value })} /></label><label><small>GR</small><input value={activeStep?.title_gr || ""} onChange={(event) => updateStep(selectedGroup, { title_gr: event.target.value })} /></label></div>
+            <div className="inquiry-step-heading-actions"><button className="btn ghost" type="button" onClick={openAddQuestion}><span className="ic">{Ic.plus}</span>Add sub-section</button><button className="btn danger" type="button" disabled={groups.length <= 1} onClick={() => removeStep(selectedGroup)}>{Ic.trash} Remove step</button></div>
+          </div>
           {questions.map((question, index) => ({ question, index })).filter((item) => item.question.group === selectedGroup).map(({ question, index }, stepIndex) => {
             const hasOptions = question.type === "buttons" || question.type === "select";
             return (
@@ -1795,6 +1821,15 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
           <button className="btn primary" type="button" disabled={!changed || !valid} onClick={() => onSave(normalise(form))}>Save form</button>
         </div>
       </div>
+      {addingStep && (
+        <div className="sheet-wrap inquiry-builder-modal" onMouseDown={(event) => event.target === event.currentTarget && setAddingStep(false)}>
+          <div className="sheet inquiry-builder-dialog" role="dialog" aria-modal="true" aria-labelledby="add-step-title">
+            <div className="sheet-head"><div><div className="eyebrow">/ New form step</div><h2 id="add-step-title">Add step</h2></div><button className="icon-btn" type="button" aria-label="Close" onClick={() => setAddingStep(false)}>{Ic.close}</button></div>
+            <div className="sheet-body"><div className="inquiry-language-grid"><div className="inquiry-language-panel"><div className="inquiry-language-title"><b>EN</b><span>English</span></div><Field label="Step question" required><input autoFocus value={stepDraft.title} onChange={(event) => setStepDraft({ ...stepDraft, title: event.target.value })} placeholder="e.g. What are you planning?" /></Field></div><div className="inquiry-language-panel"><div className="inquiry-language-title"><b>GR</b><span>Ελληνικά</span></div><Field label="Ερώτηση βήματος" required><input value={stepDraft.title_gr} onChange={(event) => setStepDraft({ ...stepDraft, title_gr: event.target.value })} placeholder="π.χ. Τι σχεδιάζετε;" /></Field></div></div></div>
+            <div className="sheet-foot"><span className="muted">You can add sub-sections after creating the step</span><div className="right"><button className="btn ghost" type="button" onClick={() => setAddingStep(false)}>Cancel</button><button className="btn primary" type="button" disabled={!stepDraft.title.trim() || !stepDraft.title_gr.trim()} onClick={addStep}>Add step</button></div></div>
+          </div>
+        </div>
+      )}
       {adding && (
         <div className="sheet-wrap inquiry-builder-modal" onMouseDown={(event) => event.target === event.currentTarget && setAdding(false)}>
           <div className="sheet inquiry-builder-dialog" role="dialog" aria-modal="true" aria-labelledby="add-question-title">
