@@ -525,7 +525,6 @@ function App({ session }) {
   const [sideOpen, setSideOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef(null);
-  const sideAccountRef = useRef(null);
   const goSection = (s) => { setSection(s); setSideOpen(false); };
   const goProjectTexts = (id = "all") => { setTextsProject(id); setEditing(null); goSection("texts"); };
 
@@ -537,7 +536,7 @@ function App({ session }) {
         setAccountOpen(false);
         return;
       }
-      if (event.type === "mousedown" && !accountRef.current?.contains(event.target) && !sideAccountRef.current?.contains(event.target)) {
+      if (event.type === "mousedown" && !accountRef.current?.contains(event.target)) {
         setAccountOpen(false);
       }
     };
@@ -965,17 +964,12 @@ function App({ session }) {
           </a>
 
           <div className="side-meta">localStorage · v1</div>
-          <div className={"side-account" + (accountOpen ? " open" : "")} ref={sideAccountRef}>
-            <button className="side-account-trigger" type="button" aria-label="Open account menu" aria-haspopup="menu" aria-expanded={accountOpen} onClick={() => setAccountOpen((open) => !open)}>
-              <span className="side-account-avatar" aria-hidden="true">{initials(user.name)}</span>
-              <span className="side-account-copy"><b>{user.name}</b><small>{window.P58Auth.ROLE_LABELS[user.role] || user.role}</small></span>
-            </button>
-            {accountOpen && (
-              <div className="topbar-account-popover side-account-popover" role="menu" aria-label="Account menu">
-                <div className="topbar-account-head"><span className="topbar-account-avatar" aria-hidden="true">{initials(user.name)}</span><span><b title={user.name}>{user.name}</b><small>{window.P58Auth.ROLE_LABELS[user.role] || user.role}</small></span></div>
-                <button className="topbar-account-signout" type="button" role="menuitem" onClick={() => window.P58Auth.logout()}>Sign out</button>
-              </div>
-            )}
+          <div className="side-user">
+            <div className="side-user-id">
+              <span className="side-user-avatar" aria-hidden="true">{initials(user.name)}</span>
+              <span className="side-user-text"><b title={user.name}>{user.name}</b><span className={`side-user-role role-${user.role}`}>{window.P58Auth.ROLE_LABELS[user.role] || user.role}</span></span>
+            </div>
+            <button className="side-signout" type="button" onClick={() => window.P58Auth.logout()}>Sign out</button>
           </div>
           <a className="side-footer-logo" href="index.html" target="_blank" rel="noopener" aria-label="Open Project58 website">
             <img src="assets/logo-black.svg" alt="Project58" />
