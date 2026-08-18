@@ -307,6 +307,125 @@ function HomePage({ go }) {
 
 }
 
+/* ================== V2 HOME — three-part presentation ================== */
+function V2HomePage({ go }) {
+  const pick = window.usePick();
+  const { lang } = window.useLang();
+  const visible = publicProjects();
+  const featured = visible.filter((project) => project.featured);
+  const works = (featured.length ? featured : visible).slice(0, 3);
+  const lead = works[0] || visible[0];
+  const [chapter, setChapter] = useS(0);
+
+  const copy = lang === "gr" ? {
+    practice: "Το γραφείο",
+    works: "Τα έργα",
+    contact: "Επικοινωνία",
+    statement: "Το Project58 είναι ένα αρχιτεκτονικό γραφείο που σχεδιάζει χώρους για την καθημερινή ζωή — από την κλίμακα ενός δωματίου έως την κλίμακα ενός κτιρίου.",
+    detail: "Αρχιτεκτονική, εσωτερικοί χώροι και επαναλαμβανόμενες εμπορικές εφαρμογές. Με έδρα την Αθήνα, εργαζόμαστε με σαφείς ιδέες, υλικά που αντέχουν και προσεκτική υλοποίηση.",
+    selected: "Επιλεγμένα έργα",
+    index: "Όλα τα έργα",
+    open: "Προβολή έργου",
+  } : {
+    practice: "The practice",
+    works: "The works",
+    contact: "Contact",
+    statement: "Project58 is an architectural practice designing places for everyday life — from the scale of a room to the scale of a building.",
+    detail: "Architecture, interiors and repeatable retail environments. Based in Athens, we work through clear ideas, durable materials and careful delivery.",
+    selected: "Selected works",
+    index: "View all works",
+    open: "View project",
+  };
+
+  useE(() => {
+    document.body.dataset.route = "v2-home";
+    document.body.classList.add("v2-home-active");
+    const panels = Array.from(document.querySelectorAll(".v2-panel"));
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) setChapter(Number(entry.target.dataset.chapter || 0));
+      });
+    }, { threshold: 0.55 });
+    panels.forEach((panel) => observer.observe(panel));
+    return () => {
+      observer.disconnect();
+      delete document.body.dataset.route;
+      document.body.classList.remove("v2-home-active");
+    };
+  }, []);
+
+  const scrollToChapter = (index) => {
+    const panel = document.querySelector(`.v2-panel[data-chapter="${index}"]`);
+    if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  return (
+    <div className="v2-home page-enter">
+      <aside className={`v2-chapters v2-chapters--${chapter}`} aria-label="Presentation chapters">
+        {[copy.practice, copy.works, copy.contact].map((label, index) => (
+          <button key={label} className={chapter === index ? "on" : ""} onClick={() => scrollToChapter(index)}>
+            <span>{String(index + 1).padStart(2, "0")}</span>
+            <em>{label}</em>
+          </button>
+        ))}
+      </aside>
+
+      <section className="v2-panel v2-practice" data-chapter="0">
+        {lead ? (
+          <div className="v2-practice-media" aria-hidden="true">
+            <SiteMedia src={lead.hero} alt="" />
+          </div>
+        ) : null}
+        <div className="v2-practice-wash" aria-hidden="true" />
+        <div className="v2-practice-copy">
+          <span className="v2-kicker">01 / {copy.practice}</span>
+          <h1>{copy.statement}</h1>
+          <div className="v2-practice-note">
+            <p>{copy.detail}</p>
+            <button onClick={() => go({ name: "agency" })}>{copy.practice}<span>↗</span></button>
+          </div>
+        </div>
+        <button className="v2-next" onClick={() => scrollToChapter(1)} aria-label={copy.works}>
+          <span>Scroll</span><i>↓</i>
+        </button>
+      </section>
+
+      <section className="v2-panel v2-works" data-chapter="1">
+        <header className="v2-works-head">
+          <span className="v2-kicker">02 / {copy.works}</span>
+          <h2>{copy.selected}</h2>
+          <button onClick={() => go({ name: "projects" })}>{copy.index}<span>↗</span></button>
+        </header>
+        <div className="v2-works-grid">
+          {works.map((project, index) => (
+            <a
+              key={project.id}
+              className={`v2-work v2-work--${index + 1}`}
+              href={`/v2/projects/${project.slug || project.id}`}
+              onClick={(event) => {
+                event.preventDefault();
+                go({ name: "project", id: project.slug || project.id }, { fromEl: event.currentTarget.querySelector("img"), src: project.hero });
+              }}>
+              <div className="v2-work-image"><SiteMedia src={project.hero} alt={pick(project, "name")} lazy /></div>
+              <div className="v2-work-caption">
+                <span>{String(index + 1).padStart(2, "0")}</span>
+                <h3>{pick(project, "name")}</h3>
+                <p>{pick(project, "location")}</p>
+                <em>{copy.open} ↗</em>
+              </div>
+            </a>
+          ))}
+        </div>
+      </section>
+
+      <section className="v2-panel v2-contact" data-chapter="2">
+        <span className="v2-contact-label">03 / {copy.contact}</span>
+        {window.Footer ? <window.Footer go={go} /> : null}
+      </section>
+    </div>
+  );
+}
+
 function MobileHomePage({ go, featured, active, setActive, cur, catOf }) {
   const pick = window.usePick();
   const t = window.useT();

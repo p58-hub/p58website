@@ -3,6 +3,8 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "rewrites": [
+    { "source": "/v2", "destination": "/index" },
+    { "source": "/v2/:path*", "destination": "/index" },
     { "source": "/projects", "destination": "/index" },
     { "source": "/projects/:slug", "destination": "/index" },
     { "source": "/architecture", "destination": "/index" },
