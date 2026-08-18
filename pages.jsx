@@ -309,13 +309,12 @@ function HomePage({ go }) {
 
 /* ================== V2 HOME — three-part presentation ================== */
 function V2HomePage({ go }) {
-  const pick = window.usePick();
   const { lang } = window.useLang();
   const visible = publicProjects();
   const featured = visible.filter((project) => project.featured);
-  const works = (featured.length ? featured : visible).slice(0, 3);
-  const lead = works[0] || visible[0];
+  const lead = (featured.length ? featured : visible)[0];
   const [chapter, setChapter] = useS(0);
+  const chapterRatios = useR(new Map());
 
   const copy = lang === "gr" ? {
     practice: "Το γραφείο",
@@ -323,18 +322,14 @@ function V2HomePage({ go }) {
     contact: "Επικοινωνία",
     statement: "Το Project58 είναι ένα αρχιτεκτονικό γραφείο που σχεδιάζει χώρους για την καθημερινή ζωή — από την κλίμακα ενός δωματίου έως την κλίμακα ενός κτιρίου.",
     detail: "Αρχιτεκτονική, εσωτερικοί χώροι και επαναλαμβανόμενες εμπορικές εφαρμογές. Με έδρα την Αθήνα, εργαζόμαστε με σαφείς ιδέες, υλικά που αντέχουν και προσεκτική υλοποίηση.",
-    selected: "Επιλεγμένα έργα",
     index: "Όλα τα έργα",
-    open: "Προβολή έργου",
   } : {
     practice: "The practice",
     works: "The works",
     contact: "Contact",
     statement: "Project58 is an architectural practice designing places for everyday life — from the scale of a room to the scale of a building.",
     detail: "Architecture, interiors and repeatable retail environments. Based in Athens, we work through clear ideas, durable materials and careful delivery.",
-    selected: "Selected works",
     index: "View all works",
-    open: "View project",
   };
 
   useE(() => {
@@ -343,9 +338,18 @@ function V2HomePage({ go }) {
     const panels = Array.from(document.querySelectorAll(".v2-panel"));
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
-        if (entry.isIntersecting) setChapter(Number(entry.target.dataset.chapter || 0));
+        chapterRatios.current.set(entry.target, entry.intersectionRatio);
       });
-    }, { threshold: 0.55 });
+      let nextChapter = 0;
+      let bestRatio = -1;
+      chapterRatios.current.forEach((ratio, panel) => {
+        if (ratio > bestRatio) {
+          bestRatio = ratio;
+          nextChapter = Number(panel.dataset.chapter || 0);
+        }
+      });
+      setChapter(nextChapter);
+    }, { threshold: [0, 0.2, 0.45, 0.7] });
     panels.forEach((panel) => observer.observe(panel));
     return () => {
       observer.disconnect();
@@ -370,7 +374,7 @@ function V2HomePage({ go }) {
         ))}
       </aside>
 
-      <section className="v2-panel v2-practice" data-chapter="0">
+      <section className={`v2-panel v2-practice ${chapter === 0 ? "v2-panel--active" : ""}`} data-chapter="0">
         {lead ? (
           <div className="v2-practice-media" aria-hidden="true">
             <SiteMedia src={lead.hero} alt="" />
@@ -390,35 +394,25 @@ function V2HomePage({ go }) {
         </button>
       </section>
 
-      <section className="v2-panel v2-works" data-chapter="1">
+      <section className={`v2-panel v2-works ${chapter === 1 ? "v2-panel--active" : ""}`} data-chapter="1">
         <header className="v2-works-head">
           <span className="v2-kicker">02 / {copy.works}</span>
-          <h2>{copy.selected}</h2>
-          <button onClick={() => go({ name: "projects" })}>{copy.index}<span>↗</span></button>
+          <h2>{copy.works}</h2>
         </header>
-        <div className="v2-works-grid">
-          {works.map((project, index) => (
-            <a
-              key={project.id}
-              className={`v2-work v2-work--${index + 1}`}
-              href={`/v2/projects/${project.slug || project.id}`}
-              onClick={(event) => {
-                event.preventDefault();
-                go({ name: "project", id: project.slug || project.id }, { fromEl: event.currentTarget.querySelector("img"), src: project.hero });
-              }}>
-              <div className="v2-work-image"><SiteMedia src={project.hero} alt={pick(project, "name")} lazy /></div>
-              <div className="v2-work-caption">
-                <span>{String(index + 1).padStart(2, "0")}</span>
-                <h3>{pick(project, "name")}</h3>
-                <p>{pick(project, "location")}</p>
-                <em>{copy.open} ↗</em>
-              </div>
-            </a>
-          ))}
+        <div className="v2-works-gateway">
+          {lead ? (
+            <div className="v2-works-gateway-media" aria-hidden="true">
+              <SiteMedia src={lead.hero} alt="" lazy />
+            </div>
+          ) : null}
+          <div className="v2-works-gateway-copy">
+            <span>{String(visible.length).padStart(2, "0")} / Project58</span>
+            <button onClick={() => go({ name: "projects" })}>{copy.index}<i>↗</i></button>
+          </div>
         </div>
       </section>
 
-      <section className="v2-panel v2-contact" data-chapter="2">
+      <section className={`v2-panel v2-contact ${chapter === 2 ? "v2-panel--active" : ""}`} data-chapter="2">
         <span className="v2-contact-label">03 / {copy.contact}</span>
         {window.Footer ? <window.Footer go={go} /> : null}
       </section>
