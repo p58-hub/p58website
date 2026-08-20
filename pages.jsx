@@ -106,20 +106,24 @@ function HomePage({ go }) {
   const targetX = useR(0);
   const animRef = useR(null);
 
-  // home route flag (locks the page to a single horizontal viewport via CSS)
+  // Desktop is a vertical presentation; mobile keeps its existing experience.
+  // The header remains hidden over the opening gallery and returns afterwards.
   useE(() => {
     document.body.dataset.route = "home";
     document.body.classList.add("hz-at-hero");
+    document.body.classList.toggle("desktop-presentation-home", !isMobile);
+    const onScroll = () => {
+      if (!isMobile) document.body.classList.toggle("hz-at-hero", window.scrollY < window.innerHeight * 0.72);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
     return () => {
+      window.removeEventListener("scroll", onScroll);
       delete document.body.dataset.route;
       document.body.classList.remove("hz-at-hero");
+      document.body.classList.remove("desktop-presentation-home");
     };
-  }, []);
-
-  // Hide the header on the landing (hero) pane; reveal it once you scroll into work.
-  useE(() => {
-    document.body.classList.toggle("hz-at-hero", progress < 0.04);
-  }, [progress]);
+  }, [isMobile]);
 
   // hero auto-rotates while the hero pane is the one in view
   useE(() => {
@@ -226,84 +230,126 @@ function HomePage({ go }) {
     return <MobileHomePage go={go} featured={featured} active={activeIndex} setActive={setI} cur={cur} catOf={catOf} />;
   }
 
+  const pgLead = publicProjects().find((p) => BRAND_KEY(p) === "pg") || cur;
+  const dnLead = publicProjects().find((p) => BRAND_KEY(p) === "dn") || cur;
+  const banners = [
+    {
+      key: "residences",
+      eyebrow: "Architecture / Living",
+      title: "Residences",
+      note: "Human-centered places for everyday life.",
+      tone: "sand",
+      action: () => go({ name: "architecture" }),
+    },
+    {
+      key: "protein-garden",
+      eyebrow: "Scalable retail systems",
+      title: "Protein Garden",
+      note: "A repeatable spatial identity shaped through material research and parametric tools.",
+      image: pgLead && pgLead.hero,
+      tone: "image",
+      action: () => go({ name: "interiors", brand: "pg" }),
+    },
+    {
+      key: "dinas",
+      eyebrow: "Hospitality / Brand experience",
+      title: "DINAS eat real",
+      note: "Warm, fluid spaces translating care and Mediterranean references into a growing system.",
+      image: dnLead && dnLead.hero,
+      tone: "image",
+      action: () => go({ name: "interiors", brand: "dn" }),
+    },
+    {
+      key: "workplaces",
+      eyebrow: "Architecture / Work",
+      title: "Workplaces",
+      note: "Studios and workplaces designed around focus, collaboration and identity.",
+      tone: "ink",
+      action: () => go({ name: "start" }),
+    },
+  ];
+
   return (
-    <div className="hzone" ref={trackRef}>
-      {/* ===== ZONE 1 — LANDING / HERO (100vw) ===== */}
+    <div className="dhome">
       <section
-        className="hz-hero"
-        style={{ cursor: "pointer" }}
+        className="dhome-hero"
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
-        onClick={() => { sessionStorage.setItem("hzone_scroll", trackRef.current ? trackRef.current.scrollLeft : 0); go({ name: "project", id: cur.slug || cur.id, from: { name: "home" } }); }}>
-        {featured.map((p, idx) =>
-        <div key={p.id} className={`vhome-slide ${idx === activeIndex ? "on" : ""}`}>
+        onClick={() => go({ name: "project", id: cur.slug || cur.id, from: { name: "home" } })}>
+        {featured.map((p, idx) => (
+          <div key={p.id} className={`vhome-slide ${idx === activeIndex ? "on" : ""}`}>
             <img src={p.hero} alt="" />
           </div>
-        )}
-        <div className="vhome-veil" aria-hidden="true"></div>
-        <div className="vhome-brand" onClick={(e) => { e.stopPropagation(); go({ name: "home" }); }} role="button" aria-label="Project58 home">
+        ))}
+        <div className="dhome-hero-veil" aria-hidden="true" />
+        <div className="vhome-brand" onClick={(event) => { event.stopPropagation(); go({ name: "home" }); }} role="button" aria-label="Project58 home">
           <img src="assets/logo-white.png" alt="Project58" />
+        </div>
+        <div className="dhome-hero-copy">
+          <span className="dhome-kicker">Project58 / Design practice</span>
+          <h1>Designing for a new emerging world!</h1>
+          <p>We create architecture, interiors, design, and research for innovative solutions in an emerging world.</p>
         </div>
         <div className="vhome-loc">{pick(cur, "location")}</div>
         <div className="vhome-cue">
           <svg className="mouse-icon" viewBox="0 0 18 28" width="18" height="28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <rect x="1" y="1" width="16" height="26" rx="8" stroke="white" strokeWidth="1.5" strokeOpacity="0.85"/>
-            <rect className="mouse-wheel" x="8" y="5" width="2" height="5" rx="1" fill="white"/>
+            <rect x="1" y="1" width="16" height="26" rx="8" stroke="white" strokeWidth="1.5" strokeOpacity="0.85" />
+            <rect className="mouse-wheel" x="8" y="5" width="2" height="5" rx="1" fill="white" />
           </svg>
           <span>SCROLL</span>
         </div>
-        <div className="vhome-dots" onClick={(e) => e.stopPropagation()}>
-          {featured.map((p, idx) =>
-          <button
-            key={p.id}
-            className={`vhome-dot ${idx === activeIndex ? "on" : ""}`}
-            onClick={() => setI(idx)}
-            aria-label={`Project ${idx + 1}`} />
-
-          )}
+        <div className="vhome-dots" onClick={(event) => event.stopPropagation()}>
+          {featured.map((p, idx) => (
+            <button key={p.id} className={`vhome-dot ${idx === activeIndex ? "on" : ""}`} onClick={() => setI(idx)} aria-label={`Project ${idx + 1}`} />
+          ))}
         </div>
       </section>
 
-      {/* ===== ZONE 2 — HORIZONTAL GALLERY (intro panel + portrait cards) ===== */}
-      <section className="hz-intro">
-        <h2 className="vhome-rail-title">Recent Projects</h2>
+      <section className="dhome-statement dhome-statement--practice">
+        <span className="dhome-kicker">01 / Practice</span>
+        <h2>We can design your residence, your business, and your workplace.</h2>
+        <div className="dhome-methods" aria-label="Our approach">
+          <span>Parametric tools</span>
+          <span>Human-centered design</span>
+          <span>Data-driven</span>
+          <span>Senses</span>
+          <span>Science</span>
+        </div>
       </section>
 
-      {featured.map((p, idx) =>
-      <a
-        key={p.id}
-        className="vhome-hcard hz-card"
-        href={`/projects/${p.slug || p.id}`}
-        onClick={(e) => {
-          e.preventDefault();
-          sessionStorage.setItem("hzone_scroll", trackRef.current ? trackRef.current.scrollLeft : 0);
-          go({ name: "project", id: p.slug || p.id, brand: BRAND_KEY(p) });
-        }}>
-          <div className="vhome-hpic">
-            <img src={p.hero} alt={pick(p, "name")} loading="lazy" draggable="false" />
-            <span className="vhome-hpic-num">N°{String(idx + 1).padStart(2, "0")}</span>
-            <span className="vhome-hpic-cat">{catOf(p)}</span>
-          </div>
-          <div className="vhome-hcap">
-            <div className="vhome-name">{pick(p, "name")}</div>
-            <div className="vhome-loc-2">{pick(p, "location")}</div>
-          </div>
-        </a>
-      )}
+      <section className="dhome-work" aria-labelledby="dhome-work-title">
+        <header className="dhome-work-head">
+          <span className="dhome-kicker">02 / Selected fields</span>
+          <h2 id="dhome-work-title">Where we work.</h2>
+        </header>
+        <div className="dhome-banners">
+          {banners.map((banner, index) => (
+            <button key={banner.key} className={`dhome-banner dhome-banner--${banner.tone}`} onClick={banner.action}>
+              {banner.image ? <img src={banner.image} alt="" loading="lazy" /> : null}
+              <span className="dhome-banner-shade" aria-hidden="true" />
+              <span className="dhome-banner-number">{String(index + 1).padStart(2, "0")}</span>
+              <span className="dhome-banner-copy">
+                <span>{banner.eyebrow}</span>
+                <strong>{banner.title}</strong>
+                <small>{banner.note}</small>
+              </span>
+              <span className="dhome-banner-arrow">↗</span>
+            </button>
+          ))}
+        </div>
+      </section>
 
-      <div className="vhome-endcard hz-end">
-        <div className="eyebrow">End of selection</div>
-        <h3>See the full index of work.</h3>
-        <button onClick={() => go({ name: "interiors" })}>All projects ↗</button>
-      </div>
+      <section className="dhome-statement dhome-statement--systems">
+        <span className="dhome-kicker">03 / Design systems</span>
+        <h2>We developed scalable design systems for two fast-casual brands, delivering 10+ shops across Greece in less than a year.</h2>
+        <button onClick={() => go({ name: "projects" })}>View all projects <span>↗</span></button>
+      </section>
 
-      {/* ===== ZONE 3 — FOOTER (100vw) ===== */}
-      <section className="hz-foot">
+      <section className="dhome-contact">
         {window.Footer ? <window.Footer go={go} /> : null}
       </section>
-
-      <div className="hz-progress"><i style={{ width: `${progress * 100}%` }} /></div>
-    </div>);
+    </div>
+  );
 
 }
 
