@@ -30,50 +30,46 @@ function routeFromLocation() {
   const legacyHash = (location.hash || "").replace(/^#/, "");
   if (legacyHash) return routeFromLegacyHash(legacyHash);
 
-  const rawParts = location.pathname.split("/").filter(Boolean).map(decodeURIComponent);
-  const version = rawParts[0] === "v2" ? "v2" : null;
-  const parts = version ? rawParts.slice(1) : rawParts;
+  const parts = location.pathname.split("/").filter(Boolean).map(decodeURIComponent);
   const params = new URLSearchParams(location.search);
-  const withVersion = (route) => version ? { ...route, version } : route;
-  if (parts[0] === "projects" && parts[1]) return withVersion({ name: "project", id: parts[1] });
+  if (parts[0] === "projects" && parts[1]) return { name: "project", id: parts[1] };
   if (parts[0] === "projects") {
     const type = params.get("type");
     const brand = params.get("brand");
     const sort = params.get("sort");
-    return withVersion({
+    return {
       name: "projects",
       ...(type ? { type } : {}),
       ...(brand ? { brand } : {}),
       ...(sort ? { sort } : {}),
-    });
+    };
   }
   if (parts[0] === "interiors") {
     const brand = params.get("brand");
     const sort = params.get("sort");
-    return withVersion({ name: "interiors", ...(brand ? { brand } : {}), ...(sort ? { sort } : {}) });
+    return { name: "interiors", ...(brand ? { brand } : {}), ...(sort ? { sort } : {}) };
   }
-  if (parts[0] === "people") return withVersion({ name: "agency" });
-  if (parts[0] === "start-a-project") return withVersion({ name: "start" });
+  if (parts[0] === "people") return { name: "agency" };
+  if (parts[0] === "start-a-project") return { name: "start" };
   if (ROUTES.includes(parts[0])) {
     const sort = params.get("sort");
-    return withVersion({ name: parts[0], ...(sort ? { sort } : {}) });
+    return { name: parts[0], ...(sort ? { sort } : {}) };
   }
-  return withVersion({ name: "home" });
+  return { name: "home" };
 }
 
 function pathFromRoute(r) {
   const name = ALIAS[r.name] || r.name;
-  const prefix = r.version === "v2" ? "/v2" : "";
-  if (name === "home") return prefix || "/";
-  if (name === "project") return `${prefix}/projects/${encodeURIComponent(r.id)}`;
-  if (name === "agency") return `${prefix}/people`;
-  if (name === "start") return `${prefix}/start-a-project`;
+  if (name === "home") return "/";
+  if (name === "project") return `/projects/${encodeURIComponent(r.id)}`;
+  if (name === "agency") return "/people";
+  if (name === "start") return "/start-a-project";
   const params = new URLSearchParams();
   if (r.type) params.set("type", r.type);
   if (r.brand) params.set("brand", r.brand);
   if (r.sort) params.set("sort", r.sort);
   const query = params.toString();
-  return `${prefix}/${name}${query ? `?${query}` : ""}`;
+  return `/${name}${query ? `?${query}` : ""}`;
 }
 
 function routeKey(r) {
@@ -87,7 +83,7 @@ const MOBILE_MQ = "(max-width: 720px)";
 
 function resolveRoute(r) {
   const onPhone = typeof window !== "undefined" && window.matchMedia(MOBILE_MQ).matches;
-  return r.name === "home" && onPhone && r.version !== "v2" ? { name: "projects" } : r;
+  return r.name === "home" && onPhone ? { name: "projects" } : r;
 }
 
 /* WebGL backdrop for the site entrance — soft flowing paper-grain field.
@@ -276,7 +272,6 @@ function App() {
       setRoute({ name });
     };
     const followBreakpoint = () => {
-      if (routeFromLocation().version === "v2") return;
       if (mq.matches) {
         if (routeFromLocation().name !== "home") return;
         standingInForHome.current = true;
@@ -308,20 +303,18 @@ function App() {
   const go = (r, opts = {}) => {
     saveScroll();
     const name = ALIAS[r.name] || r.name;
-    const version = r.version || routeRef.current.version;
     // capture referrer when entering a project from a non-project page
     let from = r.from;
     if (name === "project" && !from && routeRef.current.name !== "project") {
       const cur = routeRef.current;
       from = {
         name: cur.name,
-        ...(cur.version ? { version: cur.version } : {}),
         ...(cur.brand ? { brand: cur.brand } : {}),
         ...(cur.type ? { type: cur.type } : {}),
         ...(cur.sort ? { sort: cur.sort } : {}),
       };
     }
-    const next = resolveRoute({ ...r, name, ...(version ? { version } : {}), ...(from ? { from } : {}) });
+    const next = resolveRoute({ ...r, name, ...(from ? { from } : {}) });
     standingInForHome.current = name === "home" && next.name !== "home";
     const nextPath = pathFromRoute(next);
     const currentPath = pathFromRoute(routeRef.current);
@@ -460,9 +453,7 @@ function App() {
   }, [route.name, route.id, route.brand, route.type, contentVersion]);
 
   let page = null;
-  if (route.name === "home")         page = route.version === "v2"
-    ? <V2HomePage go={go} />
-    : (window.visibleProjects ? window.visibleProjects() : PROJECTS.filter((p) => p.visible !== false)).length ? <HomePage go={go} /> : <ProjectsPage go={go} />;
+  if (route.name === "home")         page = (window.visibleProjects ? window.visibleProjects() : PROJECTS.filter((p) => p.visible !== false)).length ? <HomePage go={go} /> : <ProjectsPage go={go} />;
   if (route.name === "projects")     page = <ProjectsPage go={go} type={route.type} brand={route.brand} sort={route.sort} />;
   if (route.name === "architecture") page = <ArchitecturePage go={go} sort={route.sort} />;
   if (route.name === "interiors")    page = <InteriorsPage go={go} brand={route.brand} sort={route.sort} />;
@@ -490,8 +481,8 @@ function App() {
         </div>
       ) : null}
       <Nav route={route} go={go} />
-      <main key={(route.version || "v1") + route.name + (route.id || "") + (route.brand || "") + (route.type || "") + (route.sort || "") + ":" + contentVersion} data-screen-label={pageLabel(route)}>{page}</main>
-      {route.name !== "project" && route.name !== "projects" && route.name !== "interiors" && route.name !== "architecture" && route.name !== "agency" && route.name !== "start" && route.name !== "contact" && route.version !== "v2" && <Footer go={go} />}
+      <main key={route.name + (route.id || "") + (route.brand || "") + (route.type || "") + (route.sort || "") + ":" + contentVersion} data-screen-label={pageLabel(route)}>{page}</main>
+      {route.name !== "project" && route.name !== "projects" && route.name !== "interiors" && route.name !== "architecture" && route.name !== "agency" && route.name !== "start" && route.name !== "contact" && <Footer go={go} />}
       {zoom ? (
         <div className={`zoom-flight ${zoom.on ? "on" : ""}`} aria-hidden="true">
           <img
