@@ -345,7 +345,7 @@ function HomePage({ go }) {
         <button onClick={() => go({ name: "projects" })}>View all projects <span>↗</span></button>
       </section>
 
-      <section className="dhome-contact">
+      <section className="dhome-contact hz-foot">
         {window.Footer ? <window.Footer go={go} /> : null}
       </section>
     </div>

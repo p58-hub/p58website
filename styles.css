@@ -4580,11 +4580,9 @@ body.desktop-presentation-home[data-route="home"] .nav {
 }
 .dhome-statement--systems button span { transition: transform 180ms ease; }
 .dhome-statement--systems button:hover span { transform: translate(4px, -4px); }
-.dhome-contact footer.foot {
-  min-height: 100vh;
-  min-height: 100dvh;
-  margin: 0;
-  padding-top: clamp(100px, 14vh, 160px);
+.dhome-contact {
+  height: 100vh;
+  height: 100dvh;
 }
 
 @media (max-width: 720px) {
