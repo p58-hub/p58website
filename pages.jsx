@@ -310,11 +310,15 @@ function HomePage({ go }) {
 /* ================== V2 HOME — three-part presentation ================== */
 function V2HomePage({ go }) {
   const { lang } = window.useLang();
+  const isMobile = useHomeMobile();
   const visible = publicProjects();
   const featured = visible.filter((project) => project.featured);
   const lead = (featured.length ? featured : visible)[0];
   const [chapter, setChapter] = useS(0);
   const chapterRatios = useR(new Map());
+  const trackRef = useR(null);
+  const targetX = useR(0);
+  const scrollAnimation = useR(null);
 
   const copy = lang === "gr" ? {
     practice: "Το γραφείο",
@@ -336,6 +340,7 @@ function V2HomePage({ go }) {
     document.body.dataset.route = "v2-home";
     document.body.classList.add("v2-home-active");
     const panels = Array.from(document.querySelectorAll(".v2-panel"));
+    chapterRatios.current.clear();
     const observer = new IntersectionObserver((entries) => {
       entries.forEach((entry) => {
         chapterRatios.current.set(entry.target, entry.intersectionRatio);
@@ -349,22 +354,85 @@ function V2HomePage({ go }) {
         }
       });
       setChapter(nextChapter);
-    }, { threshold: [0, 0.2, 0.45, 0.7] });
+    }, {
+      root: isMobile ? null : trackRef.current,
+      threshold: [0, 0.2, 0.45, 0.7],
+    });
     panels.forEach((panel) => observer.observe(panel));
     return () => {
       observer.disconnect();
       delete document.body.dataset.route;
       document.body.classList.remove("v2-home-active");
     };
-  }, []);
+  }, [isMobile]);
+
+  // Preserve the original desktop interaction: vertical wheel/trackpad input
+  // advances a single horizontal presentation rail.
+  useE(() => {
+    const track = trackRef.current;
+    if (!track || isMobile) return undefined;
+    targetX.current = track.scrollLeft;
+
+    const stopAnimation = () => {
+      if (!scrollAnimation.current) return;
+      clearInterval(scrollAnimation.current);
+      scrollAnimation.current = null;
+    };
+    const animateToTarget = () => {
+      if (scrollAnimation.current) return;
+      scrollAnimation.current = setInterval(() => {
+        const difference = targetX.current - track.scrollLeft;
+        if (Math.abs(difference) < 0.5) {
+          track.scrollLeft = targetX.current;
+          stopAnimation();
+          return;
+        }
+        track.scrollLeft += difference * 0.18;
+      }, 16);
+    };
+    const clamp = (value) => Math.max(0, Math.min(track.scrollWidth - track.clientWidth, value));
+    const onWheel = (event) => {
+      const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+      if (!delta) return;
+      event.preventDefault();
+      targetX.current = clamp((scrollAnimation.current ? targetX.current : track.scrollLeft) + delta);
+      animateToTarget();
+    };
+    const onScroll = () => {
+      if (!scrollAnimation.current) targetX.current = track.scrollLeft;
+    };
+    const onKeyDown = (event) => {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      const direction = event.key === "ArrowRight" ? 1 : -1;
+      targetX.current = clamp(track.scrollLeft + direction * track.clientWidth);
+      animateToTarget();
+    };
+
+    track.addEventListener("wheel", onWheel, { passive: false });
+    track.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      stopAnimation();
+      track.removeEventListener("wheel", onWheel);
+      track.removeEventListener("scroll", onScroll);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isMobile]);
 
   const scrollToChapter = (index) => {
     const panel = document.querySelector(`.v2-panel[data-chapter="${index}"]`);
-    if (panel) panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    if (!panel) return;
+    if (!isMobile && trackRef.current) {
+      setChapter(index);
+      targetX.current = panel.offsetLeft;
+      trackRef.current.scrollLeft = panel.offsetLeft;
+      return;
+    }
+    panel.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   return (
-    <div className="v2-home page-enter">
+    <div className="v2-home page-enter" ref={trackRef}>
       <aside className={`v2-chapters v2-chapters--${chapter}`} aria-label="Presentation chapters">
         {[copy.practice, copy.works, copy.contact].map((label, index) => (
           <button key={label} className={chapter === index ? "on" : ""} onClick={() => scrollToChapter(index)}>

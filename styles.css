@@ -4454,23 +4454,40 @@ body[data-route="home"].hz-at-hero .nav {
    V2 HOME — presentation in three chapters
    ===================================================== */
 body.v2-home-active {
-  scroll-snap-type: y proximity;
-  overscroll-behavior-y: contain;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
 }
 body.v2-home-active .nav {
   position: sticky;
   top: 0;
 }
+body.v2-home-active main {
+  height: calc(100vh - 75px);
+  height: calc(100dvh - 75px);
+  overflow: hidden;
+}
 .v2-home {
+  display: flex;
+  height: 100%;
   width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overscroll-behavior-x: contain;
   background: var(--paper);
 }
+.v2-home::-webkit-scrollbar { display: none; }
 .v2-panel {
   position: relative;
-  min-height: calc(100vh - 75px);
-  min-height: calc(100dvh - 75px);
+  flex: 0 0 100vw;
+  width: 100vw;
+  height: 100%;
+  min-height: 0;
   scroll-snap-align: start;
-  scroll-margin-top: 75px;
 }
 .v2-panel--active {
   animation: v2-section-flight 680ms cubic-bezier(.2,.7,.2,1) both;
@@ -4637,7 +4654,9 @@ body.v2-home-active .nav {
 @keyframes v2-down { 50% { transform: translateY(5px); } }
 
 .v2-works {
-  padding: clamp(70px, 9vh, 110px) max(calc(var(--gutter) + 58px), 7vw) clamp(54px, 8vh, 90px) var(--gutter);
+  display: flex;
+  flex-direction: column;
+  padding: clamp(30px, 5vh, 64px) max(calc(var(--gutter) + 58px), 7vw) clamp(28px, 4vh, 52px) var(--gutter);
   background: var(--paper);
 }
 .v2-works-head {
@@ -4645,7 +4664,8 @@ body.v2-home-active .nav {
   grid-template-columns: 1fr auto;
   align-items: end;
   gap: 10px 32px;
-  margin-bottom: clamp(28px, 4vh, 52px);
+  flex: 0 0 auto;
+  margin-bottom: clamp(18px, 2.5vh, 32px);
 }
 .v2-works-head .v2-kicker { grid-column: 1 / -1; color: var(--ink-3); }
 .v2-works-head h2 {
@@ -4658,7 +4678,8 @@ body.v2-home-active .nav {
 }
 .v2-works-gateway {
   position: relative;
-  min-height: clamp(430px, 58vh, 720px);
+  flex: 1 1 auto;
+  min-height: 0;
   overflow: hidden;
   color: #fff;
   background: var(--ink);
@@ -4723,8 +4744,7 @@ body.v2-home-active .nav {
 .v2-works-gateway-copy button:hover i { transform: translate(5px, -5px); }
 .v2-contact {
   display: flex;
-  min-height: calc(100vh - 75px);
-  min-height: calc(100dvh - 75px);
+  min-height: 0;
   color: #fff;
   background: var(--ink);
 }
@@ -4746,7 +4766,19 @@ body.v2-home-active .nav {
 }
 
 @media (max-width: 720px) {
-  body.v2-home-active { scroll-snap-type: none; }
+  body.v2-home-active {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  body.v2-home-active main {
+    height: auto;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: visible;
+  }
   body.v2-home-active .nav.mobile-home-top {
     color: var(--ink);
     background: var(--paper);
@@ -4756,7 +4788,18 @@ body.v2-home-active .nav {
   }
   body.v2-home-active .nav.mobile-home-top .nav-logo img { filter: none; }
   body.v2-home-active .nav.mobile-home-top .nav-icon { color: var(--ink); }
-  .v2-panel { min-height: calc(100dvh - 62px); scroll-margin-top: 62px; }
+  .v2-home {
+    display: block;
+    height: auto;
+    overflow: visible;
+    scroll-snap-type: none;
+  }
+  .v2-panel {
+    width: 100%;
+    height: auto;
+    min-height: calc(100dvh - 62px);
+    scroll-margin-top: 62px;
+  }
   .v2-chapters { display: none; }
   .v2-practice-copy {
     display: block;
