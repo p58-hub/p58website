@@ -1,7 +1,7 @@
 /* ===== chrome.jsx — Nav + Footer =====
    - Compact wordmark logo (uses logo-black.svg now — no black bounding box).
-   - Center nav now reads RETAIL / RESIDENTIAL. RETAIL reveals a horizontal
-     brand strip (Protein Garden, Dinas) underneath.
+   - Center nav is a single PROJECTS link into the works index, which carries
+     its own category row (All / Retail / Residential + brands) underneath.
    - Right side: a Spotlight-style search trigger + a sandwich menu that
      pops a minimal AGENCY / CONTACT card.
 */
@@ -251,18 +251,11 @@ function Nav({ route, go }) {
                 </button>
               )
           ) : (
-            <React.Fragment>
-              <button
-                className={`nav-link ${isRetail ? "active" : ""}`}
-                onClick={() => go({ name: "interiors" })}>
-                {t("retail")}
-              </button>
-              <button
-                className={`nav-link ${isResidential ? "active" : ""}`}
-                onClick={() => go({ name: "architecture" })}>
-                {t("residential")}
-              </button>
-            </React.Fragment>
+            <button
+              className={`nav-link ${isProjects || isRetail || isResidential ? "active" : ""}`}
+              onClick={() => go({ name: "projects" })}>
+              {t("projects")}
+            </button>
           )}
         </div>
 
@@ -700,9 +693,23 @@ function TabMoreIcon() {
 function MobileTabBar({ route, go, onMore }) {
   const t = window.useT();
   const { lang, setLang } = window.useLang();
+  const isHome = route.name === "home";
   const isProjects = route.name === "projects" || route.name === "interiors" || route.name === "architecture";
   return (
     <nav className="mobile-tab-bar" aria-label="Mobile primary">
+      <button
+        className={`mobile-tab ${isHome ? "on" : ""}`}
+        type="button"
+        aria-label={t("home")}
+        aria-current={isHome ? "page" : undefined}
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          go({ name: "home" });
+        }}>
+        <TabHomeIcon on={isHome} />
+        <span>{t("home")}</span>
+      </button>
       <button
         className="mobile-tab mobile-tab-language"
         type="button"

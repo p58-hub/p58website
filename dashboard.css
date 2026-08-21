@@ -1845,6 +1845,54 @@ a { color: inherit; }
   color: var(--ink-3);
 }
 
+/* ============ Home V2 banners ============ */
+.v2-settings { max-width: 1080px; }
+.v2-section-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.v2-section-switch .form-section-title { margin-bottom: 7px; }
+.v2-section-switch .hero-hint { margin: 0; }
+.v2-banner-list { display: grid; gap: 14px; margin-top: 18px; }
+.v2-banner-card {
+  padding: 18px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 10px;
+  background: var(--paper-2);
+  transition: opacity 160ms ease, background 160ms ease;
+}
+.v2-banner-card.is-hidden { opacity: .58; background: var(--paper-3); }
+.v2-banner-card-head {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.v2-banner-index {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .14em;
+  color: var(--ink-3);
+}
+.v2-banner-card-head > strong {
+  overflow: hidden;
+  font-size: 17px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.v2-banner-actions { display: flex; align-items: center; gap: 5px; }
+.v2-banner-card textarea { min-height: 68px; }
+
+@media (max-width: 720px) {
+  .v2-section-switch { align-items: flex-start; }
+  .v2-banner-card-head { grid-template-columns: 28px minmax(0, 1fr); }
+  .v2-banner-actions { grid-column: 1 / -1; justify-content: flex-end; }
+}
+
 /* ============ Inquiry form builder ============ */
 .inquiry-form-settings { max-width: 1180px; }
 .inquiry-builder-intro {

@@ -101,18 +101,20 @@ function HomePage({ go }) {
 
   const [i, setI] = useS(0);
   const [paused, setPaused] = useS(false);
+  const [heroVisible, setHeroVisible] = useS(true);
   const [progress, setProgress] = useS(0);
   const trackRef = useR(null);
   const targetX = useR(0);
   const animRef = useR(null);
 
-  // Desktop is a vertical presentation; mobile keeps its existing experience.
-  // The header remains hidden over the opening gallery and returns afterwards.
+  // The v2 vertical presentation is shared by desktop and mobile. The header
+  // remains hidden over the opening gallery and returns afterwards.
   useE(() => {
     document.body.dataset.route = "home";
     document.body.classList.add("hz-at-hero");
     document.body.classList.toggle("desktop-presentation-home", !isMobile);
     const onScroll = () => {
+      setHeroVisible(window.scrollY < window.innerHeight * 0.95);
       if (!isMobile) document.body.classList.toggle("hz-at-hero", window.scrollY < window.innerHeight * 0.72);
     };
     onScroll();
@@ -127,10 +129,10 @@ function HomePage({ go }) {
 
   // hero auto-rotates while the hero pane is the one in view
   useE(() => {
-    if (paused || progress > 0.04) return;
+    if (paused || !heroVisible || progress > 0.04) return;
     const id = setTimeout(() => setI((x) => (x + 1) % featured.length), heroIntervalMs);
     return () => clearTimeout(id);
-  }, [i, paused, featured.length, progress, heroIntervalMs]);
+  }, [i, paused, heroVisible, featured.length, progress, heroIntervalMs]);
 
   // eased loop: tween actual scrollLeft toward targetX (timer-based so it runs
   // even when the tab isn't focused; gives momentum/smoothness to wheel + buttons)
@@ -226,48 +228,24 @@ function HomePage({ go }) {
   if (!cur) return null;
   const catOf = (p) => BRAND_KEY(p) === "pg" ? "Retail" : "Hospitality";
 
-  if (isMobile) {
-    return <MobileHomePage go={go} featured={featured} active={activeIndex} setActive={setI} cur={cur} catOf={catOf} />;
-  }
-
   const pgLead = publicProjects().find((p) => BRAND_KEY(p) === "pg") || cur;
   const dnLead = publicProjects().find((p) => BRAND_KEY(p) === "dn") || cur;
-  const banners = [
-    {
-      key: "residences",
-      eyebrow: "Architecture / Living",
-      title: "Residences",
-      note: "Human-centered places for everyday life.",
-      tone: "sand",
-      action: () => go({ name: "architecture" }),
-    },
-    {
-      key: "protein-garden",
-      eyebrow: "Scalable retail systems",
-      title: "Protein Garden",
-      note: "A repeatable spatial identity shaped through material research and parametric tools.",
-      image: pgLead && pgLead.hero,
-      tone: "image",
-      action: () => go({ name: "interiors", brand: "pg" }),
-    },
-    {
-      key: "dinas",
-      eyebrow: "Hospitality / Brand experience",
-      title: "DINAS eat real",
-      note: "Warm, fluid spaces translating care and Mediterranean references into a growing system.",
-      image: dnLead && dnLead.hero,
-      tone: "image",
-      action: () => go({ name: "interiors", brand: "dn" }),
-    },
-    {
-      key: "workplaces",
-      eyebrow: "Architecture / Work",
-      title: "Workplaces",
-      note: "Studios and workplaces designed around focus, collaboration and identity.",
-      tone: "ink",
-      action: () => go({ name: "start" }),
-    },
-  ];
+  const storedSite = window.readP58Store ? window.readP58Store()?.site : null;
+  const homeV2 = window.normaliseSiteSettings(storedSite || window.DEFAULT_SITE_SETTINGS).homeV2;
+  const bannerAction = (destination) => {
+    if (destination === "architecture") return () => go({ name: "architecture" });
+    if (destination === "protein-garden") return () => go({ name: "interiors", brand: "pg" });
+    if (destination === "dinas") return () => go({ name: "interiors", brand: "dn" });
+    if (destination === "contact") return () => go({ name: "start" });
+    return () => go({ name: "projects" });
+  };
+  const banners = homeV2.banners
+    .filter((banner) => banner.visible !== false)
+    .map((banner) => ({
+      ...banner,
+      image: banner.image || (banner.id === "protein-garden" ? pgLead?.hero : banner.id === "dinas" ? dnLead?.hero : ""),
+      action: bannerAction(banner.destination),
+    }));
 
   return (
     <div className="dhome">
@@ -286,8 +264,8 @@ function HomePage({ go }) {
           <img src="assets/logo-white.png" alt="Project58" />
         </div>
         <div className="dhome-hero-copy">
-          <span className="dhome-kicker">Project58 / Design practice</span>
-          <h1>Designing for a new emerging world!</h1>
+          <span className="dhome-kicker">Project58 Architecture &amp; Design Practice</span>
+          <h1>Designing for an emerging world!</h1>
           <p>We create architecture, interiors, design, and research for innovative solutions in an emerging world.</p>
         </div>
         <div className="vhome-loc">{pick(cur, "location")}</div>
@@ -307,24 +285,24 @@ function HomePage({ go }) {
 
       <section className="dhome-statement dhome-statement--practice">
         <span className="dhome-kicker">01 / Practice</span>
-        <h2>We can design your residence, your business, and your workplace.</h2>
+        <h2>Project58 is an architecture and design practice where human-centered design, technology, and data-driven research come together to shape meaningful spatial experiences.</h2>
         <div className="dhome-methods" aria-label="Our approach">
-          <span>Parametric tools</span>
+          <span>Computational design</span>
           <span>Human-centered design</span>
-          <span>Data-driven</span>
-          <span>Senses</span>
-          <span>Science</span>
+          <span>Data-driven design</span>
+          <span>Research</span>
+          <span>Environmental design</span>
         </div>
       </section>
 
-      <section className="dhome-work" aria-labelledby="dhome-work-title">
+      {homeV2.enabled && banners.length ? <section className="dhome-work" aria-labelledby="dhome-work-title">
         <header className="dhome-work-head">
-          <span className="dhome-kicker">02 / Selected fields</span>
-          <h2 id="dhome-work-title">Where we work.</h2>
+          <span className="dhome-kicker">{homeV2.kicker}</span>
+          <h2 id="dhome-work-title">{homeV2.title}</h2>
         </header>
         <div className="dhome-banners">
           {banners.map((banner, index) => (
-            <button key={banner.key} className={`dhome-banner dhome-banner--${banner.tone}`} onClick={banner.action}>
+            <button key={banner.id} className={`dhome-banner dhome-banner--${banner.tone}`} onClick={banner.action}>
               {banner.image ? <img src={banner.image} alt="" loading="lazy" /> : null}
               <span className="dhome-banner-shade" aria-hidden="true" />
               <span className="dhome-banner-number">{String(index + 1).padStart(2, "0")}</span>
@@ -337,7 +315,7 @@ function HomePage({ go }) {
             </button>
           ))}
         </div>
-      </section>
+      </section> : null}
 
       <section className="dhome-statement dhome-statement--systems">
         <span className="dhome-kicker">03 / Design systems</span>
@@ -492,20 +470,166 @@ function InteriorsPage({ go, brand, sort }) {
     </div>);
 }
 
+/* ================== PROJECTS — horizontal rail (desktop) ==================
+   The v1 home page, repurposed as the works landing: an opening gallery pane,
+   then the categories as portrait cards you scroll through sideways. Picking a
+   category hands over to ProjectsPage, which lists that category's projects the
+   ordinary way — scrolling down. Phones go straight to ProjectsPage. */
+function ProjectsRail({ go }) {
+  const pick = window.usePick();
+  const t = window.useT();
+
+  // The categories are the dashboard's, in the dashboard's order. Not cached:
+  // a project hidden there has to leave the counts at once.
+  const visible = publicProjects();
+  const categories = window.siteCategories().map((c) => {
+    const members = visible.filter((p) => window.projectCategoryId(p) === c.id);
+    return { ...c, count: members.length, cover: members.find((p) => p.hero) };
+  });
+
+  // the opening pane cycles the featured set, in the order the dashboard pins
+  const gallery = (() => {
+    const visible = publicProjects();
+    const picked = visible.filter((p) => p.featured);
+    const list = (picked.length ? picked : visible).slice();
+    const stored = window.readP58Store ? window.readP58Store() : null;
+    const pinned = Array.isArray(stored?.site?.heroGallery?.order) ? stored.site.heroGallery.order : [];
+    if (pinned.length) {
+      const rank = new Map(pinned.map((id, idx) => [id, idx]));
+      const at = (p) => (rank.has(p.id) ? rank.get(p.id) : Number.MAX_SAFE_INTEGER);
+      list.sort((a, b) => at(a) - at(b));
+    }
+    return list.slice(0, 6);
+  })();
+
+  const galleryIntervalMs = useM(() => {
+    const stored = window.readP58Store ? window.readP58Store() : null;
+    return Math.max(2000, Number(stored?.site?.heroGallery?.interval) || 5200);
+  }, []);
+
+  const [i, setI] = useS(0);
+  const [paused, setPaused] = useS(false);
+
+  const rail = window.useHorizontalRail({
+    storageKey: "hzone_scroll",
+    // the header stays out of the way while the opening pane fills the screen
+    onScroll: (el) => document.body.classList.toggle("hz-at-hero", el.scrollLeft < el.clientWidth * 0.62),
+  });
+
+  useE(() => {
+    document.body.dataset.route = "projects";
+    document.body.classList.add("hz-at-hero");
+    return () => {
+      delete document.body.dataset.route;
+      document.body.classList.remove("hz-at-hero");
+    };
+  }, []);
+
+  // the opening gallery only advances while it is the pane in view
+  useE(() => {
+    if (paused || !gallery.length || rail.progress > 0.04) return undefined;
+    const id = setTimeout(() => setI((x) => (x + 1) % gallery.length), galleryIntervalMs);
+    return () => clearTimeout(id);
+  }, [i, paused, gallery.length, rail.progress, galleryIntervalMs]);
+
+  const activeIndex = gallery.length ? i % gallery.length : 0;
+  const cur = gallery[activeIndex];
+  if (!cur) return null;
+  const openProject = (p, from) => {
+    rail.save();
+    go({ name: "project", id: p.slug || p.id, from });
+  };
+
+  return (
+    <div className="hzone" ref={rail.ref}>
+      {/* ===== opening pane — featured gallery (100vw) ===== */}
+      <section
+        className="hz-hero"
+        style={{ cursor: "pointer" }}
+        onMouseEnter={() => setPaused(true)}
+        onMouseLeave={() => setPaused(false)}
+        onClick={() => openProject(cur, { name: "projects" })}>
+        {gallery.map((p, idx) => (
+          <div key={p.id} className={`vhome-slide ${idx === activeIndex ? "on" : ""}`}>
+            <img src={p.hero} alt="" />
+          </div>
+        ))}
+        <div className="vhome-veil" aria-hidden="true" />
+        <div className="vhome-brand" onClick={(e) => { e.stopPropagation(); go({ name: "home" }); }} role="button" aria-label="Project58 home">
+          <img src="assets/logo-white.png" alt="Project58" />
+        </div>
+        <h1 className="hz-hero-title">{t("projects")}</h1>
+        <div className="vhome-loc">{pick(cur, "location")}</div>
+        <div className="vhome-cue">
+          <svg className="mouse-icon" viewBox="0 0 18 28" width="18" height="28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <rect x="1" y="1" width="16" height="26" rx="8" stroke="white" strokeWidth="1.5" strokeOpacity="0.85" />
+            <rect className="mouse-wheel" x="8" y="5" width="2" height="5" rx="1" fill="white" />
+          </svg>
+          <span>SCROLL</span>
+        </div>
+        <div className="vhome-dots" onClick={(e) => e.stopPropagation()}>
+          {gallery.map((p, idx) => (
+            <button key={p.id} className={`vhome-dot ${idx === activeIndex ? "on" : ""}`} onClick={() => setI(idx)} aria-label={`Project ${idx + 1}`} />
+          ))}
+        </div>
+      </section>
+
+      {/* ===== the works themselves — title pane, then portrait cards ===== */}
+      <section className="hz-intro">
+        <h2 className="vhome-rail-title">{t("projects")}</h2>
+        <p className="hz-intro-note">
+          {t("home_note")} <em>{t("home_note_em")}</em> {t("home_note_tail")}
+        </p>
+      </section>
+
+      {categories.map((c, idx) => (
+        <a
+          key={c.id}
+          className={`vhome-hcard hz-card hz-cat ${c.count ? "" : "hz-cat--empty"}`}
+          href={`/projects?type=${c.id}`}
+          onClick={(e) => { e.preventDefault(); go({ name: "projects", type: c.id }); }}>
+          <div className="vhome-hpic">
+            {c.cover ? <img src={c.cover.hero} alt="" loading="lazy" draggable="false" /> : null}
+            <span className="vhome-hpic-num">N°{String(idx + 1).padStart(2, "0")}</span>
+          </div>
+          <div className="vhome-hcap">
+            <div className="vhome-name">{c.label}</div>
+            <div className="vhome-loc-2">
+              {c.count ? `${c.count} ${t("proj_word")}` : t("arch_meta_b")}
+            </div>
+          </div>
+        </a>
+      ))}
+
+      <div className="vhome-endcard hz-end">
+        <div className="eyebrow">{t("rail_end_eyebrow")}</div>
+        <h3>{t("rail_end_h")}</h3>
+        <button onClick={() => go({ name: "start" })}>{t("rail_end_cta")} ↗</button>
+      </div>
+
+      {/* ===== closing pane — the site footer (100vw) ===== */}
+      <section className="hz-foot">
+        {window.Footer ? <window.Footer go={go} /> : null}
+      </section>
+
+      <div className="hz-progress"><i style={{ width: `${rail.progress * 100}%` }} /></div>
+    </div>
+  );
+}
+
 /* ================== PROJECTS — unified list with type filter ================== */
 function ProjectsPage({ go, type, brand, sort }) {
   const pick = window.usePick();
   const t = window.useT();
-  const normalisedType = type === "retail" || type === "residential" ? type : null;
+  // `type` is a dashboard category id — anything the dashboard publishes is a
+  // valid filter here, not just the two the nav's category row happens to show.
+  const categoryIds = window.siteCategories().map((c) => c.id);
+  const normalisedType = categoryIds.includes(type) ? type : null;
   const normalisedBrand = normalisedType === "retail" && (brand === "pg" || brand === "dn") ? brand : null;
   const order = window.PROJECT_SORTS[sort] ? sort : window.PROJECT_SORT_DEFAULT;
   const filtered = publicProjects().filter((p) => {
     if (!normalisedType) return true;
-    const category = (p.category || p.typology || "retail").toLowerCase();
-    if (normalisedType === "residential") {
-      return category === "residential" || category === "architecture";
-    }
-    if (category !== "retail") return false;
+    if (window.projectCategoryId(p) !== normalisedType) return false;
     return !normalisedBrand || BRAND_KEY(p) === normalisedBrand;
   }).sort(window.PROJECT_SORTS[order].compare(pick));
   const coverGallery = (() => {

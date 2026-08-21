@@ -118,6 +118,11 @@ const DICT = {
     sort_date: "Completion date",
     sort_region: "Region · City",
 
+    // projects rail — the pane that closes the works index
+    rail_end_eyebrow: "End of selection",
+    rail_end_h: "Let's design your next space.",
+    rail_end_cta: "Start a project",
+
     // mobile drawer
     menu_eyebrow: "Project58 · Menu",
     studio_location: "Athens",
@@ -279,6 +284,11 @@ const DICT = {
     sort: "Ταξινόμηση",
     sort_date: "Ημερομηνία ολοκλήρωσης",
     sort_region: "Περιοχή · Πόλη",
+
+    // projects rail — the pane that closes the works index
+    rail_end_eyebrow: "Τέλος επιλογής",
+    rail_end_h: "Ας σχεδιάσουμε τον επόμενο χώρο σας.",
+    rail_end_cta: "Ξεκινήστε ένα έργο",
 
     // mobile drawer
     menu_eyebrow: "Project58 · Μενού",

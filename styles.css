@@ -99,7 +99,8 @@ body.at-footer .nav {
 .nav { will-change: transform; }
 /* At the footer stage: drop the header out of flow ONLY on the home route,
    so the footer pane can expand to true fullscreen. Other pages just hide via transform. */
-body.at-footer[data-route="home"] .nav { position: absolute; }
+body.at-footer[data-route="home"] .nav,
+body.at-footer[data-route="projects"] .nav { position: absolute; }
 body.project-page .nav { position: fixed; border-bottom: none; }
 body.interiors-page .nav { position: sticky; top: 0; }
 body.interiors-page main { padding-top: 0; }
@@ -189,7 +190,8 @@ body.architecture-page main { padding-top: 0; }
   height: 1px;
   background: currentColor;
 }
-body.at-footer[data-route="home"] main {
+body.at-footer[data-route="home"] main,
+body.at-footer[data-route="projects"] main {
   height: 100vh;
   height: 100dvh;
   transition: height 360ms cubic-bezier(.4,0,.2,1);
@@ -3302,6 +3304,7 @@ main h3 em {
     transform: translateX(-50%);
     z-index: 65;
     display: flex;
+    width: min(calc(100vw - 24px), 430px);
     gap: 6px;
     background: rgba(255, 255, 255, 0.92);
     -webkit-backdrop-filter: blur(18px);
@@ -3320,8 +3323,9 @@ main h3 em {
   body.contact-page-active .mobile-tab { color: rgba(255, 255, 255, 0.55); }
   body.contact-page-active .mobile-tab.on { color: var(--paper); }
   .mobile-tab {
-    min-width: 84px;
-    padding: 0 14px;
+    min-width: 0;
+    flex: 1 1 0;
+    padding: 0 6px;
     height: 54px;
     display: flex;
     flex-direction: column;
@@ -3340,7 +3344,7 @@ main h3 em {
     text-transform: uppercase;
   }
   .mobile-tab-language {
-    min-width: 92px;
+    min-width: 0;
     padding-inline: 7px;
   }
   .mobile-tab-language .mobile-language-value {
@@ -4012,18 +4016,25 @@ body[data-route="home"] .nav.home-top .nav-logo img { opacity: 1; }
    HOME — SINGLE HORIZONTAL TRACK (3 zones side by side)
    ===================================================== */
 
-/* lock the page to one horizontal viewport; global footer is rendered as a pane instead */
-body[data-route="home"] main { height: 100vh; height: 100dvh; overflow: hidden; padding: 0; }
-body[data-route="home"] main ~ footer.foot { display: none; }
+/* lock the page to one horizontal viewport; global footer is rendered as a pane
+   instead. Both the home landing and the works index run on this rail. */
+body[data-route="home"] main,
+body[data-route="projects"] main { height: 100vh; height: 100dvh; overflow: hidden; padding: 0; }
+body[data-route="home"] main ~ footer.foot,
+body[data-route="projects"] main ~ footer.foot { display: none; }
 
-/* Home: the header floats as an overlay and disappears entirely on the
-   landing (hero) pane — and on the footer pane — so the hero is full-bleed. */
-body[data-route="home"] .nav {
+/* On a rail the header floats as an overlay and disappears entirely on the
+   opening pane — and on the footer pane — so those panes are full-bleed.
+   The fixed position also has to beat .interiors-page's sticky nav, which the
+   works index still carries for its category row. */
+body[data-route="home"] .nav,
+body[data-route="projects"] .nav {
   position: fixed;
   transition: transform 420ms cubic-bezier(.4,0,.2,1), opacity 320ms ease,
               background-color 320ms ease, border-color 320ms ease;
 }
-body[data-route="home"].hz-at-hero .nav {
+body[data-route="home"].hz-at-hero .nav,
+body[data-route="projects"].hz-at-hero .nav {
   transform: translateY(-100%);
   opacity: 0;
   pointer-events: none;
@@ -4066,6 +4077,22 @@ body[data-route="home"].hz-at-hero .nav {
   filter: drop-shadow(0 1px 10px rgba(0,0,0,0.35));
 }
 .hz-hero .vhome-cue { display: flex; } /* show mouse-scroll cue on the hero pane */
+/* the index names itself over the opening gallery, sitting on the location line */
+.hz-hero-title {
+  position: absolute;
+  z-index: 4;
+  left: var(--gutter);
+  bottom: 68px;
+  margin: 0;
+  font-family: var(--sans);
+  font-size: clamp(56px, 7vw, 128px);
+  font-weight: 600;
+  line-height: .84;
+  letter-spacing: -.06em;
+  text-transform: uppercase;
+  color: #fff;
+  pointer-events: none;
+}
 
 /* ZONE 1 — hero pane */
 .hz-hero {
@@ -4095,6 +4122,17 @@ body[data-route="home"].hz-at-hero .nav {
   text-transform: uppercase;
   margin: 0;
 }
+.hz-intro-note {
+  max-width: 30ch;
+  margin: 26px 0 0;
+  font-family: var(--sans);
+  font-size: clamp(15px, 1.15vw, 18px);
+  font-weight: 400;
+  line-height: 1.45;
+  letter-spacing: -0.01em;
+  color: var(--ink-3);
+}
+.hz-intro-note em { font-style: normal; color: var(--ink); }
 
 /* ZONE 2 — portrait cards, full-height & vertically centered */
 .hz-card {
@@ -4137,6 +4175,17 @@ body[data-route="home"].hz-at-hero .nav {
   transition: transform 1100ms cubic-bezier(.2,.7,.2,1);
 }
 .hz-card:hover .vhome-hpic img { transform: scale(1.07); }
+
+/* category cards — wider than a project card, since each one stands for a set */
+.hz-cat { width: clamp(300px, 26vw, 440px); }
+.hz-cat .vhome-name { text-transform: uppercase; letter-spacing: -0.02em; }
+.hz-cat .vhome-loc-2 { font-family: var(--mono); font-size: 10px; letter-spacing: .16em; text-transform: uppercase; }
+/* a category with nothing published yet still reads as a place, not a gap */
+.hz-cat--empty .vhome-hpic {
+  background:
+    repeating-linear-gradient(0deg, transparent 0 72px, rgba(255,255,255,.055) 72px 73px),
+    #22221f;
+}
 .vhome-hpic-num { position: absolute; top: 15px; left: 16px; z-index: 2; font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: #fff; text-shadow: 0 1px 8px rgba(0,0,0,0.4); }
 .vhome-hpic-cat { position: absolute; top: 13px; right: 14px; z-index: 2; font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--ink); background: var(--paper); padding: 5px 9px; }
 .vhome-hcap {
@@ -4338,9 +4387,29 @@ body.desktop-presentation-home[data-route="home"] .nav {
 }
 .dhome {
   width: 100%;
-  overflow: hidden;
+  /* Keep the page from becoming a scroll container: its direct sections use
+     viewport-level sticky positioning to stack over one another. */
+  overflow: visible;
   background: var(--paper);
 }
+.dhome > section {
+  position: sticky;
+  top: 0;
+}
+.dhome > section:nth-of-type(1) { z-index: 1; }
+.dhome > section:nth-of-type(2) { z-index: 2; }
+.dhome > section:nth-of-type(3) { z-index: 3; }
+.dhome > section:nth-of-type(4) { z-index: 4; }
+.dhome > section:nth-of-type(5) { z-index: 5; }
+.dhome-statement--practice { background: var(--paper); }
+.dhome .dhome-statement--practice h2 { line-height: .98; }
+/* The longer Practice statement now exceeds one viewport, so it needs to move
+   with the page while retaining its higher layer over the sticky hero. */
+.dhome > .dhome-statement--practice { position: relative; }
+/* Selected fields is taller than one viewport. It must move with the document
+   so all four banners remain reachable; its higher layer still lets it cover
+   the sticky Practice section as it enters. */
+.dhome > .dhome-work { position: relative; }
 .dhome-kicker {
   font-family: var(--mono);
   font-size: 10px;
@@ -4428,6 +4497,10 @@ body.desktop-presentation-home[data-route="home"] .nav {
   line-height: .88;
   letter-spacing: -.055em;
 }
+.dhome-statement--practice h2 {
+  max-width: 22ch;
+  font-size: clamp(44px, 6.4vw, 60px);
+}
 .dhome-methods {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -4464,20 +4537,30 @@ body.desktop-presentation-home[data-route="home"] .nav {
   font-size: clamp(62px, 9vw, 150px);
   font-weight: 500;
   line-height: .84;
-  letter-spacing: -.06em;
+  letter-spacing: .012em;
 }
-.dhome-banners { display: grid; gap: clamp(24px, 3vw, 48px); }
+.dhome-banners {
+  display: grid;
+  gap: clamp(24px, 3vw, 48px);
+}
 .dhome-banner {
   position: relative;
   display: block;
   width: 100%;
-  height: clamp(460px, 68vh, 780px);
+  height: clamp(250px, 32vh, 340px);
   overflow: hidden;
   padding: 0;
   color: #fff;
   text-align: left;
   background: var(--ink);
   isolation: isolate;
+  transition: height 620ms cubic-bezier(.2,.72,.18,1), box-shadow 320ms ease;
+  will-change: height;
+}
+.dhome-banner:hover,
+.dhome-banner:focus-visible {
+  height: clamp(480px, 64vh, 720px);
+  box-shadow: 0 24px 56px rgba(20,18,14,.14);
 }
 .dhome-banner img {
   position: absolute;
@@ -4489,7 +4572,8 @@ body.desktop-presentation-home[data-route="home"] .nav {
   transform: scale(1.015);
   transition: transform 900ms cubic-bezier(.2,.7,.2,1), filter 450ms ease;
 }
-.dhome-banner:hover img { transform: scale(1.06); filter: brightness(.82); }
+.dhome-banner:hover img,
+.dhome-banner:focus-visible img { transform: scale(1.06); filter: brightness(.82); }
 .dhome-banner-shade {
   position: absolute;
   z-index: -1;
@@ -4539,11 +4623,14 @@ body.desktop-presentation-home[data-route="home"] .nav {
 }
 .dhome-banner-copy strong {
   font-family: var(--sans);
-  font-size: clamp(58px, 8vw, 138px);
+  font-size: clamp(42px, 5.5vw, 92px);
   font-weight: 500;
   line-height: .86;
   letter-spacing: -.055em;
+  transition: font-size 620ms cubic-bezier(.2,.72,.18,1);
 }
+.dhome-banner:hover .dhome-banner-copy strong,
+.dhome-banner:focus-visible .dhome-banner-copy strong { font-size: clamp(58px, 8vw, 138px); }
 .dhome-banner-copy small {
   max-width: 54ch;
   margin-top: 22px;
@@ -4558,7 +4645,16 @@ body.desktop-presentation-home[data-route="home"] .nav {
   font-size: clamp(24px, 3vw, 46px);
   transition: transform 220ms ease;
 }
-.dhome-banner:hover .dhome-banner-arrow { transform: translate(7px, -7px); }
+.dhome-banner:hover .dhome-banner-arrow,
+.dhome-banner:focus-visible .dhome-banner-arrow { transform: translate(7px, -7px); }
+
+@media (hover: none) {
+  .dhome-banner,
+  .dhome-banner:hover,
+  .dhome-banner:focus-visible { height: clamp(340px, 52vh, 520px); }
+  .dhome-banner:hover .dhome-banner-copy strong,
+  .dhome-banner:focus-visible .dhome-banner-copy strong { font-size: clamp(42px, 8vw, 92px); }
+}
 
 .dhome-statement--systems {
   color: #fff;
@@ -4602,9 +4698,179 @@ body.desktop-presentation-home[data-route="home"] .nav {
     opacity: 1 !important;
     pointer-events: auto !important;
   }
+  .dhome-hero {
+    min-height: 620px;
+    height: 100svh;
+  }
+  .dhome-hero .vhome-brand,
+  .dhome-hero .vhome-cue { display: none; }
+  .dhome-hero-copy {
+    right: var(--gutter);
+    bottom: max(76px, calc(env(safe-area-inset-bottom) + 58px));
+    width: auto;
+  }
+  .dhome-hero-copy .dhome-kicker {
+    max-width: 32ch;
+    margin-bottom: 18px;
+    font-size: 9px;
+    line-height: 1.35;
+  }
+  .dhome-hero-copy h1 {
+    max-width: 11ch;
+    font-size: clamp(46px, 14vw, 68px);
+    line-height: .86;
+  }
+  .dhome-hero-copy p {
+    max-width: 38ch;
+    margin-top: 20px;
+    font-size: 14px;
+  }
+  .dhome-statement {
+    min-height: 100svh;
+    padding: max(112px, calc(env(safe-area-inset-top) + 92px)) var(--gutter) 44px;
+  }
+  .dhome .dhome-statement h2 {
+    max-width: none;
+    margin: 52px 0 68px;
+    font-size: clamp(38px, 10.8vw, 52px);
+    line-height: .96;
+  }
+  .dhome .dhome-statement--practice h2 {
+    font-size: clamp(34px, 9.4vw, 46px);
+    line-height: 1.04;
+    letter-spacing: -.04em;
+  }
+  .dhome > .dhome-statement--systems {
+    position: relative;
+    min-height: 70svh;
+    justify-content: flex-start;
+    padding-top: max(15svh, calc(env(safe-area-inset-top) + 58px));
+    padding-bottom: max(15svh, calc(env(safe-area-inset-bottom) + 40px));
+  }
+  .dhome .dhome-statement--systems h2 {
+    margin: 38px 0 44px;
+  }
+  .dhome-methods {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dhome-methods span,
+  .dhome-methods span + span {
+    min-height: 74px;
+    padding: 15px 10px 12px 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--rule-strong);
+  }
+  .dhome-methods span:nth-child(even) {
+    padding-left: 12px;
+    border-left: 1px solid var(--rule-strong);
+  }
+  .dhome-methods span:last-child {
+    grid-column: 1 / -1;
+    border-bottom: 0;
+  }
+  .dhome-work {
+    padding: max(112px, calc(env(safe-area-inset-top) + 92px)) var(--gutter) 80px;
+  }
+  .dhome-work-head {
+    display: block;
+    margin-bottom: 42px;
+  }
+  .dhome-work-head h2 {
+    margin-top: 20px;
+    font-size: clamp(48px, 15vw, 68px);
+    line-height: .88;
+  }
+  .dhome-banners { gap: 18px; }
+  .dhome-banner,
+  .dhome-banner:hover,
+  .dhome-banner:focus-visible {
+    height: clamp(360px, 58svh, 500px);
+    box-shadow: none;
+  }
+  .dhome-banner-number { top: 20px; left: 20px; }
+  .dhome-banner-copy {
+    right: 22px;
+    bottom: 52px;
+    left: 22px;
+  }
+  .dhome-banner-copy > span { margin-bottom: 12px; font-size: 9px; }
+  .dhome-banner-copy strong,
+  .dhome-banner:hover .dhome-banner-copy strong,
+  .dhome-banner:focus-visible .dhome-banner-copy strong {
+    font-size: clamp(36px, 11vw, 48px);
+  }
+  .dhome-banner-copy small {
+    margin-top: 14px;
+    font-size: 13px;
+  }
+  .dhome-banner-arrow { right: 22px; bottom: 20px; font-size: 24px; }
+  .dhome-contact.hz-foot {
+    display: flex;
+    min-height: 100svh;
+  }
+  .dhome-contact.hz-foot footer.foot {
+    position: relative;
+    align-items: center;
+    justify-content: center;
+    min-height: 100svh;
+    padding-top: max(88px, calc(env(safe-area-inset-top) + 72px));
+    padding-bottom: max(28px, env(safe-area-inset-bottom));
+    text-align: center;
+  }
+  .dhome-contact.hz-foot footer.foot .foot-top,
+  .dhome-contact.hz-foot footer.foot .foot-top.foot-top-2col {
+    display: flex !important;
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    gap: 30px !important;
+    padding: 0 !important;
+    text-align: center !important;
+  }
+  .dhome-contact.hz-foot footer.foot .foot-big {
+    display: flex;
+    width: 100%;
+    max-width: 12ch;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  .dhome-contact.hz-foot footer.foot .foot-logo {
+    margin-right: auto !important;
+    margin-left: auto !important;
+  }
+  .dhome-contact.hz-foot footer.foot .foot-cta-center {
+    width: 100%;
+    justify-content: center;
+  }
+  .dhome-contact.hz-foot footer.foot .foot-col.foot-col-split {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 8px;
+    border-top: 1px solid #ffffff1f;
+    padding-top: 24px;
+    text-align: center;
+  }
+  .dhome-contact.hz-foot footer.foot .foot-col-split .foot-col-b {
+    padding-top: 6px;
+  }
+  .dhome-contact.hz-foot footer.foot .foot-bot {
+    position: absolute;
+    right: var(--gutter);
+    bottom: max(22px, env(safe-area-inset-bottom));
+    left: var(--gutter);
+    grid-template-columns: 1fr !important;
+    justify-items: center;
+    gap: 6px;
+    padding-top: 0;
+    text-align: center;
+  }
+  .dhome-contact.hz-foot footer.foot .foot-bot .right {
+    text-align: center;
+  }
   .mhome-hero .vhome-brand { display: none; }
   body[data-route="home"] main ~ footer.foot {
-    display: flex;
+    display: none;
     flex-direction: column;
     box-sizing: border-box;
     min-height: 100vh;

@@ -76,14 +76,8 @@ function routeKey(r) {
   return pathFromRoute(r || routeFromLocation());
 }
 
-// The home landing exists only where the horizontal hero fits. Below this width
-// there is no landing at all — the project index is the entry page — so any
-// route resolving to "home" is rewritten before it can render.
-const MOBILE_MQ = "(max-width: 720px)";
-
 function resolveRoute(r) {
-  const onPhone = typeof window !== "undefined" && window.matchMedia(MOBILE_MQ).matches;
-  return r.name === "home" && onPhone ? { name: "projects" } : r;
+  return r;
 }
 
 /* WebGL backdrop for the site entrance — soft flowing paper-grain field.
@@ -221,9 +215,22 @@ function App() {
   const routeRef = aUseRef(route);
   // true while the index on screen is only standing in for the home landing,
   // so a viewport that grows back past the breakpoint can restore the hero
-  const standingInForHome = aUseRef(false);
   const scrollMemory = aUseRef(new Map());
   const restoreRef = aUseRef(null);
+  // the works rail needs a wheel; phones fall back to the scrolling list
+  const [railOnDesktop, setRailOnDesktop] = aUseState(() =>
+    typeof window !== "undefined" && !window.matchMedia("(max-width: 720px)").matches
+  );
+  aUseEffect(() => {
+    const mq = window.matchMedia("(max-width: 720px)");
+    const onChange = (e) => setRailOnDesktop(!e.matches);
+    if (mq.addEventListener) mq.addEventListener("change", onChange);
+    else mq.addListener(onChange);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener("change", onChange);
+      else mq.removeListener(onChange);
+    };
+  }, []);
   const [zoom, setZoom] = aUseState(null);
   const [contentVersion, setContentVersion] = aUseState(0);
   const [introVisible, setIntroVisible] = aUseState(true);
@@ -247,7 +254,6 @@ function App() {
     const sync = () => {
       const target = routeFromLocation();
       const next = resolveRoute(target);
-      standingInForHome.current = target.name === "home" && next.name !== "home";
       restoreRef.current = next;
       setRoute(next);
     };
@@ -256,37 +262,6 @@ function App() {
     return () => {
       window.removeEventListener("popstate", sync);
       window.removeEventListener("hashchange", sync);
-    };
-  }, []);
-
-  // Follow the breakpoint in both directions: phones swap the home landing for
-  // the index (and the address bar with it), while a window that grows back to
-  // desktop width returns to the hero it skipped.
-  aUseEffect(() => {
-    const mq = window.matchMedia(MOBILE_MQ);
-    const swapTo = (name) => {
-      const path = pathFromRoute({ name });
-      if (`${location.pathname}${location.search}` !== path) {
-        history.replaceState({ route: path }, "", path);
-      }
-      setRoute({ name });
-    };
-    const followBreakpoint = () => {
-      if (mq.matches) {
-        if (routeFromLocation().name !== "home") return;
-        standingInForHome.current = true;
-        swapTo("projects");
-      } else if (standingInForHome.current) {
-        standingInForHome.current = false;
-        swapTo("home");
-      }
-    };
-    followBreakpoint();
-    if (mq.addEventListener) mq.addEventListener("change", followBreakpoint);
-    else mq.addListener(followBreakpoint);
-    return () => {
-      if (mq.removeEventListener) mq.removeEventListener("change", followBreakpoint);
-      else mq.removeListener(followBreakpoint);
     };
   }, []);
 
@@ -315,7 +290,6 @@ function App() {
       };
     }
     const next = resolveRoute({ ...r, name, ...(from ? { from } : {}) });
-    standingInForHome.current = name === "home" && next.name !== "home";
     const nextPath = pathFromRoute(next);
     const currentPath = pathFromRoute(routeRef.current);
 
@@ -454,7 +428,11 @@ function App() {
 
   let page = null;
   if (route.name === "home")         page = (window.visibleProjects ? window.visibleProjects() : PROJECTS.filter((p) => p.visible !== false)).length ? <HomePage go={go} /> : <ProjectsPage go={go} />;
-  if (route.name === "projects")     page = <ProjectsPage go={go} type={route.type} brand={route.brand} sort={route.sort} />;
+  // Unfiltered /projects is the horizontal category rail on desktop; picking a
+  // category adds a filter and hands over to the ordinary vertical list.
+  if (route.name === "projects")     page = railOnDesktop && !route.type && !route.brand
+    ? <ProjectsRail go={go} />
+    : <ProjectsPage go={go} type={route.type} brand={route.brand} sort={route.sort} />;
   if (route.name === "architecture") page = <ArchitecturePage go={go} sort={route.sort} />;
   if (route.name === "interiors")    page = <InteriorsPage go={go} brand={route.brand} sort={route.sort} />;
   if (route.name === "agency")       page = <AgencyPage go={go} />;

@@ -35,15 +35,8 @@ const DEFAULT_SITE = window.DEFAULT_SITE_SETTINGS || {
   },
 };
 const normaliseSite = window.normaliseSiteSettings || ((site) => ({ ...DEFAULT_SITE, ...(site || {}) }));
-const DEFAULT_CATEGORIES = [
-  { id: "retail", label: "Retail", description: "Multi-site retail and fast casual interiors", order: 0, subLabel: "Brand", subcategories: [
-    { id: "protein-garden", label: "Protein Garden", order: 0 },
-    { id: "dinas", label: "Dinas", order: 1 },
-  ] },
-  { id: "hospitality", label: "Hospitality", description: "Restaurants, cafes, bars, and service-led rooms", order: 1 },
-  { id: "residential", label: "Residential", description: "Homes, renovations, and private commissions", order: 2 },
-  { id: "workplace", label: "Workplace", description: "Studios, offices, and work environments", order: 3 },
-];
+// Defined in data.jsx so the public site renders the same list the dashboard edits.
+const DEFAULT_CATEGORIES = window.DEFAULT_CATEGORIES;
 const slugifyId = (value) => String(value || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 const normaliseSubcategories = (subs) => (Array.isArray(subs) ? subs : [])
   .map((s, order) => {
@@ -851,6 +844,12 @@ function App({ session }) {
     setToast("Hero gallery saved");
   };
 
+  const onSaveHomeV2 = (homeV2) => {
+    const site = normaliseSite({ ...(data.site || DEFAULT_SITE), homeV2 });
+    update({ ...data, site });
+    setToast("V2 section saved — ready to publish");
+  };
+
   const onSaveInquiryForm = (inquiryForm) => {
     const site = normaliseSite({ ...(data.site || DEFAULT_SITE), inquiryForm });
     update({ ...data, site });
@@ -891,7 +890,7 @@ function App({ session }) {
 
   // If a section is off-limits for this role, fall back to Projects
   // rather than rendering an empty panel.
-  const SECTION_CAPABILITY = { site: "siteSettings", "website-texts": "siteSettings", hero: "heroGallery", "inquiry-form": "siteSettings" };
+  const SECTION_CAPABILITY = { site: "siteSettings", "website-texts": "siteSettings", v2: "siteSettings", hero: "heroGallery", "inquiry-form": "siteSettings" };
   useEffect(() => {
     const needed = SECTION_CAPABILITY[section];
     if (needed && !can(needed)) setSection("projects");
@@ -952,6 +951,11 @@ function App({ session }) {
         {can("heroGallery") && (
           <button className={`side-btn ${section === "hero" ? "on" : ""}`} onClick={() => goSection("hero")}>
             <span>Hero gallery</span><span className="count">▶</span>
+          </button>
+        )}
+        {can("siteSettings") && (
+          <button className={`side-btn ${section === "v2" ? "on" : ""}`} onClick={() => goSection("v2")}>
+            <span>V2 banners</span><span className="count">{normaliseSite(data.site || DEFAULT_SITE).homeV2.banners.length}</span>
           </button>
         )}
 
@@ -1015,7 +1019,7 @@ function App({ session }) {
                 <span className="ic">{Ic.reset}</span><span>Reset</span>
               </button>
             )}
-            <button className="btn primary new-content-btn" style={(section === "texts" || section === "site" || section === "website-texts" || section === "hero" || section === "inquiries" || section === "inquiry-form" || section === "media") ? { display: "none" } : null} onClick={() => setEditing({ kind: section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news" : "team", id: null })}>
+            <button className="btn primary new-content-btn" style={(section === "texts" || section === "site" || section === "website-texts" || section === "v2" || section === "hero" || section === "inquiries" || section === "inquiry-form" || section === "media") ? { display: "none" } : null} onClick={() => setEditing({ kind: section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news" : "team", id: null })}>
               <span className="ic">{Ic.plus}</span><span>New {section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news item" : section === "site" ? "—" : "person"}</span>
             </button>
           </div>
@@ -1103,6 +1107,9 @@ function App({ session }) {
               onReorder={onReorderHeroGallery}
             />
           )}
+          {section === "v2" && can("siteSettings") && (
+            <HomeV2Settings homeV2={normaliseSite(data.site || DEFAULT_SITE).homeV2} onSave={onSaveHomeV2} />
+          )}
         </div>
       </main>
 
@@ -1110,8 +1117,8 @@ function App({ session }) {
         <button className={section === "projects" ? "on" : ""} type="button" onClick={() => goSection("projects")}><span className="mobile-nav-icon" aria-hidden="true">▤</span><span>Projects</span></button>
         <button className={section === "media" ? "on" : ""} type="button" onClick={() => goSection("media")}><span className="mobile-nav-icon" aria-hidden="true">▦</span><span>Media</span></button>
         <button className="mobile-create-project" type="button" aria-label="Create new project" onClick={() => { goSection("projects"); setEditing({ kind: "project", id: null }); }}><span aria-hidden="true">+</span></button>
-        <button className={(section === "site" || section === "website-texts" || section === "hero") ? "on" : ""} type="button" disabled={!can("siteSettings")} onClick={() => can("siteSettings") && goSection("site")}><span className="mobile-nav-icon" aria-hidden="true">⚙</span><span>Settings</span></button>
-        <button className={(sideOpen || !["projects", "media", "site", "website-texts", "hero"].includes(section)) ? "on" : ""} type="button" onClick={() => setSideOpen(true)}><span className="mobile-nav-icon mobile-nav-more" aria-hidden="true">•••</span><span>More{unreadInquiries ? ` · ${unreadInquiries}` : ""}</span></button>
+        <button className={(section === "site" || section === "website-texts" || section === "v2" || section === "hero") ? "on" : ""} type="button" disabled={!can("siteSettings")} onClick={() => can("siteSettings") && goSection("site")}><span className="mobile-nav-icon" aria-hidden="true">⚙</span><span>Settings</span></button>
+        <button className={(sideOpen || !["projects", "media", "site", "website-texts", "v2", "hero"].includes(section)) ? "on" : ""} type="button" onClick={() => setSideOpen(true)}><span className="mobile-nav-icon mobile-nav-more" aria-hidden="true">•••</span><span>More{unreadInquiries ? ` · ${unreadInquiries}` : ""}</span></button>
       </nav>
 
       {editing && editing.kind === "project" && (
@@ -2227,6 +2234,126 @@ function HeroGallerySettings({ heroGallery, projects, onSave, onToggleFeatured, 
         <div className="settings-foot">
           <span className="muted">Changes take effect on the next page load.</span>
           <button className="btn primary" disabled={!dirty} onClick={() => onSave({ ...heroGallery, interval })}>Save</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function HomeV2Settings({ homeV2, onSave }) {
+  const normalise = window.normaliseHomeV2 || ((value) => value);
+  const [draft, setDraft] = useState(() => JSON.parse(JSON.stringify(normalise(homeV2))));
+
+  useEffect(() => {
+    setDraft(JSON.parse(JSON.stringify(normalise(homeV2))));
+  }, [homeV2]);
+
+  const banners = draft.banners || [];
+  const changed = JSON.stringify(normalise(draft)) !== JSON.stringify(normalise(homeV2));
+  const updateBanner = (id, patch) => setDraft((current) => ({
+    ...current,
+    banners: current.banners.map((banner) => banner.id === id ? { ...banner, ...patch } : banner),
+  }));
+  const moveBanner = (index, direction) => setDraft((current) => {
+    const next = current.banners.slice();
+    const target = index + direction;
+    if (target < 0 || target >= next.length) return current;
+    [next[index], next[target]] = [next[target], next[index]];
+    return { ...current, banners: next };
+  });
+  const addBanner = () => setDraft((current) => ({
+    ...current,
+    banners: [...current.banners, {
+      id: newId("banner"),
+      visible: true,
+      eyebrow: "New field",
+      title: "New banner",
+      note: "Add a short description.",
+      tone: "sand",
+      image: "",
+      destination: "projects",
+    }],
+  }));
+  const removeBanner = (id) => {
+    if (!confirm("Delete this V2 banner?")) return;
+    setDraft((current) => ({ ...current, banners: current.banners.filter((banner) => banner.id !== id) }));
+  };
+
+  return (
+    <>
+      <SectionHead eyebrow="/ Home page · Selected fields" title="V2 banners">
+        <button className="btn primary" type="button" onClick={addBanner}><span className="ic">{Ic.plus}</span>Add banner</button>
+      </SectionHead>
+      <div className="settings-card v2-settings">
+        <div className="form-section v2-section-switch">
+          <div>
+            <div className="form-section-title">V2 section</div>
+            <p className="hero-hint">Hide the whole “Where we work” section without deleting its banners.</p>
+          </div>
+          <button
+            className={`visibility-toggle ${draft.enabled ? "is-visible" : "is-hidden"}`}
+            type="button"
+            role="switch"
+            aria-checked={draft.enabled}
+            onClick={() => setDraft((current) => ({ ...current, enabled: !current.enabled }))}>
+            <span aria-hidden="true"></span>{draft.enabled ? "Visible" : "Hidden"}
+          </button>
+        </div>
+
+        <div className="form-section">
+          <div className="form-section-title">Section heading</div>
+          <div className="field-group">
+            <Field label="Section label"><input type="text" value={draft.kicker || ""} onChange={(event) => setDraft((current) => ({ ...current, kicker: event.target.value }))} /></Field>
+            <Field label="Heading"><input type="text" value={draft.title || ""} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} /></Field>
+          </div>
+        </div>
+
+        <div className="form-section">
+          <div className="form-section-title">Banners</div>
+          <p className="hero-hint">The number is generated from this order. Hidden banners keep their content but are skipped on the site.</p>
+          <div className="v2-banner-list">
+            {banners.map((banner, index) => (
+              <article className={`v2-banner-card ${banner.visible === false ? "is-hidden" : ""}`} key={banner.id}>
+                <div className="v2-banner-card-head">
+                  <span className="v2-banner-index">{String(index + 1).padStart(2, "0")}</span>
+                  <strong>{banner.title || "Untitled banner"}</strong>
+                  <div className="v2-banner-actions">
+                    <button className={`visibility-toggle ${banner.visible === false ? "is-hidden" : "is-visible"}`} type="button" role="switch" aria-checked={banner.visible !== false} onClick={() => updateBanner(banner.id, { visible: banner.visible === false })}><span aria-hidden="true"></span>{banner.visible === false ? "Hidden" : "Visible"}</button>
+                    <button className="delete" type="button" title="Move up" disabled={index === 0} onClick={() => moveBanner(index, -1)}>↑</button>
+                    <button className="delete" type="button" title="Move down" disabled={index === banners.length - 1} onClick={() => moveBanner(index, 1)}>↓</button>
+                    <button className="delete" type="button" title="Delete banner" onClick={() => removeBanner(banner.id)}>{Ic.trash}</button>
+                  </div>
+                </div>
+                <div className="field-group">
+                  <Field label="Small heading"><input type="text" value={banner.eyebrow || ""} onChange={(event) => updateBanner(banner.id, { eyebrow: event.target.value })} /></Field>
+                  <Field label="Title"><input type="text" value={banner.title || ""} onChange={(event) => updateBanner(banner.id, { title: event.target.value })} /></Field>
+                </div>
+                <div className="field-group cols-1">
+                  <Field label="Description"><textarea rows="2" value={banner.note || ""} onChange={(event) => updateBanner(banner.id, { note: event.target.value })} /></Field>
+                </div>
+                <div className="field-group">
+                  <Field label="Style">
+                    <select value={banner.tone || "sand"} onChange={(event) => updateBanner(banner.id, { tone: event.target.value })}>
+                      <option value="sand">Sand graphic</option><option value="ink">Dark graphic</option><option value="image">Image</option>
+                    </select>
+                  </Field>
+                  <Field label="Opens">
+                    <select value={banner.destination || "projects"} onChange={(event) => updateBanner(banner.id, { destination: event.target.value })}>
+                      <option value="projects">All projects</option><option value="architecture">Architecture</option><option value="protein-garden">Protein Garden</option><option value="dinas">DINAS</option><option value="contact">Contact / inquiry</option>
+                    </select>
+                  </Field>
+                </div>
+                <div className="field-group cols-1">
+                  <Field label="Background image" hint="Optional. Existing Protein Garden and DINAS cards fall back to their current project hero."><ImageInput value={banner.image || ""} onChange={(value) => updateBanner(banner.id, { image: value })} placeholder="Banner background image" /></Field>
+                </div>
+              </article>
+            ))}
+            {!banners.length ? <div className="empty-row">No V2 banners yet. Use “Add banner” to create one.</div> : null}
+          </div>
+        </div>
+        <div className="settings-foot">
+          <span className="muted">Save, then Publish to make these changes public.</span>
+          <button className="btn primary" type="button" disabled={!changed} onClick={() => onSave(normalise(draft))}>Save V2</button>
         </div>
       </div>
     </>

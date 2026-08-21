@@ -610,9 +610,50 @@ TIMELINE.forEach((r, i) => { if (TIMELINE_GR[i]) Object.assign(r, TIMELINE_GR[i]
 
 const P58_STORE_KEY = "p58_data_v1";
 const P58_PROJECT_PREVIEW_PREFIX = "p58_project_preview_v1:";
+const DEFAULT_HOME_V2_BANNERS = [
+  { id: "residences", visible: true, eyebrow: "Architecture / Living", title: "Residences", note: "Human-centered places for everyday life.", tone: "sand", image: "", destination: "architecture" },
+  { id: "protein-garden", visible: true, eyebrow: "Scalable retail systems", title: "proteingarden", note: "Protein Garden is a Greek fast-casual restaurant chain centered on high-protein, customizable meals, with a spatial identity that reflects freshness, health, and simplicity.", tone: "image", image: "", destination: "protein-garden" },
+  { id: "dinas", visible: true, eyebrow: "Hospitality / Brand experience", title: "DINAS eat real", note: "Warm, fluid spaces translating care and Mediterranean references into a growing system.", tone: "image", image: "", destination: "dinas" },
+  { id: "workplaces", visible: true, eyebrow: "Architecture / Work", title: "Workplaces", note: "Studios and workplaces designed around focus, collaboration and identity.", tone: "ink", image: "", destination: "contact" },
+];
+
+function normaliseHomeV2(homeV2) {
+  const source = homeV2 && Array.isArray(homeV2.banners)
+    ? homeV2.banners
+    : DEFAULT_HOME_V2_BANNERS;
+  const validTones = new Set(["sand", "ink", "image"]);
+  const validDestinations = new Set(["architecture", "projects", "protein-garden", "dinas", "contact"]);
+  const rawTitle = String(homeV2 && homeV2.title || "Design in Practice");
+  return {
+    enabled: !homeV2 || homeV2.enabled !== false,
+    kicker: String(homeV2 && homeV2.kicker || "02 / Selected fields"),
+    title: rawTitle === "Where we work." ? "Design in Practice" : rawTitle,
+    banners: source.map((banner, order) => {
+      const id = String(banner && banner.id || `banner-${order + 1}`);
+      const legacyProteinGarden = id === "protein-garden";
+      const rawBannerTitle = String(banner && banner.title || `Banner ${order + 1}`);
+      const rawNote = String(banner && banner.note || "");
+      return {
+        id,
+        visible: !banner || banner.visible !== false,
+        eyebrow: String(banner && banner.eyebrow || ""),
+        title: legacyProteinGarden && rawBannerTitle === "Protein Garden" ? "proteingarden" : rawBannerTitle,
+        note: legacyProteinGarden && rawNote === "A repeatable spatial identity shaped through material research and parametric tools."
+          ? "Protein Garden is a Greek fast-casual restaurant chain centered on high-protein, customizable meals, with a spatial identity that reflects freshness, health, and simplicity."
+          : rawNote,
+        tone: validTones.has(banner && banner.tone) ? banner.tone : "sand",
+        image: String(banner && banner.image || ""),
+        destination: validDestinations.has(banner && banner.destination) ? banner.destination : "projects",
+        order,
+      };
+    }),
+  };
+}
+
 const DEFAULT_SITE_SETTINGS = {
   favicon: "https://fdjd29ysr4tmphjq.public.blob.vercel-storage.com/media/files/document-w0X6lo2U3mFMxkuvMvwbniYZAwivdT.svg",
   heroGallery: { interval: 5200, order: [] },
+  homeV2: normaliseHomeV2(),
   menuImages: {
     home: "assets/projects/pg-panormou/01.png",
     projects: "assets/projects/pg-skoufa/01.png",
@@ -745,6 +786,7 @@ function normaliseSiteSettings(site = {}) {
         ? (site.heroGallery || {}).order.filter((id) => typeof id === "string")
         : [],
     },
+    homeV2: normaliseHomeV2(site.homeV2),
     menuImages: {
       ...DEFAULT_SITE_SETTINGS.menuImages,
       ...(site.menuImages || {}),
@@ -959,6 +1001,64 @@ function isVideoSrc(src) {
   return /\.mp4$/i.test(src.split(/[?#]/)[0]);
 }
 
+/* ===== Categories =====
+   The dashboard owns this list: it publishes `categories` with the rest of the
+   content, and both the dashboard and the public site read it from here so the
+   two cannot drift. The defaults below are only the seed for a store that has
+   never had the section saved. */
+const DEFAULT_CATEGORIES = [
+  { id: "retail", label: "Retail", description: "Multi-site retail and fast casual interiors", order: 0, subLabel: "Brand", subcategories: [
+    { id: "protein-garden", label: "Protein Garden", order: 0 },
+    { id: "dinas", label: "Dinas", order: 1 },
+  ] },
+  { id: "hospitality", label: "Hospitality", description: "Restaurants, cafes, bars, and service-led rooms", order: 1 },
+  { id: "residential", label: "Residential", description: "Homes, renovations, and private commissions", order: 2 },
+  { id: "workplace", label: "Workplace", description: "Studios, offices, and work environments", order: 3 },
+];
+
+const slugifyCategoryId = (value) => String(value || "").toLowerCase().normalize("NFD")
+  .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+const normaliseCategorySubs = (subs) => (Array.isArray(subs) ? subs : [])
+  .map((sub, order) => {
+    const label = (typeof sub === "string" ? sub : (sub && sub.label)) || "";
+    return {
+      id: (sub && sub.id) || slugifyCategoryId(label) || `sub-${order}`,
+      label: label || (sub && sub.id) || "Sub-category",
+      order: Number.isFinite(Number(sub && sub.order)) ? Number(sub.order) : order,
+      icon: (sub && sub.icon) || "",
+    };
+  })
+  .filter((sub) => sub.label)
+  .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+
+function normaliseCategories(items) {
+  const source = Array.isArray(items) && items.length ? items : DEFAULT_CATEGORIES;
+  return source
+    .map((c, order) => ({
+      id: c.id || slugifyCategoryId(c.label) || `cat-${order}`,
+      label: c.label || c.id || "Category",
+      description: c.description || "",
+      order: Number.isFinite(Number(c.order)) ? Number(c.order) : order,
+      subLabel: c.subLabel || "Sub-category",
+      subcategories: normaliseCategorySubs(c.subcategories),
+    }))
+    .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+}
+
+/* The published category list, ready to render. */
+function siteCategories() {
+  const stored = readP58Store();
+  return normaliseCategories(stored && stored.categories);
+}
+
+/* Which category a project belongs to, tolerating the older `typology` field
+   and the "architecture" id that pre-dates "residential". */
+function projectCategoryId(project) {
+  const raw = String((project && (project.category || project.typology)) || "retail").toLowerCase();
+  return raw === "architecture" ? "residential" : raw;
+}
+
 /* The badge a project shows in the indexes: project override, then category
    icon, then the one shared site-wide default. */
 function projectIconFor(project, site, categories) {
@@ -1013,4 +1113,4 @@ const PROJECT_SORTS = {
 applyP58ContentFromStore();
 const P58_CONTENT_READY = loadRemoteContent();
 
-Object.assign(window, { P58_STORE_KEY, P58_CONTENT_READY, DEFAULT_SITE_SETTINGS, DEFAULT_INQUIRY_FORM, INQUIRY_FORM_GROUPS, normaliseInquiryForm, normaliseSiteSettings, applySiteFavicon, projectSlugFromFields, applyP58ContentFromStore, readP58Store, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor, isProjectVisible, visibleProjects, isVideoSrc });
+Object.assign(window, { P58_STORE_KEY, P58_CONTENT_READY, DEFAULT_SITE_SETTINGS, DEFAULT_HOME_V2_BANNERS, DEFAULT_INQUIRY_FORM, INQUIRY_FORM_GROUPS, normaliseHomeV2, normaliseInquiryForm, normaliseSiteSettings, applySiteFavicon, projectSlugFromFields, applyP58ContentFromStore, readP58Store, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor, isProjectVisible, visibleProjects, isVideoSrc, DEFAULT_CATEGORIES, normaliseCategories, siteCategories, projectCategoryId });
