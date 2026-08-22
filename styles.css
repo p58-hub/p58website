@@ -4761,6 +4761,7 @@ body[data-route="projects"].hz-at-hero .nav {
 .hz-card:hover .vhome-hpic img { transform: scale(1.07); }
 
 /* category cards — wider than a project card, since each one stands for a set */
+.hz-cat-heading { display: none; }
 .hz-cat { width: clamp(300px, 26vw, 440px); }
 .hz-cat .vhome-name { text-transform: none; letter-spacing: -0.02em; }
 .hzone.hz-cat-uppercase .hz-cat .vhome-name { text-transform: uppercase; }
@@ -5578,6 +5579,10 @@ body.desktop-presentation-home[data-route="home"] .nav {
     width: 100%;
     height: 100vh;
     height: 100dvh;
+    /* the desktop rail spaces its panes with a flex gap, which a stacked
+       block layout drops — without this the first banner butts against
+       the bottom edge of the opening image */
+    margin-bottom: 34px;
   }
   .hz-hero .vhome-brand {
     top: max(18px, calc(env(safe-area-inset-top) + 16px));
@@ -5648,11 +5653,9 @@ body.desktop-presentation-home[data-route="home"] .nav {
     font-size: 18px;
     color: var(--ink-3);
   }
-  .hz-end {
-    width: 100%;
-    height: auto;
-    padding: 20px var(--gutter) 56px;
-  }
+  /* the closing pane repeats the footer's own call to action, which follows
+     immediately below it once the panes are stacked */
+  .hz-end { display: none; }
   .hz-ctrl,
   .hz-progress { display: none; }
 
@@ -5682,12 +5685,20 @@ body.desktop-presentation-home[data-route="home"] .nav {
     transform: translate(-50%, 22px);
     pointer-events: none;
   }
-  .hz-center-copy {
-    width: 100%;
-    height: auto;
-    padding: 44px var(--gutter) 10px;
+  /* the mid-rail line is a full-height column between the desktop panes; stacked
+     vertically it just sits between the hero and the first banner */
+  .hz-center-copy { display: none; }
+  .hz-cat-heading {
+    display: block;
+    margin: 0 0 16px;
+    padding: 0 var(--gutter);
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.19em;
+    text-transform: uppercase;
+    color: var(--ink-3);
   }
-  .hz-center-copy p { max-width: none; font-size: clamp(22px, 6.5vw, 30px); }
   .hz-card { margin-top: 0; padding-bottom: 40px; }
   .hz-cat .vhome-name { color: #fff; font-size: clamp(24px, 6.8vw, 34px); }
   .hz-cat .vhome-loc-2 {

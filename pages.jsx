@@ -632,6 +632,10 @@ function ProjectsRail({ go, transition }) {
         </section>
       ) : null}
 
+      {/* labels the run of category banners on a phone, where they follow the
+          opening pane directly instead of a rail of separate columns */}
+      <h2 className="hz-cat-heading">{t("categories_view")}</h2>
+
       {categories.map((c, idx) => (
         <a
           key={c.id}
