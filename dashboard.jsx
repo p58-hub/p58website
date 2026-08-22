@@ -59,6 +59,7 @@ const normaliseCategories = (items) => {
       id: c.id || slugifyId(c.label) || newId("cat"),
       label: c.label || c.id || "Category",
       description: c.description || "",
+      cover: c.cover || "",
       order: Number.isFinite(Number(c.order)) ? Number(c.order) : order,
       subLabel: c.subLabel || "Sub-category",
       subcategories: normaliseSubcategories(c.subcategories),
@@ -2363,7 +2364,9 @@ function HomeV2Settings({ homeV2, onSave }) {
 function SiteSettings({ site, onSave }) {
   const [s, setS] = useState(site);
   const contact = s.contact || DEFAULT_SITE.contact;
+  const projectsPage = s.projectsPage || DEFAULT_SITE.projectsPage;
   const setContact = (k, v) => setS((x) => ({ ...x, contact: { ...(x.contact || DEFAULT_SITE.contact), [k]: v } }));
+  const setProjectsPage = (k, v) => setS((x) => ({ ...x, projectsPage: { ...(x.projectsPage || DEFAULT_SITE.projectsPage), [k]: v } }));
   const setMenuImage = (k, v) => setS((x) => ({ ...x, menuImages: { ...(x.menuImages || DEFAULT_SITE.menuImages), [k]: v } }));
   const setPeopleField = (k, v) => setS((x) => ({ ...x, people: { ...(x.people || DEFAULT_SITE.people), [k]: v } }));
   const setDefaultProjectBadge = (v) => setS((x) => ({ ...x, defaultProjectBadge: v }));
@@ -2373,6 +2376,64 @@ function SiteSettings({ site, onSave }) {
     <>
       <SectionHead eyebrow="/ Footer addresses · contact details" title="Site settings" />
       <div className="settings-card">
+        <div className="form-section">
+          <div className="form-section-title">Projects page</div>
+          <div className="field-group">
+            <Field label="Hero title (EN)">
+              <input type="text" value={projectsPage.heroTitle || ""} onChange={(e) => setProjectsPage("heroTitle", e.target.value)} placeholder="Projects" />
+            </Field>
+            <Field label="Hero title (GR)">
+              <input type="text" value={projectsPage.heroTitle_gr || ""} onChange={(e) => setProjectsPage("heroTitle_gr", e.target.value)} placeholder="Έργα" />
+            </Field>
+          </div>
+          <div className="field-group cols-1">
+            <Field label={`Hero title size — ${projectsPage.heroTitleScale || 150}%`} hint="100% is the original size. Current design uses 150%. Range: 50–250%.">
+              <input type="range" min="50" max="250" step="5" value={projectsPage.heroTitleScale || 150} onChange={(e) => setProjectsPage("heroTitleScale", Number(e.target.value))} style={{ width: "100%" }} />
+            </Field>
+          </div>
+          <div className="field-group">
+            <Field label="Centre text (EN)" hint="Leave empty to hide it.">
+              <input type="text" value={projectsPage.centerText || ""} onChange={(e) => setProjectsPage("centerText", e.target.value)} placeholder="we design what you want" />
+            </Field>
+            <Field label="Centre text (GR)" hint="Leave empty to hide it in Greek.">
+              <input type="text" value={projectsPage.centerText_gr || ""} onChange={(e) => setProjectsPage("centerText_gr", e.target.value)} placeholder="we design what you want" />
+            </Field>
+          </div>
+          <div className="form-section v2-section-switch">
+            <div>
+              <div className="form-section-title">Intro panel</div>
+              <p className="hero-hint">Show or hide the title-and-description panel before the category cards.</p>
+            </div>
+            <button className={`visibility-toggle ${projectsPage.showIntro ? "is-visible" : "is-hidden"}`} type="button" role="switch" aria-checked={Boolean(projectsPage.showIntro)} onClick={() => setProjectsPage("showIntro", !projectsPage.showIntro)}>
+              <span aria-hidden="true"></span>{projectsPage.showIntro ? "Visible" : "Hidden"}
+            </button>
+          </div>
+          <div className="field-group">
+            <Field label="Intro title (EN)">
+              <input type="text" value={projectsPage.introTitle || ""} onChange={(e) => setProjectsPage("introTitle", e.target.value)} placeholder="Projects" />
+            </Field>
+            <Field label="Intro title (GR)">
+              <input type="text" value={projectsPage.introTitle_gr || ""} onChange={(e) => setProjectsPage("introTitle_gr", e.target.value)} placeholder="Έργα" />
+            </Field>
+          </div>
+          <div className="field-group">
+            <Field label="Intro description (EN)">
+              <textarea rows="3" value={projectsPage.introNote || ""} onChange={(e) => setProjectsPage("introNote", e.target.value)} />
+            </Field>
+            <Field label="Intro description (GR)">
+              <textarea rows="3" value={projectsPage.introNote_gr || ""} onChange={(e) => setProjectsPage("introNote_gr", e.target.value)} />
+            </Field>
+          </div>
+          <div className="form-section v2-section-switch">
+            <div>
+              <div className="form-section-title">Category title casing</div>
+              <p className="hero-hint">Choose normal names such as “Retail” or force every category name to uppercase.</p>
+            </div>
+            <button className={`visibility-toggle ${projectsPage.categoryTitlesUppercase ? "is-visible" : "is-hidden"}`} type="button" role="switch" aria-checked={Boolean(projectsPage.categoryTitlesUppercase)} onClick={() => setProjectsPage("categoryTitlesUppercase", !projectsPage.categoryTitlesUppercase)}>
+              <span aria-hidden="true"></span>{projectsPage.categoryTitlesUppercase ? "UPPERCASE" : "Normal case"}
+            </button>
+          </div>
+        </div>
         <div className="form-section">
           <div className="form-section-title">Browser favicon</div>
           <div className="field-group cols-1">
@@ -3175,6 +3236,7 @@ function CategorySheet({ category, onSave, onClose }) {
     id: "",
     label: "",
     description: "",
+    cover: "",
     subLabel: "Sub-category",
     subcategories: [],
   }));
@@ -3215,6 +3277,9 @@ function CategorySheet({ category, onSave, onClose }) {
           </div>
           <Field label="Description">
             <textarea value={c.description || ""} onChange={(e) => set("description", e.target.value)} placeholder="Short internal description for the dashboard grouping." />
+          </Field>
+          <Field label="Search / category banner image" hint="Used in the empty search and on the category card. When empty, the first project image is used automatically.">
+            <ImageInput value={c.cover || ""} onChange={(value) => set("cover", value)} placeholder="Category banner · landscape image recommended" />
           </Field>
 
           <div className="sheet-section-head">

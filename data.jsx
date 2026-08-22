@@ -456,9 +456,9 @@ const PROJECTS_GR = {
   "pg-panormou": {
     name_gr: "Πανόρμου",
     location_gr: "Αθήνα · Πανόρμου",
-    type_gr: "Fast Casual · Λιανική",
+    type_gr: "Γρήγορη εστίαση · Λιανική",
     role_gr: "Αρχιτεκτονική · Έπιπλα · Τεκμηρίωση Roll-out",
-    summary_gr: "Το μεγαλύτερο από τα δωμάτια Protein Garden — ένας γωνιακός χώρος 142 τ.μ. στην Πανόρμου με γραμμή αναμονής, ανοιχτή κουζίνα και πάγκο takeaway 28 θέσεων.",
+    summary_gr: "Το μεγαλύτερο από τα δωμάτια Protein Garden — ένας γωνιακός χώρος 142 τ.μ. στην Πανόρμου με γραμμή αναμονής, ανοιχτή κουζίνα και πάγκο παραλαβής 28 θέσεων.",
     body_gr: [
       ["Brief", "Η Protein Garden επέστρεψε για πέμπτο σημείο, σε μία πολυσύχναστη γωνία της Πανόρμου. Το brief ζητούσε το πιο γενναιόδωρο από τα οκτώ δωμάτια: ευρύτερο πάγκο σερβίς, εικοσιοκτώ θέσεις και μια ξεκάθαρα οργανωμένη κουζίνα ορατή από τον δρόμο."],
       ["Move", "Τοποθετήσαμε τον πάγκο στον μεγάλο άξονα και αφήσαμε τη γραμμή αναμονής να εισέρχεται κατά μήκος του υαλοπίνακα. Η κουζίνα τοποθετήθηκε πίσω από ένα διάτρητο μεταλλικό τοίχωμα — αρκετά ορατή ώστε να διαβάζεται ως ειλικρινής, αρκετά κρυμμένη ώστε να διατηρεί το δωμάτιο δροσερό."],
@@ -468,9 +468,9 @@ const PROJECTS_GR = {
   "pg-skoufa": {
     name_gr: "Κολωνάκι · Σκουφά",
     location_gr: "Αθήνα · Κολωνάκι",
-    type_gr: "Fast Casual · Λιανική",
+    type_gr: "Γρήγορη εστίαση · Λιανική",
     role_gr: "Αρχιτεκτονική · Έπιπλα",
-    summary_gr: "Ένα δωμάτιο 64 τ.μ. στο Κολωνάκι αναδιοργανωμένο γύρω από έναν καμπύλο πάγκο — λιγότερες θέσεις, περισσότερη παραμονή, το ίδιο kit εξαρτημάτων.",
+    summary_gr: "Ένα δωμάτιο 64 τ.μ. στο Κολωνάκι αναδιοργανωμένο γύρω από έναν καμπύλο πάγκο — λιγότερες θέσεις, περισσότερη παραμονή, το ίδιο σύστημα εξαρτημάτων.",
     body_gr: [
       ["Site", "Ένα στενό κέλυφος στο Κολωνάκι επί της Σκουφά, τρία μέτρα φάρδος και είκοσι βάθος. Η γειτονιά διαβάζεται αργή, έτσι επιβραδύναμε το δωμάτιο: καμπύλος πάγκος δρυός, έξι μαλακά σκαμπό, ένας μοναδικός καθρέφτης ως τερματικός τοίχος για να διπλασιάσει το αντιληπτό βάθος."],
       ["Move", "Η κουζίνα ωθήθηκε στο πίσω μέρος, αφήνοντας ολόκληρο το μπροστινό τμήμα ως ήρεμη ζώνη παραμονής. Ο πάγκος είναι το μόνο αντικείμενο που αγγίζει και τους δύο τοίχους."],
@@ -508,7 +508,7 @@ const PROJECTS_GR = {
     name_gr: "Νέα Σμύρνη · Ομήρου 40",
     location_gr: "Αθήνα · Νέα Σμύρνη",
     role_gr: "Αρχιτεκτονική",
-    summary_gr: "Το prototype της Νέας Σμύρνης με προτεραιότητα στο pickup — λεπτό παράθυρο σερβίς, ένα μοναδικό παγκάκι, βαθύ εσωτερικό για προσωπικό και προετοιμασία.",
+    summary_gr: "Το πρότυπο της Νέας Σμύρνης με προτεραιότητα στην παραλαβή — λεπτό παράθυρο εξυπηρέτησης, ένα μοναδικό παγκάκι, βαθύ εσωτερικό για προσωπικό και προετοιμασία.",
     body_gr: [
       ["Idea", "Το brief εδώ έδινε βάρος στο delivery και το takeaway έναντι της παραμονής. Λεπτύναμε τη ζώνη πελάτη σε ένα μοναδικό βαθύ παγκάκι και δώσαμε το υπόλοιπο δάπεδο σε γενναιόδωρο back-of-house."],
     ],
@@ -517,7 +517,7 @@ const PROJECTS_GR = {
     name_gr: "Πειραιάς · Τσαμαδού",
     location_gr: "Πειραιάς · Τσαμαδού",
     role_gr: "Αρχιτεκτονική · Φωτισμός",
-    summary_gr: "Το δωμάτιο του Πειραιά — μια βάση από εμφανές μπετόν, ένα ράφι δρυός και ένα χαμηλό cove που λούζει τον πίσω τοίχο στο βραδινό φως.",
+    summary_gr: "Το δωμάτιο του Πειραιά — μια βάση από εμφανές μπετόν, ένα ράφι δρυός και ένας χαμηλός κρυφός φωτισμός που λούζει τον πίσω τοίχο στο βραδινό φως.",
     body_gr: [
       ["Light", "Ο Πειραιάς ανοίγει αργά. Ο φωτισμός επανασχεδιάστηκε εδώ: συνεχές cove πίσω από τον πάγκο, έμμεσο πλύσιμο στην οροφή και ένα μόνο κρεμαστό φωτιστικό που σηματοδοτεί το ταμείο. Χωρίς spot στη ζώνη πελάτη."],
     ],
@@ -545,7 +545,7 @@ const PROJECTS_GR = {
     name_gr: "Πανόρμου",
     location_gr: "Αθήνα · Πανόρμου",
     role_gr: "Αρχιτεκτονική",
-    summary_gr: "Dinas, Πανόρμου — δεύτερο σημείο, εξελίσσοντας το kit εξαρτημάτων και προσθέτοντας μια βεράντα στο πεζοδρόμιο.",
+    summary_gr: "Dinas, Πανόρμου — δεύτερο σημείο, εξελίσσοντας το σύστημα εξαρτημάτων και προσθέτοντας μια βεράντα στο πεζοδρόμιο.",
     body_gr: [
       ["Refinement", "Η Πανόρμου είναι η πρώτη φορά που ξαναεπισκεπτόμαστε τη γλώσσα Dinas. Η γεωμετρία πάγκου, το cove φωτισμού και η παλέτα υλικών παραμένουν· η λογική κάθισης διευρύνεται, και προστίθεται μια βεράντα έξι θέσεων στο πεζοδρόμιο."],
     ],
@@ -588,7 +588,7 @@ const TEAM_GR = [
   { role_gr: "Αρχιτέκτων Έργου", note_gr: "Δίπλ. Αρχ. TU Delft" },
   { role_gr: "Αρχιτέκτων · Μακετίστας", note_gr: "M.Arch. KU Leuven" },
   { role_gr: "Νέος Αρχιτέκτων", note_gr: "Δίπλ. Αρχ. ΑΠΘ" },
-  { role_gr: "Studio Manager", note_gr: "BA Επιχειρήσεων · δέκα χρόνια διαχείρισης στούντιο" },
+  { role_gr: "Υπεύθυνος Στούντιο", note_gr: "BA Επιχειρήσεων · δέκα χρόνια διαχείρισης στούντιο" },
 ];
 
 const TIMELINE_GR = [
@@ -611,10 +611,10 @@ TIMELINE.forEach((r, i) => { if (TIMELINE_GR[i]) Object.assign(r, TIMELINE_GR[i]
 const P58_STORE_KEY = "p58_data_v1";
 const P58_PROJECT_PREVIEW_PREFIX = "p58_project_preview_v1:";
 const DEFAULT_HOME_V2_BANNERS = [
-  { id: "residences", visible: true, eyebrow: "Architecture / Living", title: "Residential", note: "Human-centered places for everyday life.", tone: "sand", image: "", destination: "architecture" },
-  { id: "workplaces", visible: true, eyebrow: "Architecture / Work", title: "Business & Workplaces", note: "Studios and workplaces designed around focus, collaboration and identity.", tone: "ink", image: "", destination: "contact" },
-  { id: "protein-garden", visible: true, eyebrow: "Scalable retail systems", title: "proteingarden", note: "Protein Garden is a Greek fast-casual restaurant chain centered on high-protein, customizable meals, with a spatial identity that reflects freshness, health, and simplicity.", tone: "image", image: "", destination: "protein-garden" },
-  { id: "dinas", visible: true, eyebrow: "Hospitality / Brand experience", title: "DINAS eat real", note: "Warm, fluid spaces translating care and Mediterranean references into a growing system.", tone: "image", image: "", destination: "dinas" },
+  { id: "residences", visible: true, eyebrow: "Architecture / Living", eyebrow_gr: "Αρχιτεκτονική / Κατοικία", title: "Residential", title_gr: "Κατοικίες", note: "Human-centered places for everyday life.", note_gr: "Ανθρωποκεντρικοί χώροι για την καθημερινή ζωή.", tone: "sand", image: "", destination: "architecture" },
+  { id: "workplaces", visible: true, eyebrow: "Architecture / Work", eyebrow_gr: "Αρχιτεκτονική / Εργασία", title: "Business & Workplaces", title_gr: "Επιχειρήσεις & Χώροι εργασίας", note: "Studios and workplaces designed around focus, collaboration and identity.", note_gr: "Στούντιο και χώροι εργασίας σχεδιασμένοι για συγκέντρωση, συνεργασία και ταυτότητα.", tone: "ink", image: "", destination: "contact" },
+  { id: "protein-garden", visible: true, eyebrow: "Scalable retail systems", eyebrow_gr: "Κλιμακούμενα συστήματα λιανικής", title: "proteingarden", title_gr: "proteingarden", note: "Protein Garden is a Greek fast-casual restaurant chain centered on high-protein, customizable meals, with a spatial identity that reflects freshness, health, and simplicity.", note_gr: "Η Protein Garden είναι μια ελληνική αλυσίδα γρήγορης εστίασης με γεύματα υψηλής πρωτεΐνης και μια χωρική ταυτότητα που εκφράζει φρεσκάδα, υγεία και απλότητα.", tone: "image", image: "", destination: "protein-garden" },
+  { id: "dinas", visible: true, eyebrow: "Hospitality / Brand experience", eyebrow_gr: "Φιλοξενία / Εμπειρία ταυτότητας", title: "DINAS eat real", title_gr: "DINAS eat real", note: "Warm, fluid spaces translating care and Mediterranean references into a growing system.", note_gr: "Ζεστοί, ρευστοί χώροι που μεταφράζουν τη φροντίδα και τις μεσογειακές αναφορές σε ένα αναπτυσσόμενο σύστημα.", tone: "image", image: "", destination: "dinas" },
 ];
 
 function normaliseHomeV2(homeV2) {
@@ -624,12 +624,16 @@ function normaliseHomeV2(homeV2) {
   const validTones = new Set(["sand", "ink", "image"]);
   const validDestinations = new Set(["architecture", "projects", "protein-garden", "dinas", "contact"]);
   const rawTitle = String(homeV2 && homeV2.title || "Design in Practice");
+  const defaultsById = Object.fromEntries(DEFAULT_HOME_V2_BANNERS.map((banner) => [banner.id, banner]));
   return {
     enabled: !homeV2 || homeV2.enabled !== false,
     kicker: String(homeV2 && homeV2.kicker || "02 / Selected fields"),
+    kicker_gr: String(homeV2 && homeV2.kicker_gr || "02 / Επιλεγμένοι τομείς"),
     title: rawTitle === "Where we work." ? "Design in Practice" : rawTitle,
+    title_gr: String(homeV2 && homeV2.title_gr || "Σχεδιασμός στην πράξη"),
     banners: source.map((banner, order) => {
       const id = String(banner && banner.id || `banner-${order + 1}`);
+      const defaults = defaultsById[id] || {};
       const legacyProteinGarden = id === "protein-garden";
       const rawBannerTitle = String(banner && banner.title || `Banner ${order + 1}`);
       const rawNote = String(banner && banner.note || "");
@@ -642,10 +646,13 @@ function normaliseHomeV2(homeV2) {
         id,
         visible: !banner || banner.visible !== false,
         eyebrow: String(banner && banner.eyebrow || ""),
+        eyebrow_gr: String(banner && banner.eyebrow_gr || defaults.eyebrow_gr || banner && banner.eyebrow || ""),
         title: legacyProteinGarden && migratedTitle === "Protein Garden" ? "proteingarden" : migratedTitle,
+        title_gr: String(banner && banner.title_gr || defaults.title_gr || migratedTitle),
         note: legacyProteinGarden && rawNote === "A repeatable spatial identity shaped through material research and parametric tools."
           ? "Protein Garden is a Greek fast-casual restaurant chain centered on high-protein, customizable meals, with a spatial identity that reflects freshness, health, and simplicity."
           : rawNote,
+        note_gr: String(banner && banner.note_gr || defaults.note_gr || rawNote),
         tone: validTones.has(banner && banner.tone) ? banner.tone : "sand",
         image: String(banner && banner.image || ""),
         destination: validDestinations.has(banner && banner.destination) ? banner.destination : "projects",
@@ -658,6 +665,19 @@ function normaliseHomeV2(homeV2) {
 const DEFAULT_SITE_SETTINGS = {
   favicon: "https://fdjd29ysr4tmphjq.public.blob.vercel-storage.com/media/files/document-w0X6lo2U3mFMxkuvMvwbniYZAwivdT.svg",
   heroGallery: { interval: 5200, order: [] },
+  projectsPage: {
+    heroTitle: "Projects",
+    heroTitle_gr: "Έργα",
+    heroTitleScale: 150,
+    centerText: "we design what you want",
+    centerText_gr: "we design what you want",
+    showIntro: false,
+    introTitle: "Projects",
+    introTitle_gr: "Έργα",
+    introNote: "A practice for buildings, shops & the rooms in between.",
+    introNote_gr: "Ένα γραφείο για κτίρια, καταστήματα & τα δωμάτια στο ενδιάμεσο.",
+    categoryTitlesUppercase: false,
+  },
   homeV2: normaliseHomeV2(),
   menuImages: {
     home: "assets/projects/pg-panormou/01.png",
@@ -680,13 +700,16 @@ const DEFAULT_SITE_SETTINGS = {
   foot_copy_right: "Designed in-house · v1.0",
   contact: {
     location_label: "ATHENS",
+    location_label_gr: "ΑΘΗΝΑ",
     address: "Akademias 76 · 106 76",
+    address_gr: "Ακαδημίας 76 · 106 76",
     address_url: "",
     phone: "+30 210 000 5800",
     phone_url: "tel:+302100005800",
     email: "g.grigoriadis@project58.gr",
     email_url: "mailto:g.grigoriadis@project58.gr",
     instagram_text: "Instagram → @project.58",
+    instagram_text_gr: "Instagram → @project.58",
     instagram_url: "",
   },
   inquiryForm: null,
@@ -791,6 +814,13 @@ function normaliseSiteSettings(site = {}) {
         ? (site.heroGallery || {}).order.filter((id) => typeof id === "string")
         : [],
     },
+    projectsPage: {
+      ...DEFAULT_SITE_SETTINGS.projectsPage,
+      ...(site.projectsPage || {}),
+      heroTitleScale: Math.min(250, Math.max(50, Number((site.projectsPage || {}).heroTitleScale) || DEFAULT_SITE_SETTINGS.projectsPage.heroTitleScale)),
+      showIntro: (site.projectsPage || {}).showIntro === true,
+      categoryTitlesUppercase: (site.projectsPage || {}).categoryTitlesUppercase === true,
+    },
     homeV2: normaliseHomeV2(site.homeV2),
     menuImages: {
       ...DEFAULT_SITE_SETTINGS.menuImages,
@@ -813,6 +843,7 @@ function normaliseSiteSettings(site = {}) {
     inquiryForm: normaliseInquiryForm(site.inquiryForm),
     contact: {
       ...DEFAULT_SITE_SETTINGS.contact,
+      ...contact,
       // The current nested settings always win, including an intentional empty
       // value. Top-level fields are legacy fallbacks for older saved documents.
       location_label: hasContact("location_label") ? contact.location_label : site.location_label || site.athens_label || DEFAULT_SITE_SETTINGS.contact.location_label,
@@ -847,16 +878,23 @@ const BUNDLED_CONTENT = {
 function normaliseProject(p, order) {
   const brandKey = p.brand === "Dinas" || (p.id || "").startsWith("dn-") ? "dn" : "pg";
   const slug = !p.slug || p.slug === p.id ? projectSlugFromFields(p) : p.slug;
+  const greekDefaults = PROJECTS_GR[p.id] || {};
   return {
     slug,
     category: p.category || p.typology || "retail",
     order: Number.isFinite(Number(p.order)) ? Number(p.order) : order,
     featured: p.featured != null ? Boolean(p.featured) : order < 6,
+    ...greekDefaults,
     ...p,
     // Visibility is opt-out so every project created before this setting
     // existed remains on the public site.
     visible: p.visible !== false,
     brandKey,
+    name_gr: p.name_gr || greekDefaults.name_gr || p.name || "",
+    location_gr: p.location_gr || greekDefaults.location_gr || p.location || "",
+    type_gr: p.type_gr || greekDefaults.type_gr || (p.type === "Fast Casual · Retail" ? "Γρήγορη εστίαση · Λιανική" : p.type || ""),
+    role_gr: p.role_gr || greekDefaults.role_gr || p.role || "",
+    summary_gr: p.summary_gr || greekDefaults.summary_gr || p.summary || "",
     gallery: Array.isArray(p.gallery) ? p.gallery : [],
     body: Array.isArray(p.body) ? p.body : [],
   };
@@ -981,7 +1019,16 @@ function applyP58ContentFromStore() {
       NEWS.splice(0, NEWS.length, ...sortByOrder(source.news.map((n, order) => ({ order, ...n }))));
     }
     if (Array.isArray(source.team) && source.team.length) {
-      const team = sortByOrder(source.team.map((m, order) => ({ order, ...m })));
+      const team = sortByOrder(source.team.map((m, order) => {
+        const greekDefaults = TEAM_GR[order] || {};
+        return {
+          ...greekDefaults,
+          order,
+          ...m,
+          role_gr: m.role_gr === "Studio Manager" ? "Υπεύθυνος Στούντιο" : (m.role_gr || greekDefaults.role_gr || m.role || ""),
+          note_gr: m.note_gr || greekDefaults.note_gr || m.note || "",
+        };
+      }));
       if (team[0] && team[0].name === "Nikos Andreadis") {
         team[0] = { ...team[0], name: "Georgios Grigoriadis", role: "Founder", role_gr: "Ιδρυτής", note: "Founder of Project58, leading the studio’s architectural direction and project delivery.", note_gr: "Ιδρυτής του Project58, με ευθύνη για την αρχιτεκτονική κατεύθυνση και την υλοποίηση των έργων του γραφείου.", portrait: "assets/people/georgios-grigoriadis.jpg" };
       } else if (team[0] && team[0].name === "Georgios Grigoriadis" && !team[0].portrait) {
@@ -1012,13 +1059,13 @@ function isVideoSrc(src) {
    two cannot drift. The defaults below are only the seed for a store that has
    never had the section saved. */
 const DEFAULT_CATEGORIES = [
-  { id: "retail", label: "Retail", description: "Multi-site retail and fast casual interiors", order: 0, subLabel: "Brand", subcategories: [
+  { id: "retail", label: "Retail", label_gr: "Λιανική", description: "Multi-site retail and fast casual interiors", description_gr: "Χώροι λιανικής πολλαπλών σημείων και εσωτερικοί χώροι γρήγορης εστίασης", order: 0, subLabel: "Brand", subLabel_gr: "Εμπορικό σήμα", subcategories: [
     { id: "protein-garden", label: "Protein Garden", order: 0 },
     { id: "dinas", label: "Dinas", order: 1 },
   ] },
-  { id: "hospitality", label: "Hospitality", description: "Restaurants, cafes, bars, and service-led rooms", order: 1 },
-  { id: "residential", label: "Residential", description: "Homes, renovations, and private commissions", order: 2 },
-  { id: "workplace", label: "Workplace", description: "Studios, offices, and work environments", order: 3 },
+  { id: "hospitality", label: "Hospitality", label_gr: "Φιλοξενία", description: "Restaurants, cafes, bars, and service-led rooms", description_gr: "Εστιατόρια, καφέ, bar και χώροι εξυπηρέτησης", order: 1 },
+  { id: "residential", label: "Residential", label_gr: "Κατοικίες", description: "Homes, renovations, and private commissions", description_gr: "Κατοικίες, ανακαινίσεις και ιδιωτικές αναθέσεις", order: 2 },
+  { id: "workplace", label: "Workplace", label_gr: "Χώροι εργασίας", description: "Studios, offices, and work environments", description_gr: "Στούντιο, γραφεία και περιβάλλοντα εργασίας", order: 3 },
 ];
 
 const slugifyCategoryId = (value) => String(value || "").toLowerCase().normalize("NFD")
@@ -1039,15 +1086,24 @@ const normaliseCategorySubs = (subs) => (Array.isArray(subs) ? subs : [])
 
 function normaliseCategories(items) {
   const source = Array.isArray(items) && items.length ? items : DEFAULT_CATEGORIES;
+  const defaultsById = Object.fromEntries(DEFAULT_CATEGORIES.map((category) => [category.id, category]));
   return source
-    .map((c, order) => ({
-      id: c.id || slugifyCategoryId(c.label) || `cat-${order}`,
-      label: c.label || c.id || "Category",
-      description: c.description || "",
-      order: Number.isFinite(Number(c.order)) ? Number(c.order) : order,
-      subLabel: c.subLabel || "Sub-category",
-      subcategories: normaliseCategorySubs(c.subcategories),
-    }))
+    .map((c, order) => {
+      const id = c.id || slugifyCategoryId(c.label) || `cat-${order}`;
+      const defaults = defaultsById[id] || {};
+      return {
+        id,
+        label: c.label || c.id || "Category",
+        label_gr: c.label_gr || defaults.label_gr || c.label || c.id || "Κατηγορία",
+        description: c.description || "",
+        description_gr: c.description_gr || defaults.description_gr || c.description || "",
+        cover: c.cover || defaults.cover || "",
+        order: Number.isFinite(Number(c.order)) ? Number(c.order) : order,
+        subLabel: c.subLabel || "Sub-category",
+        subLabel_gr: c.subLabel_gr || defaults.subLabel_gr || c.subLabel || "Υποκατηγορία",
+        subcategories: normaliseCategorySubs(c.subcategories),
+      };
+    })
     .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
 }
 

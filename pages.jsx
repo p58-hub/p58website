@@ -258,7 +258,7 @@ function HomePage({ go }) {
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
         onClick={() => setI((current) => (current + 1) % featured.length)}
-        aria-label="Show next gallery image">
+        aria-label={t("show_next_gallery")}>
         {featured.map((p, idx) => (
           <div key={p.id} className={`vhome-slide ${idx === activeIndex ? "on" : ""}`}>
             <img src={p.hero} alt="" />
@@ -269,9 +269,9 @@ function HomePage({ go }) {
           <img src="assets/logo-white.png" alt="Project58" />
         </div>
         <div className="dhome-hero-copy">
-          <span className="dhome-kicker">Project58 Architecture &amp; Design Practice</span>
-          <h1>Designing for an emerging world!</h1>
-          <p>We create architecture, interiors, design, and research for innovative solutions in an emerging world.</p>
+          <span className="dhome-kicker">{t("home_hero_kicker")}</span>
+          <h1>{t("home_hero_title")}</h1>
+          <p>{t("home_hero_body")}</p>
         </div>
         <div className="vhome-loc">{pick(cur, "location")}</div>
         <div className="vhome-cue">
@@ -279,31 +279,31 @@ function HomePage({ go }) {
             <rect x="1" y="1" width="16" height="26" rx="8" stroke="white" strokeWidth="1.5" strokeOpacity="0.85" />
             <rect className="mouse-wheel" x="8" y="5" width="2" height="5" rx="1" fill="white" />
           </svg>
-          <span>SCROLL</span>
+          <span>{t("scroll")}</span>
         </div>
         <div className="vhome-dots" onClick={(event) => event.stopPropagation()}>
           {featured.map((p, idx) => (
-            <button key={p.id} className={`vhome-dot ${idx === activeIndex ? "on" : ""}`} onClick={() => setI(idx)} aria-label={`Project ${idx + 1}`} />
+            <button key={p.id} className={`vhome-dot ${idx === activeIndex ? "on" : ""}`} onClick={() => setI(idx)} aria-label={`${t("project")} ${idx + 1}`} />
           ))}
         </div>
       </section>
 
       <section className="dhome-statement dhome-statement--practice">
-        <span className="dhome-kicker">01 / Practice</span>
-        <h2>Project58 is an architecture and design practice based in Athens, Greece. We can design your residence, your business and your workplace.</h2>
-        <div className="dhome-methods" aria-label="Our approach">
-          <span>Computational design</span>
-          <span>Human-centered design</span>
-          <span>Data-driven design</span>
-          <span>Research</span>
-          <span>Environmental design</span>
+        <span className="dhome-kicker">{t("home_practice_kicker")}</span>
+        <h2>{t("home_practice_title")}</h2>
+        <div className="dhome-methods" aria-label={t("home_method_human")}>
+          <span>{t("home_method_computational")}</span>
+          <span>{t("home_method_human")}</span>
+          <span>{t("home_method_data")}</span>
+          <span>{t("home_method_research")}</span>
+          <span>{t("home_method_environmental")}</span>
         </div>
       </section>
 
       {homeV2.enabled && banners.length ? <section className="dhome-work" aria-labelledby="dhome-work-title">
         <header className="dhome-work-head">
-          <span className="dhome-kicker">{homeV2.kicker}</span>
-          <h2 id="dhome-work-title">{homeV2.title}</h2>
+          <span className="dhome-kicker">{pick(homeV2, "kicker")}</span>
+          <h2 id="dhome-work-title">{pick(homeV2, "title")}</h2>
         </header>
         <div className="dhome-banners">
           {banners.map((banner, index) => (
@@ -313,16 +313,16 @@ function HomePage({ go }) {
                 <span className="dhome-banner-shade" aria-hidden="true" />
                 <span className="dhome-banner-number">{String(index + 1).padStart(2, "0")}</span>
                 <span className="dhome-banner-copy">
-                  <span>{banner.eyebrow}</span>
-                  <strong>{banner.title}</strong>
-                  <small>{banner.note}</small>
+                  <span>{pick(banner, "eyebrow")}</span>
+                  <strong>{pick(banner, "title")}</strong>
+                  <small>{pick(banner, "note")}</small>
                 </span>
-                <span className="dhome-banner-arrow">↗</span>
+                <span className="dhome-banner-arrow ui-arrow-up-right" aria-hidden="true" />
               </button>
               {index === 1 ? (
                 <aside className="dhome-banners-statement">
-                  <span className="dhome-kicker">Scalable design systems</span>
-                  <p>We developed scalable design systems for two fast-casual brands, delivering 10+ shops across Greece in less than a year.</p>
+                  <span className="dhome-kicker">{t("home_scalable_kicker")}</span>
+                  <p>{t("home_scalable_text")}</p>
                 </aside>
               ) : null}
             </React.Fragment>
@@ -331,9 +331,9 @@ function HomePage({ go }) {
       </section> : null}
 
       <section className="dhome-statement dhome-statement--systems">
-        <span className="dhome-kicker">03 / Design systems</span>
-        <h2>We focus on human-centered design, technology, and data-driven research in order to shape meaningful spatial experiences.</h2>
-        <button onClick={() => go({ name: "projects" })}>View all projects <span>↗</span></button>
+        <span className="dhome-kicker">{t("home_systems_kicker")}</span>
+        <h2>{t("home_systems_title")}</h2>
+        <button onClick={() => go({ name: "projects" })}>{t("view_all_projects")} <span className="ui-arrow-up-right" aria-hidden="true" /></button>
       </section>
 
       <section className="dhome-contact hz-foot">
@@ -375,7 +375,7 @@ function MobileHomePage({ go, featured, active, setActive, cur, catOf }) {
       </section>
 
       <section className="mhome-intro">
-        <h2>Recent Projects</h2>
+        <h2>{t("recent_projects")}</h2>
       </section>
 
       <section className="mhome-list">
@@ -454,7 +454,7 @@ function Tile({ project, cls, go, idx }) {
             </div>
           </div>
           <div className="ovr-tag" style={{ alignSelf: "end" }}>
-            <span>{t("view")}</span><span>↗</span>
+            <span>{t("view")}</span><span className="ui-arrow-up-right" aria-hidden="true" />
           </div>
         </div>
       </div>
@@ -488,16 +488,21 @@ function InteriorsPage({ go, brand, sort }) {
    then the categories as portrait cards you scroll through sideways. Picking a
    category hands over to ProjectsPage, which lists that category's projects the
    ordinary way — scrolling down. Phones go straight to ProjectsPage. */
-function ProjectsRail({ go }) {
+function ProjectsRail({ go, transition }) {
   const pick = window.usePick();
   const t = window.useT();
+  const [openingCategory, setOpeningCategory] = useS(false);
+  const storedSite = (window.readP58Store ? window.readP58Store() : null)?.site || {};
+  const projectsPage = window.normaliseSiteSettings(storedSite).projectsPage;
+  const heroTitleScale = Math.min(250, Math.max(50, Number(projectsPage.heroTitleScale) || 150));
 
   // The categories are the dashboard's, in the dashboard's order. Not cached:
   // a project hidden there has to leave the counts at once.
   const visible = publicProjects();
   const categories = window.siteCategories().map((c) => {
     const members = visible.filter((p) => window.projectCategoryId(p) === c.id);
-    return { ...c, count: members.length, cover: members.find((p) => p.hero) };
+    const automaticCover = members.find((p) => p.hero);
+    return { ...c, count: members.length, cover: c.cover ? { hero: c.cover } : automaticCover };
   });
 
   // the opening pane cycles the featured set, in the order the dashboard pins
@@ -554,7 +559,7 @@ function ProjectsRail({ go }) {
   };
 
   return (
-    <div className="hzone" ref={rail.ref}>
+    <div className={`hzone ${projectsPage.categoryTitlesUppercase ? "hz-cat-uppercase" : ""} ${transition === "category-back" ? "category-return" : ""} ${openingCategory ? "category-leaving" : ""}`} ref={rail.ref}>
       {/* ===== opening pane — featured gallery (100vw) ===== */}
       <section
         className="hz-hero"
@@ -571,42 +576,68 @@ function ProjectsRail({ go }) {
         <div className="vhome-brand" onClick={(e) => { e.stopPropagation(); go({ name: "home" }); }} role="button" aria-label="Project58 home">
           <img src="assets/logo-white.png" alt="Project58" />
         </div>
-        <h1 className="hz-hero-title">{t("projects")}</h1>
+        <h1
+          className="hz-hero-title"
+          style={{
+            "--projects-hero-title-min": `${56 * heroTitleScale / 100}px`,
+            "--projects-hero-title-fluid": `${7 * heroTitleScale / 100}vw`,
+            "--projects-hero-title-max": `${128 * heroTitleScale / 100}px`,
+          }}>
+          {pick(projectsPage, "heroTitle") || t("projects")}
+        </h1>
         <div className="vhome-loc">{pick(cur, "location")}</div>
         <div className="vhome-cue">
           <svg className="mouse-icon" viewBox="0 0 18 28" width="18" height="28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <rect x="1" y="1" width="16" height="26" rx="8" stroke="white" strokeWidth="1.5" strokeOpacity="0.85" />
             <rect className="mouse-wheel" x="8" y="5" width="2" height="5" rx="1" fill="white" />
           </svg>
-          <span>SCROLL</span>
+          <span>{t("scroll")}</span>
         </div>
         <div className="vhome-dots" onClick={(e) => e.stopPropagation()}>
           {gallery.map((p, idx) => (
-            <button key={p.id} className={`vhome-dot ${idx === activeIndex ? "on" : ""}`} onClick={() => setI(idx)} aria-label={`Project ${idx + 1}`} />
+            <button key={p.id} className={`vhome-dot ${idx === activeIndex ? "on" : ""}`} onClick={() => setI(idx)} aria-label={`${t("project")} ${idx + 1}`} />
           ))}
         </div>
       </section>
 
-      {/* ===== the works themselves — title pane, then portrait cards ===== */}
-      <section className="hz-intro">
-        <h2 className="vhome-rail-title">{t("projects")}</h2>
-        <p className="hz-intro-note">
-          {t("home_note")} <em>{t("home_note_em")}</em> {t("home_note_tail")}
-        </p>
-      </section>
+      {/* ===== optional intro pane, then portrait category cards ===== */}
+      {projectsPage.showIntro ? (
+        <section className="hz-intro">
+          <h2 className="vhome-rail-title">{pick(projectsPage, "introTitle")}</h2>
+          <p className="hz-intro-note">{pick(projectsPage, "introNote")}</p>
+        </section>
+      ) : null}
+
+      {pick(projectsPage, "centerText") ? (
+        <section className="hz-center-copy">
+          <p>{pick(projectsPage, "centerText")}</p>
+        </section>
+      ) : null}
 
       {categories.map((c, idx) => (
         <a
           key={c.id}
           className={`vhome-hcard hz-card hz-cat ${c.count ? "" : "hz-cat--empty"}`}
           href={`/projects?type=${c.id}`}
-          onClick={(e) => { e.preventDefault(); go({ name: "projects", type: c.id }); }}>
+          onClick={(e) => {
+            e.preventDefault();
+            if (openingCategory) return;
+            rail.save();
+            if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+              go({ name: "projects", type: c.id, transition: "category-open" });
+              return;
+            }
+            setOpeningCategory(true);
+            window.setTimeout(() => {
+              go({ name: "projects", type: c.id, transition: "category-open" });
+            }, 650);
+          }}>
           <div className="vhome-hpic">
             {c.cover ? <img src={c.cover.hero} alt="" loading="lazy" draggable="false" /> : null}
             <span className="vhome-hpic-num">N°{String(idx + 1).padStart(2, "0")}</span>
           </div>
           <div className="vhome-hcap">
-            <div className="vhome-name">{c.label}</div>
+            <div className="vhome-name">{pick(c, "label")}</div>
             <div className="vhome-loc-2">
               {c.count ? `${c.count} ${t("proj_word")}` : t("arch_meta_b")}
             </div>
@@ -617,7 +648,7 @@ function ProjectsRail({ go }) {
       <div className="vhome-endcard hz-end">
         <div className="eyebrow">{t("rail_end_eyebrow")}</div>
         <h3>{t("rail_end_h")}</h3>
-        <button onClick={() => go({ name: "start" })}>{t("rail_end_cta")} ↗</button>
+        <button onClick={() => go({ name: "start" })}>{t("rail_end_cta")} <span className="ui-arrow-up-right" aria-hidden="true" /></button>
       </div>
 
       {/* ===== closing pane — the site footer (100vw) ===== */}
@@ -631,20 +662,43 @@ function ProjectsRail({ go }) {
 }
 
 /* ================== PROJECTS — unified list with type filter ================== */
-function ProjectsPage({ go, type, brand, sort }) {
+function ProjectsPage({ go, type, brand, sort, view, transition }) {
   const pick = window.usePick();
   const t = window.useT();
   // `type` is a dashboard category id — anything the dashboard publishes is a
   // valid filter here, not just the two the nav's category row happens to show.
-  const categoryIds = window.siteCategories().map((c) => c.id);
+  const categoryList = window.siteCategories();
+  const categoryIds = categoryList.map((c) => c.id);
   const normalisedType = categoryIds.includes(type) ? type : null;
   const normalisedBrand = normalisedType === "retail" && (brand === "pg" || brand === "dn") ? brand : null;
   const order = window.PROJECT_SORTS[sort] ? sort : window.PROJECT_SORT_DEFAULT;
-  const filtered = publicProjects().filter((p) => {
+  const sortedProjects = publicProjects().slice().sort(window.PROJECT_SORTS[order].compare(pick));
+  const filtered = sortedProjects.filter((p) => {
     if (!normalisedType) return true;
     if (window.projectCategoryId(p) !== normalisedType) return false;
     return !normalisedBrand || BRAND_KEY(p) === normalisedBrand;
-  }).sort(window.PROJECT_SORTS[order].compare(pick));
+  });
+  const categoryGroups = categoryList.map((category) => {
+    const projects = sortedProjects.filter((project) => window.projectCategoryId(project) === category.id);
+    const definedSubs = (category.subcategories || []).map((subcategory, index) => ({
+      ...subcategory,
+      id: subcategory.id || `sub-${index}`,
+    }));
+    const definedLabels = definedSubs.map((subcategory) => subcategory.label);
+    const extraLabels = [...new Set(projects.map((project) => String(project.brand || "").trim()).filter(Boolean))]
+      .filter((label) => !definedLabels.includes(label));
+    const extraSubs = extraLabels.map((label, index) => ({ id: `extra-${index}`, label }));
+    const subcategories = [...definedSubs, ...extraSubs].map((subcategory) => ({
+      ...subcategory,
+      projects: projects.filter((project) => String(project.brand || "").trim() === subcategory.label),
+    }));
+    const subcategoryLabels = new Set(subcategories.map((subcategory) => subcategory.label));
+    const uncategorisedProjects = projects.filter((project) => !subcategoryLabels.has(String(project.brand || "").trim()));
+    return { ...category, projects, subcategories, uncategorisedProjects };
+  });
+  const firstCategoryId = categoryGroups.find((category) => category.projects.length)?.id || categoryGroups[0]?.id || null;
+  const [activeCategory, setActiveCategory] = useS(normalisedType || firstCategoryId);
+  const [activeSubcategory, setActiveSubcategory] = useS(null);
   const coverGallery = (() => {
     const visible = publicProjects();
     const featured = visible.filter((p) => p.featured);
@@ -726,15 +780,69 @@ function ProjectsPage({ go, type, brand, sort }) {
     };
   }, []);
 
+  useE(() => {
+    const sections = Array.from(document.querySelectorAll(".projects-category-section[data-category-id]"));
+    if (!sections.length || typeof IntersectionObserver === "undefined") return undefined;
+    const observer = new IntersectionObserver((entries) => {
+      const visibleEntries = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => Math.abs(a.boundingClientRect.top - window.innerHeight * 0.3) - Math.abs(b.boundingClientRect.top - window.innerHeight * 0.3));
+      const current = visibleEntries[0];
+      if (current) setActiveCategory(current.target.dataset.categoryId);
+    }, { rootMargin: "-22% 0px -62% 0px", threshold: [0, 0.01, 0.2] });
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, [categoryGroups.map((category) => `${category.id}:${category.projects.length}`).join("|")]);
+
+  useE(() => {
+    const sections = Array.from(document.querySelectorAll(".projects-subcategory-section[data-subcategory-key]"));
+    if (!sections.length || typeof IntersectionObserver === "undefined") return undefined;
+    const observer = new IntersectionObserver((entries) => {
+      const current = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => Math.abs(a.boundingClientRect.top - window.innerHeight * 0.34) - Math.abs(b.boundingClientRect.top - window.innerHeight * 0.34))[0];
+      if (!current) return;
+      setActiveCategory(current.target.dataset.categoryId);
+      setActiveSubcategory(current.target.dataset.subcategoryKey);
+    }, { rootMargin: "-26% 0px -58% 0px", threshold: [0, 0.01, 0.2] });
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, [categoryGroups.map((category) => `${category.id}:${category.subcategories.length}`).join("|")]);
+
+  useE(() => {
+    if (!normalisedType) return undefined;
+    const timer = window.setTimeout(() => {
+      const section = document.getElementById(`projects-category-${normalisedType}`);
+      if (section) section.scrollIntoView({ block: "start", behavior: "instant" });
+    }, 40);
+    return () => window.clearTimeout(timer);
+  }, [normalisedType]);
+
+  const jumpToCategory = (categoryId) => {
+    const section = document.getElementById(`projects-category-${categoryId}`);
+    if (!section) return;
+    setActiveCategory(categoryId);
+    setActiveSubcategory(null);
+    section.scrollIntoView({ block: "start", behavior: "smooth" });
+  };
+
+  const jumpToSubcategory = (categoryId, subcategoryId) => {
+    const key = `${categoryId}:${subcategoryId}`;
+    const section = document.getElementById(`projects-subcategory-${categoryId}-${subcategoryId}`);
+    if (!section) return;
+    setActiveCategory(categoryId);
+    setActiveSubcategory(key);
+    section.scrollIntoView({ block: "start", behavior: "smooth" });
+  };
+
   const keepSort = (route) => (sort ? { ...route, sort } : route);
   const sheetRoute = {
     name: "projects",
     ...(normalisedType ? { type: normalisedType } : {}),
     ...(normalisedBrand ? { brand: normalisedBrand } : {}),
     ...(sort ? { sort } : {}),
+    ...(view === "all" ? { view: "all" } : {}),
   };
-  const finalProject = showMobileCover && filtered.length ? filtered[filtered.length - 1] : null;
-  const precedingProjects = finalProject ? filtered.slice(0, -1) : filtered;
   const openCoverProject = () => {
     if (!coverProject) return;
     go({ name: "project", id: coverProject.slug || coverProject.id, from: sheetRoute });
@@ -761,7 +869,7 @@ function ProjectsPage({ go, type, brand, sort }) {
   };
 
   return (
-    <div className="page-enter" key={`${normalisedType || "all"}:${normalisedBrand || "all"}:${order}`}>
+    <div className={`page-enter ${transition === "category-open" ? "category-page-enter" : ""}`} key={`${normalisedType || "all"}:${normalisedBrand || "all"}:${order}`}>
       {showMobileCover ? (
         <section
           className="mobile-projects-cover"
@@ -791,7 +899,7 @@ function ProjectsPage({ go, type, brand, sort }) {
           <div className="mobile-projects-cover-veil" aria-hidden="true" />
           <div className="mobile-projects-cover-loc">{pick(coverProject, "location")}</div>
           <div className="mobile-projects-cover-cue" aria-hidden="true">
-            <span>Scroll</span>
+            <span>{t("scroll")}</span>
             <svg viewBox="0 0 16 26" width="16" height="26" fill="none">
               <path d="M8 1v22M3 18l5 5 5-5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -807,7 +915,7 @@ function ProjectsPage({ go, type, brand, sort }) {
                   event.stopPropagation();
                   setCoverIndex(index);
                 }}
-                aria-label={`Project ${index + 1}`} />
+                aria-label={`${t("project")} ${index + 1}`} />
             ))}
           </div>
         </section>
@@ -816,55 +924,137 @@ function ProjectsPage({ go, type, brand, sort }) {
         <div className="mobile-projects-sheet-head">
           <div className="project-filter-groups">
             <div className="interiors-filter">
-              <button className={`filter-btn ${!normalisedType ? "on" : ""}`} onClick={() => go(keepSort({ name: "projects" }))}>{t("all")}</button>
-              <button className={`filter-btn ${normalisedType === "retail" ? "on" : ""}`} onClick={() => go(keepSort({ name: "projects", type: "retail" }))}>{t("retail")}</button>
-              <button className={`filter-btn ${normalisedType === "residential" ? "on" : ""}`} onClick={() => go(keepSort({ name: "projects", type: "residential" }))}>{t("residential")}</button>
+              {categoryGroups.map((category) => (
+                <button key={category.id} className={`filter-btn ${activeCategory === category.id ? "on" : ""}`} onClick={() => jumpToCategory(category.id)}>
+                  {pick(category, "label")}
+                </button>
+              ))}
             </div>
-            {normalisedType === "retail" ? (
-              <div className="interiors-filter brand-filter">
-                <button className={`filter-btn ${!normalisedBrand ? "on" : ""}`} onClick={() => go(keepSort({ name: "projects", type: "retail" }))}>{t("all_brands")}</button>
-                <button className={`filter-btn ${normalisedBrand === "pg" ? "on" : ""}`} onClick={() => go(keepSort({ name: "projects", type: "retail", brand: "pg" }))}>Protein Garden</button>
-                <button className={`filter-btn ${normalisedBrand === "dn" ? "on" : ""}`} onClick={() => go(keepSort({ name: "projects", type: "retail", brand: "dn" }))}>Dinas</button>
-              </div>
-            ) : null}
           </div>
           <window.ProjectSort route={sheetRoute} go={go} />
         </div>
-        <div className={`proj-list ${showMobileCover && finalProject ? "proj-list-before-last" : ""}`}>
-          {precedingProjects.map((p, i) =>
-            <ProjListRow key={p.id} project={p} go={go} idx={i + 1} />
-          )}
-          {filtered.length === 0 && (
-            <div className="proj-list-empty">No projects in this category yet.</div>
-          )}
+        <div className="projects-category-browser">
+          <div className="projects-category-column">
+            {categoryGroups.map((category, categoryIndex) => (
+              <section
+                key={category.id}
+                id={`projects-category-${category.id}`}
+                data-category-id={category.id}
+                className="projects-category-section">
+                <header className="projects-category-heading">
+                  <span>N°{String(categoryIndex + 1).padStart(2, "0")}</span>
+                  <h2>{pick(category, "label")}</h2>
+                  <span>{category.projects.length} {t("proj_word")}</span>
+                </header>
+                {category.subcategories.length ? (
+                  <div className="projects-subcategory-list">
+                    {category.subcategories.map((subcategory) => {
+                      const subcategoryKey = `${category.id}:${subcategory.id}`;
+                      return (
+                        <section
+                          key={subcategory.id}
+                          id={`projects-subcategory-${category.id}-${subcategory.id}`}
+                          data-category-id={category.id}
+                          data-subcategory-key={subcategoryKey}
+                          className="projects-subcategory-section">
+                          <header className="projects-subcategory-heading">
+                            {subcategory.icon ? <img src={subcategory.icon} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
+                            <div>
+                              <span>{pick(category, "subLabel") || t("subcategory")}</span>
+                              <h3>{subcategory.label}</h3>
+                            </div>
+                            <b>{subcategory.projects.length}</b>
+                          </header>
+                          <div className="proj-list">
+                            {subcategory.projects.map((project, projectIndex) => (
+                              <ProjListRow
+                                key={project.id}
+                                project={project}
+                                go={go}
+                                idx={projectIndex + 1}
+                                from={keepSort({ name: "projects", type: category.id })} />
+                            ))}
+                            {subcategory.projects.length === 0 ? <div className="proj-list-empty">{t("no_projects_category")}</div> : null}
+                          </div>
+                        </section>
+                      );
+                    })}
+                    {category.uncategorisedProjects.length ? (
+                      <div className="proj-list projects-subcategory-unassigned">
+                        {category.uncategorisedProjects.map((project, projectIndex) => (
+                          <ProjListRow
+                            key={project.id}
+                            project={project}
+                            go={go}
+                            idx={projectIndex + 1}
+                            from={keepSort({ name: "projects", type: category.id })} />
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <div className="proj-list">
+                    {category.projects.map((project, projectIndex) => (
+                      <ProjListRow
+                        key={project.id}
+                        project={project}
+                        go={go}
+                        idx={projectIndex + 1}
+                        from={keepSort({ name: "projects", type: category.id })} />
+                    ))}
+                    {category.projects.length === 0 ? <div className="proj-list-empty">{t("no_projects_category")}</div> : null}
+                  </div>
+                )}
+              </section>
+            ))}
+          </div>
+          <aside className="projects-category-jump" aria-label={t("categories") || "Categories"}>
+            <div className="projects-category-sort">
+              <window.ProjectSort route={sheetRoute} go={go} />
+            </div>
+            <div className="projects-category-jump-label">{t("categories") || "Categories"}</div>
+            {categoryGroups.map((category, index) => (
+              <div className="projects-category-jump-group" key={category.id}>
+                <button
+                  type="button"
+                  className={`projects-category-jump-main ${activeCategory === category.id ? "on" : ""}`}
+                  onClick={() => jumpToCategory(category.id)}>
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <b>{pick(category, "label")}</b>
+                </button>
+                {category.subcategories.length ? (
+                  <div className="projects-category-jump-subs">
+                    {category.subcategories.map((subcategory) => {
+                      const subcategoryKey = `${category.id}:${subcategory.id}`;
+                      return (
+                        <button
+                          key={subcategory.id}
+                          type="button"
+                          className={activeSubcategory === subcategoryKey ? "on" : ""}
+                          onClick={() => jumpToSubcategory(category.id, subcategory.id)}>
+                          <i />
+                          <b>{subcategory.label}</b>
+                          <span>{subcategory.projects.length}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          </aside>
         </div>
-        {showMobileCover ? (
-          <div className={`projects-contact-stack ${finalProject ? "has-project-backdrop" : ""}`}>
-            {finalProject ? (
-              <div className="proj-list proj-list-last">
-                <ProjListRow project={finalProject} go={go} idx={filtered.length} />
-              </div>
-            ) : null}
-            <section className="projects-contact-parallax" aria-label={t("contact")}>
-              <div className="projects-contact-parallax-inner">
-                <window.ContactPage go={go} />
-              </div>
-            </section>
-          </div>
-        ) : null}
       </div>
-      {!showMobileCover ? (
-        <section className="projects-contact-parallax" aria-label={t("contact")}>
-          <div className="projects-contact-parallax-inner">
-            <window.ContactPage go={go} />
-          </div>
-        </section>
-      ) : null}
+      <section className="projects-contact-parallax" aria-label={t("contact")}>
+        <div className="projects-contact-parallax-inner">
+          <window.ContactPage go={go} />
+        </div>
+      </section>
     </div>
   );
 }
 
-function ProjListRow({ project, go, idx }) {
+function ProjListRow({ project, go, idx, from }) {
   const pick = window.usePick();
   const t = window.useT();
   const site = useSiteSettings();
@@ -872,19 +1062,23 @@ function ProjListRow({ project, go, idx }) {
   const monogram = bk === "pg" ? "PG" : "DN";
   const stored = window.readP58Store ? window.readP58Store() : null;
   const iconSrc = window.projectIconFor(project, site, stored && stored.categories);
+  const [iconFailed, setIconFailed] = useS(false);
+  useE(() => setIconFailed(false), [iconSrc]);
+  const builtInIconSrc = bk === "pg" ? "assets/proteingarden/Protein Garden New logo_final-03.png" : "";
+  const visibleIconSrc = iconSrc && !iconFailed ? iconSrc : builtInIconSrc;
   // Format location as "GREECE, ATHENS, NEIGHBORHOOD"
   const rawLoc = pick(project, "location") || "";
   const locParts = rawLoc.split(/\s*·\s*/);
-  const locFormatted = ["Greece", ...locParts].join(", ").toUpperCase();
+  const locFormatted = [t("country_greece"), ...locParts].join(", ").toUpperCase();
   const rawStatus = project.status || "";
   const statusLabel = t(rawStatus) !== rawStatus ? t(rawStatus) : rawStatus;
   return (
     <div
       className="proj-list-row"
-      onClick={() => go({ name: "project", id: project.slug || project.id })}>
+      onClick={() => go({ name: "project", id: project.slug || project.id, ...(from ? { from } : {}) })}>
       <div className="proj-list-info">
-        {iconSrc
-          ? <img className="proj-list-icon proj-list-icon--img" src={iconSrc} alt={project.brand} />
+        {visibleIconSrc
+          ? <img className="proj-list-icon proj-list-icon--img" src={visibleIconSrc} alt={project.brand} onError={() => { if (visibleIconSrc === iconSrc) setIconFailed(true); }} />
           : <div className={`proj-list-icon proj-list-icon--${bk}`}>{monogram}</div>
         }
         <div className="proj-list-text">
@@ -918,7 +1112,7 @@ function ArchitecturePage({ go, sort }) {
         )}
         {filtered.length === 0 && (
           <div className="proj-list-empty">
-            <p>Residential projects coming soon.</p>
+            <p>{t("residential_coming_soon")}</p>
           </div>
         )}
       </div>
@@ -1051,7 +1245,7 @@ function ProjectPage({ id, go, from, transitionDirection }) {
       {p.gallery.map((g, i) =>
       <div key={i} className="pd-page-gallery-row">
           <SiteMedia src={g.src} alt={pick(g, "tag")} lazy />
-          {pick(g, "tag") ? <span className="pd-page-tag">{pick(g, "tag")}</span> : null}
+          {pick(g, "tag") ? <span className="pd-page-tag">{t(pick(g, "tag"))}</span> : null}
         </div>
       )}
 
@@ -1059,7 +1253,7 @@ function ProjectPage({ id, go, from, transitionDirection }) {
         <div
           className={`pd-scroll-progress ${transitioning ? "is-transitioning" : ""}`}
           role="progressbar"
-          aria-label="Page progress"
+          aria-label={t("page_progress")}
           aria-valuemin="0"
           aria-valuemax="100"
           aria-valuenow={Math.round(scrollProgress)}>
@@ -1080,6 +1274,7 @@ function ProjectPage({ id, go, from, transitionDirection }) {
 
 /* ================== PEOPLE — three dashboard-managed profiles ================== */
 function AgencyPage() {
+  const t = window.useT();
   const pick = window.usePick();
   const people = TEAM;
   const [selectedPerson, setSelectedPerson] = useS(null);
@@ -1116,7 +1311,7 @@ function AgencyPage() {
               key={person._id || person.name || index}
               role="button"
               tabIndex="0"
-              aria-label={`View profile: ${person.name}`}
+              aria-label={`${t("view_profile")}: ${person.name}`}
               onClick={() => setSelectedPerson(person)}
               onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedPerson(person); }}>
               <div className="people-mosaic-media">
@@ -1134,11 +1329,11 @@ function AgencyPage() {
         <div className="people-profile-modal" role="dialog" aria-modal="true" aria-labelledby="people-profile-name" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedPerson(null); }}>
           <div className="people-profile-modal-card">
             <header className="people-profile-modal-nav">
-              <button className="people-profile-modal-back" aria-label="Back to People" onClick={() => setSelectedPerson(null)}>
+              <button className="people-profile-modal-back" aria-label={t("back_to_people")} onClick={() => setSelectedPerson(null)}>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M10.5 2.5L5 8l5.5 5.5" />
                 </svg>
-                <span>Back</span>
+                <span>{t("back")}</span>
               </button>
               <img className="people-profile-modal-logo" src="assets/logo-black.svg" alt="Project58" />
               <span aria-hidden="true" />
@@ -1230,7 +1425,7 @@ function LegacyAgencyPage({ go }) {
       </section>
 
       {/* News */}
-      <section className="bleed" style={{ padding: "60px var(--gutter) 24px", borderTop: "1px solid var(--rule-strong)", marginTop: 40 }}>
+      <section className="bleed agency-news-head" style={{ padding: "60px var(--gutter) 24px", borderTop: "1px solid var(--rule-strong)", marginTop: 40 }}>
         <div className="eyebrow">{t("news_eyebrow")}</div>
         <h2 style={{ fontFamily: "var(--sans)", fontWeight: 500, fontSize: "clamp(40px, 5vw, 76px)", letterSpacing: "-0.04em", margin: "12px 0 32px" }}>
           {t("recently")}
@@ -1245,7 +1440,7 @@ function LegacyAgencyPage({ go }) {
               <h3 style={{ fontFamily: "var(--sans)", fontWeight: 500, fontSize: "clamp(24px, 2.2vw, 34px)", letterSpacing: "-0.04em", lineHeight: 1.08, margin: "0 0 10px" }}>{pick(n, "title")}</h3>
               <p style={{ margin: 0, color: "var(--ink-2)", maxWidth: "60ch", textWrap: "pretty" }}>{pick(n, "deck")}</p>
             </div>
-            <div className="mono" style={{ fontSize: 18, justifySelf: "end", color: "var(--ink-3)" }}>↗</div>
+            <div className="mono" style={{ fontSize: 18, justifySelf: "end", color: "var(--ink-3)" }}><span className="ui-arrow-up-right" aria-hidden="true" /></div>
           </article>
         )}
       </section>
@@ -1273,11 +1468,14 @@ function LegacyAgencyPage({ go }) {
 }
 /* ================== AGENCY BLOCK FOOTER ================== */
 function AgencyFooter() {
+  const t = window.useT();
+  const { lang } = window.useLang();
   const [contactOpen, setContactOpen] = useS(false);
   const site = window.normaliseSiteSettings ? window.normaliseSiteSettings(
     (() => { const r = window.readP58Store ? window.readP58Store() : null; return r && r.site ? r.site : {}; })()
   ) : window.DEFAULT_SITE_SETTINGS || {};
   const contact = site.contact || {};
+  const contactCopy = (key) => lang === "gr" ? (contact[`${key}_gr`] || contact[key] || "") : (contact[key] || "");
 
   return (
     <footer className="agency-foot">
@@ -1285,13 +1483,13 @@ function AgencyFooter() {
       <div className={`agency-foot-contact ${contactOpen ? "open" : ""}`}>
         <div className="agency-foot-contact-inner">
           <div className="agency-foot-contact-col">
-            <div className="agency-foot-contact-label">{contact.location_label || "ATHENS"}</div>
-            <div className="agency-foot-contact-item">{contact.address}</div>
+            <div className="agency-foot-contact-label">{contactCopy("location_label")}</div>
+            <div className="agency-foot-contact-item">{contactCopy("address")}</div>
             <a className="agency-foot-contact-item" href={contact.phone_url}>{contact.phone}</a>
             <a className="agency-foot-contact-item" href={contact.email_url}>{contact.email}</a>
             {contact.instagram_url
-              ? <a className="agency-foot-contact-item" href={contact.instagram_url} target="_blank" rel="noopener noreferrer">{contact.instagram_text}</a>
-              : <span className="agency-foot-contact-item">{contact.instagram_text}</span>
+              ? <a className="agency-foot-contact-item" href={contact.instagram_url} target="_blank" rel="noopener noreferrer">{contactCopy("instagram_text")}</a>
+              : <span className="agency-foot-contact-item">{contactCopy("instagram_text")}</span>
             }
           </div>
         </div>
@@ -1304,12 +1502,12 @@ function AgencyFooter() {
           <button
             className={`agency-foot-btn ${contactOpen ? "on" : ""}`}
             onClick={() => setContactOpen(v => !v)}>
-            {contactOpen ? "Close" : "Contact"} {contactOpen ? "×" : "↗"}
+            {contactOpen ? t("inquiry_close") : t("contact")} {contactOpen ? "×" : <span className="ui-arrow-up-right" aria-hidden="true" />}
           </button>
           <button
             className="agency-foot-btn"
             onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-            Back to top ↑
+            {t("back_to_top")} ↑
           </button>
         </div>
       </div>

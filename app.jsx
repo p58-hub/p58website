@@ -37,11 +37,13 @@ function routeFromLocation() {
     const type = params.get("type");
     const brand = params.get("brand");
     const sort = params.get("sort");
+    const view = params.get("view");
     return {
       name: "projects",
       ...(type ? { type } : {}),
       ...(brand ? { brand } : {}),
       ...(sort ? { sort } : {}),
+      ...(view === "all" ? { view: "all" } : {}),
     };
   }
   if (parts[0] === "interiors") {
@@ -68,6 +70,7 @@ function pathFromRoute(r) {
   if (r.type) params.set("type", r.type);
   if (r.brand) params.set("brand", r.brand);
   if (r.sort) params.set("sort", r.sort);
+  if (name === "projects" && r.view === "all") params.set("view", "all");
   const query = params.toString();
   return `/${name}${query ? `?${query}` : ""}`;
 }
@@ -293,7 +296,7 @@ function App() {
     const nextPath = pathFromRoute(next);
     const currentPath = pathFromRoute(routeRef.current);
 
-    if (name === "project" && opts.fromEl) {
+    if (name === "project" && opts.fromEl && !window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       const rect = opts.fromEl.getBoundingClientRect();
       const src = opts.src || opts.fromEl.currentSrc || opts.fromEl.src;
       setZoom({ src, rect, on: false });
@@ -424,15 +427,15 @@ function App() {
       document.head.appendChild(canonical);
     }
     canonical.href = `${location.origin}${pathFromRoute(route)}`;
-  }, [route.name, route.id, route.brand, route.type, contentVersion]);
+  }, [route.name, route.id, route.brand, route.type, route.view, contentVersion]);
 
   let page = null;
   if (route.name === "home")         page = (window.visibleProjects ? window.visibleProjects() : PROJECTS.filter((p) => p.visible !== false)).length ? <HomePage go={go} /> : <ProjectsPage go={go} />;
   // Unfiltered /projects is the horizontal category rail on desktop; picking a
   // category adds a filter and hands over to the ordinary vertical list.
-  if (route.name === "projects")     page = railOnDesktop && !route.type && !route.brand
-    ? <ProjectsRail go={go} />
-    : <ProjectsPage go={go} type={route.type} brand={route.brand} sort={route.sort} />;
+  if (route.name === "projects")     page = railOnDesktop && route.view !== "all" && !route.type && !route.brand
+    ? <ProjectsRail go={go} transition={route.transition} />
+    : <ProjectsPage go={go} type={route.type} brand={route.brand} sort={route.sort} view={route.view} transition={route.transition} />;
   if (route.name === "architecture") page = <ArchitecturePage go={go} sort={route.sort} />;
   if (route.name === "interiors")    page = <InteriorsPage go={go} brand={route.brand} sort={route.sort} />;
   if (route.name === "agency")       page = <AgencyPage go={go} />;
