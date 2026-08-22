@@ -285,6 +285,18 @@ function Nav({ route, go }) {
         </div>
 
         <div className="nav-right">
+          {/* the language toggle sits in the header itself, not behind the menu;
+              on mobile the tab bar already carries one */}
+          {!isMobile ? (
+          <button
+            className="nav-language"
+            aria-label={t("switch_language")}
+            onClick={() => setLang(lang === "en" ? "gr" : "en")}>
+            <span className={lang === "en" ? "on" : ""}>EN</span>
+            <i>/</i>
+            <span className={lang === "gr" ? "on" : ""}>GR</span>
+          </button>
+          ) : null}
           <button className="nav-icon" aria-label={t("search")} onClick={() => setSearchOpen(true)}>
             <SearchIcon />
           </button>
@@ -333,14 +345,6 @@ function Nav({ route, go }) {
                 onFocus={() => setMenuPreviewKey("contact")}
                 onClick={goToProjectsContact}>
                   <span>{t("contact")}</span><span className="ar ui-arrow-up-right" aria-hidden="true" />
-                </button>
-                <button
-                  className="nav-menu-language"
-                  aria-label={t("switch_language")}
-                  onClick={() => setLang(lang === "en" ? "gr" : "en")}>
-                  <span className={lang === "en" ? "on" : ""}>EN</span>
-                  <i>/</i>
-                  <span className={lang === "gr" ? "on" : ""}>GR</span>
                 </button>
               </div>
               {menuImageSrc ? (

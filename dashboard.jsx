@@ -2120,8 +2120,17 @@ function WebsiteTextsSettings({ site, onSave, onGoSection }) {
 
   useEffect(() => { setDraft(makeDraft(site)); }, [site]);
 
-  const keys = Object.keys(dictionaries.en || {}).filter((key) => websiteTextGroup(key) === group && (!query || `${key} ${draft.en[key]} ${draft.gr[key]}`.toLowerCase().includes(query.toLowerCase())));
-  const ownedElsewhere = query ? [] : TEXT_OWNED_ELSEWHERE.filter((item) => item.group === group);
+  // The search box is the index into all of the copy: with something typed it
+  // reaches across every section rather than the one that happens to be open,
+  // because "where does this sentence live?" is the question it answers.
+  const needle = query.trim().toLowerCase();
+  const matches = (key) => `${key.replaceAll("_", " ")} ${draft.en[key]} ${draft.gr[key]}`.toLowerCase().includes(needle);
+  const keys = Object.keys(dictionaries.en || {}).filter((key) => (needle ? matches(key) : websiteTextGroup(key) === group));
+  // A search also reaches the copy this section does not own, so looking for a
+  // category name lands on the card that points at Categories.
+  const ownedElsewhere = needle
+    ? TEXT_OWNED_ELSEWHERE.filter((item) => `${item.title} ${item.note} ${item.cta}`.toLowerCase().includes(needle))
+    : TEXT_OWNED_ELSEWHERE.filter((item) => item.group === group);
   const serialise = () => ({
     en: Object.fromEntries(Object.keys(draft.en).map((key) => [key, Array.isArray(dictionaries.en[key]) ? draft.en[key].split("\n").map((line) => line.trim()).filter(Boolean) : draft.en[key]])),
     gr: Object.fromEntries(Object.keys(draft.gr).map((key) => [key, Array.isArray(dictionaries.gr?.[key] || dictionaries.en[key]) ? draft.gr[key].split("\n").map((line) => line.trim()).filter(Boolean) : draft.gr[key]])),
@@ -2147,12 +2156,18 @@ function WebsiteTextsSettings({ site, onSave, onGoSection }) {
       <SectionHead eyebrow="/ All website copy · English + Greek" title="Website texts">
         <div className="website-text-preview-lang" aria-label="Preview language"><button className={previewLang === "en" ? "on" : ""} onClick={() => setPreviewLang("en")}>EN</button><button className={previewLang === "gr" ? "on" : ""} onClick={() => setPreviewLang("gr")}>GR</button></div>
       </SectionHead>
-      <div className="website-texts-toolbar"><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search website texts…" /><span>{Object.keys(dictionaries.en || {}).length} texts · projects excluded</span></div>
+      <div className="website-texts-toolbar">
+        <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search every website text — English or Greek…" />
+        {needle
+          ? <><span>{keys.length} of {Object.keys(dictionaries.en || {}).length} · all sections</span><button className="btn ghost" type="button" onClick={() => setQuery("")}>Clear</button></>
+          : <span>{Object.keys(dictionaries.en || {}).length} texts · projects excluded</span>}
+      </div>
       <div className="website-texts-workspace">
         <nav className="website-texts-menu" aria-label="Website text sections">
           {WEBSITE_TEXT_GROUPS.map((item) => {
             const count = Object.keys(dictionaries.en || {}).filter((key) => websiteTextGroup(key) === item.id).length;
-            return <button className={group === item.id ? "on" : ""} type="button" key={item.id} onClick={() => setGroup(item.id)}><span>{item.label}</span><small>{count}</small></button>;
+            const hits = needle ? keys.filter((key) => websiteTextGroup(key) === item.id).length : count;
+            return <button className={`${!needle && group === item.id ? "on" : ""} ${needle && !hits ? "is-empty" : ""}`} type="button" key={item.id} onClick={() => { setQuery(""); setGroup(item.id); }}><span>{item.label}</span><small>{hits}</small></button>;
           })}
         </nav>
         <div className="website-texts-sheet">
@@ -2172,7 +2187,7 @@ function WebsiteTextsSettings({ site, onSave, onGoSection }) {
           <div className="website-texts-table-scroll" tabIndex="0" aria-label="Scrollable website texts table">
             <div className="website-texts-table">
               <div className="website-texts-head"><span>Text key</span><span>English</span><span>Ελληνικά</span><span>Location</span></div>
-              {keys.map((key) => <div className="website-text-row" key={key}><code>{key.replaceAll("_", " ")}</code><textarea rows={Array.isArray(dictionaries.en[key]) ? 4 : 2} value={draft.en[key] || ""} onChange={(event) => updateText("en", key, event.target.value)} /><textarea rows={Array.isArray(dictionaries.gr?.[key] || dictionaries.en[key]) ? 4 : 2} value={draft.gr[key] || ""} onChange={(event) => updateText("gr", key, event.target.value)} /><button className="btn ghost" type="button" onClick={() => previewText(key)}>Preview {previewLang.toUpperCase()}</button></div>)}
+              {keys.map((key) => <div className="website-text-row" key={key}><code>{key.replaceAll("_", " ")}{needle ? <em>{(WEBSITE_TEXT_GROUPS.find((item) => item.id === websiteTextGroup(key)) || {}).label}</em> : null}</code><textarea rows={Array.isArray(dictionaries.en[key]) ? 4 : 2} value={draft.en[key] || ""} onChange={(event) => updateText("en", key, event.target.value)} /><textarea rows={Array.isArray(dictionaries.gr?.[key] || dictionaries.en[key]) ? 4 : 2} value={draft.gr[key] || ""} onChange={(event) => updateText("gr", key, event.target.value)} /><button className="btn ghost" type="button" onClick={() => previewText(key)}>Preview {previewLang.toUpperCase()}</button></div>)}
               {!keys.length && <div className="empty-row">No website texts match this search.</div>}
             </div>
           </div>

@@ -842,7 +842,12 @@ a { color: inherit; }
 .website-texts-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
 .website-texts-toolbar input { flex: 1; min-width: 0; padding: 10px 12px; border: 1px solid var(--rule-strong); border-radius: 9px; background: var(--paper); outline: none; }
 .website-texts-toolbar input:focus { border-color: var(--ink); }
-.website-texts-toolbar span { font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.website-texts-toolbar span { flex: none; font-family: var(--mono); font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+.website-texts-toolbar .btn { flex: none; font-size: 10px; }
+/* A section with no hits stays listed, so the counts still read as a whole. */
+.website-texts-menu button.is-empty { opacity: 0.45; }
+/* While searching, each row names the section it came from. */
+.website-text-row code em { display: block; margin-top: 3px; font-family: var(--sans, inherit); font-size: 9.5px; font-style: normal; letter-spacing: 0.06em; color: var(--clay); }
 .website-texts-workspace { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 14px; align-items: start; }
 .website-texts-menu { position: sticky; top: 76px; overflow: hidden; border: 1px solid var(--rule-strong); border-radius: 11px; background: var(--paper); }
 .website-texts-menu button { display: flex; justify-content: space-between; gap: 10px; width: 100%; padding: 11px 12px; border-bottom: 1px solid var(--rule); font-size: 12px; text-align: left; }
@@ -905,7 +910,9 @@ a { color: inherit; }
   .website-text-row code { grid-column: 1 / -1; }
 }
 @media (max-width: 620px) {
-  .website-texts-toolbar { align-items: stretch; flex-direction: column; }
+  .website-texts-toolbar { align-items: center; flex-wrap: wrap; }
+  .website-texts-toolbar input { flex: 1 0 100%; }
+  .website-texts-toolbar span { margin-right: auto; }
   .website-text-row { grid-template-columns: 1fr; }
   .website-text-row code { grid-column: auto; }
   .website-text-row .btn { justify-self: start; }
