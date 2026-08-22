@@ -611,10 +611,10 @@ TIMELINE.forEach((r, i) => { if (TIMELINE_GR[i]) Object.assign(r, TIMELINE_GR[i]
 const P58_STORE_KEY = "p58_data_v1";
 const P58_PROJECT_PREVIEW_PREFIX = "p58_project_preview_v1:";
 const DEFAULT_HOME_V2_BANNERS = [
-  { id: "residences", visible: true, eyebrow: "Architecture / Living", title: "Residences", note: "Human-centered places for everyday life.", tone: "sand", image: "", destination: "architecture" },
+  { id: "residences", visible: true, eyebrow: "Architecture / Living", title: "Residential", note: "Human-centered places for everyday life.", tone: "sand", image: "", destination: "architecture" },
+  { id: "workplaces", visible: true, eyebrow: "Architecture / Work", title: "Business & Workplaces", note: "Studios and workplaces designed around focus, collaboration and identity.", tone: "ink", image: "", destination: "contact" },
   { id: "protein-garden", visible: true, eyebrow: "Scalable retail systems", title: "proteingarden", note: "Protein Garden is a Greek fast-casual restaurant chain centered on high-protein, customizable meals, with a spatial identity that reflects freshness, health, and simplicity.", tone: "image", image: "", destination: "protein-garden" },
   { id: "dinas", visible: true, eyebrow: "Hospitality / Brand experience", title: "DINAS eat real", note: "Warm, fluid spaces translating care and Mediterranean references into a growing system.", tone: "image", image: "", destination: "dinas" },
-  { id: "workplaces", visible: true, eyebrow: "Architecture / Work", title: "Workplaces", note: "Studios and workplaces designed around focus, collaboration and identity.", tone: "ink", image: "", destination: "contact" },
 ];
 
 function normaliseHomeV2(homeV2) {
@@ -633,11 +633,16 @@ function normaliseHomeV2(homeV2) {
       const legacyProteinGarden = id === "protein-garden";
       const rawBannerTitle = String(banner && banner.title || `Banner ${order + 1}`);
       const rawNote = String(banner && banner.note || "");
+      const migratedTitle = id === "residences" && rawBannerTitle === "Residences"
+        ? "Residential"
+        : id === "workplaces" && rawBannerTitle === "Workplaces"
+          ? "Business & Workplaces"
+          : rawBannerTitle;
       return {
         id,
         visible: !banner || banner.visible !== false,
         eyebrow: String(banner && banner.eyebrow || ""),
-        title: legacyProteinGarden && rawBannerTitle === "Protein Garden" ? "proteingarden" : rawBannerTitle,
+        title: legacyProteinGarden && migratedTitle === "Protein Garden" ? "proteingarden" : migratedTitle,
         note: legacyProteinGarden && rawNote === "A repeatable spatial identity shaped through material research and parametric tools."
           ? "Protein Garden is a Greek fast-casual restaurant chain centered on high-protein, customizable meals, with a spatial identity that reflects freshness, health, and simplicity."
           : rawNote,

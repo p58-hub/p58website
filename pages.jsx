@@ -245,7 +245,11 @@ function HomePage({ go }) {
       ...banner,
       image: banner.image || (banner.id === "protein-garden" ? pgLead?.hero : banner.id === "dinas" ? dnLead?.hero : ""),
       action: bannerAction(banner.destination),
-    }));
+    }))
+    .sort((a, b) => {
+      const order = { residences: 0, workplaces: 1, "protein-garden": 2, dinas: 3 };
+      return (order[a.id] ?? 99) - (order[b.id] ?? 99);
+    });
 
   return (
     <div className="dhome">
@@ -253,7 +257,8 @@ function HomePage({ go }) {
         className="dhome-hero"
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
-        onClick={() => go({ name: "project", id: cur.slug || cur.id, from: { name: "home" } })}>
+        onClick={() => setI((current) => (current + 1) % featured.length)}
+        aria-label="Show next gallery image">
         {featured.map((p, idx) => (
           <div key={p.id} className={`vhome-slide ${idx === activeIndex ? "on" : ""}`}>
             <img src={p.hero} alt="" />
@@ -285,7 +290,7 @@ function HomePage({ go }) {
 
       <section className="dhome-statement dhome-statement--practice">
         <span className="dhome-kicker">01 / Practice</span>
-        <h2>Project58 is an architecture and design practice where human-centered design, technology, and data-driven research come together to shape meaningful spatial experiences.</h2>
+        <h2>Project58 is an architecture and design practice based in Athens, Greece. We can design your residence, your business and your workplace.</h2>
         <div className="dhome-methods" aria-label="Our approach">
           <span>Computational design</span>
           <span>Human-centered design</span>
@@ -302,24 +307,32 @@ function HomePage({ go }) {
         </header>
         <div className="dhome-banners">
           {banners.map((banner, index) => (
-            <button key={banner.id} className={`dhome-banner dhome-banner--${banner.tone}`} onClick={banner.action}>
-              {banner.image ? <img src={banner.image} alt="" loading="lazy" /> : null}
-              <span className="dhome-banner-shade" aria-hidden="true" />
-              <span className="dhome-banner-number">{String(index + 1).padStart(2, "0")}</span>
-              <span className="dhome-banner-copy">
-                <span>{banner.eyebrow}</span>
-                <strong>{banner.title}</strong>
-                <small>{banner.note}</small>
-              </span>
-              <span className="dhome-banner-arrow">↗</span>
-            </button>
+            <React.Fragment key={banner.id}>
+              <button className={`dhome-banner dhome-banner--${banner.tone}`} onClick={banner.action}>
+                {banner.image ? <img src={banner.image} alt="" loading="lazy" /> : null}
+                <span className="dhome-banner-shade" aria-hidden="true" />
+                <span className="dhome-banner-number">{String(index + 1).padStart(2, "0")}</span>
+                <span className="dhome-banner-copy">
+                  <span>{banner.eyebrow}</span>
+                  <strong>{banner.title}</strong>
+                  <small>{banner.note}</small>
+                </span>
+                <span className="dhome-banner-arrow">↗</span>
+              </button>
+              {index === 1 ? (
+                <aside className="dhome-banners-statement">
+                  <span className="dhome-kicker">Scalable design systems</span>
+                  <p>We developed scalable design systems for two fast-casual brands, delivering 10+ shops across Greece in less than a year.</p>
+                </aside>
+              ) : null}
+            </React.Fragment>
           ))}
         </div>
       </section> : null}
 
       <section className="dhome-statement dhome-statement--systems">
         <span className="dhome-kicker">03 / Design systems</span>
-        <h2>We developed scalable design systems for two fast-casual brands, delivering 10+ shops across Greece in less than a year.</h2>
+        <h2>We focus on human-centered design, technology, and data-driven research in order to shape meaningful spatial experiences.</h2>
         <button onClick={() => go({ name: "projects" })}>View all projects <span>↗</span></button>
       </section>
 

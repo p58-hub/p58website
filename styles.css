@@ -4448,7 +4448,7 @@ body.desktop-presentation-home[data-route="home"] .nav {
   position: absolute;
   z-index: 4;
   left: var(--gutter);
-  bottom: clamp(88px, 12vh, 132px);
+  bottom: calc(clamp(88px, 12vh, 132px) + 5vh);
   width: min(88vw, 1120px);
   pointer-events: none;
 }
@@ -4542,6 +4542,27 @@ body.desktop-presentation-home[data-route="home"] .nav {
 .dhome-banners {
   display: grid;
   gap: clamp(24px, 3vw, 48px);
+}
+.dhome-banners-statement {
+  display: flex;
+  min-height: clamp(420px, 62vh, 680px);
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(72px, 10vh, 120px) clamp(24px, 4vw, 64px);
+  border-top: 1px solid var(--rule-strong);
+  border-bottom: 1px solid var(--rule-strong);
+  color: var(--ink);
+  background: var(--paper);
+}
+.dhome-banners-statement .dhome-kicker { color: var(--ink-3); }
+.dhome-banners-statement p {
+  max-width: 16ch;
+  margin: clamp(36px, 6vh, 72px) 0 0;
+  font-family: var(--sans);
+  font-size: clamp(48px, 6vw, 98px);
+  font-weight: 500;
+  line-height: .9;
+  letter-spacing: -.05em;
 }
 .dhome-banner {
   position: relative;
@@ -4781,6 +4802,15 @@ body.desktop-presentation-home[data-route="home"] .nav {
     line-height: .88;
   }
   .dhome-banners { gap: 18px; }
+  .dhome-banners-statement {
+    min-height: 70svh;
+    padding: 72px 20px;
+  }
+  .dhome-banners-statement p {
+    margin-top: 32px;
+    font-size: clamp(36px, 10vw, 48px);
+    line-height: .96;
+  }
   .dhome-banner,
   .dhome-banner:hover,
   .dhome-banner:focus-visible {
