@@ -97,8 +97,6 @@ function LangToggle({ compact }) {
 const DICT = {
   en: {
     // nav
-    retail: "Retail",
-    residential: "Residential",
     agency: "People",
     contact: "Contact",
     home: "Home",
@@ -109,13 +107,11 @@ const DICT = {
     nav: "navigate",
     open_kbd: "open",
     close_kbd: "close",
-    retail_brands: "Retail brands",
     project_types: "Project types",
     projects: "Projects",
     categories_view: "Categories",
     all_projects_view: "All projects",
     all: "All",
-    all_brands: "All brands",
     sort: "Sort",
     sort_date: "Completion date",
     sort_region: "Region · City",
@@ -143,18 +139,8 @@ const DICT = {
     studio_location: "Athens",
 
     // home
-    home_strip_eyebrow: "/01 — Interiors · Multi-site retail across Athens & Piraeus",
-    home_strip_h: "Selected work.",
-    see_more_projects: "See more projects",
     see_all_projects: "See all projects",
-    all_rooms_cta: "All projects",
-    view_project: "View project",
-    home_note_eyebrow: "/02 — Note",
-    home_note: "A practice for buildings, shops",
-    home_note_em: "& the rooms",
-    home_note_tail: "in between.",
     location: "Location",
-    year: "Year",
     size: "Size",
     status: "Status",
     home_hero_kicker: "Project58 Architecture & Design Practice",
@@ -177,44 +163,16 @@ const DICT = {
     residential_coming_soon: "Residential projects coming soon.",
 
     // interiors
-    interiors_h: "Retail.",
     interiors_eyebrow: "/ Twelve rooms · 2023 — 2026  ·  Multi-site retail · Fixtures · Roll-out",
     interiors_brand_eyebrow_a: "/",
     interiors_brand_eyebrow_b: " rooms · Multi-site retail",
-    two_operators: "Two operators",
-    rooms_plus_rooms: "rooms",
     proj_word: "projects",
-    pg_rollout: "Protein Garden roll-out",
-    dn_rollout: "Dinas roll-out",
 
-    // architecture
-    arch_h: "Residential.",
-    arch_eyebrow: "/ Buildings · Renovations · New-build  ·  In development",
-    arch_meta_a: "2026 — onward",
     arch_meta_b: "Open for commissions",
-    arch_note_eyebrow: "/01 — Note",
-    arch_note_a: "Our ground-up",
-    arch_note_em: "architecture & renovation",
-    arch_note_b: "portfolio is in development. First projects launch through 2026.",
 
-    // services (names)
-    svc_arch: "Architecture",
-    svc_arch_d: "Ground-up buildings, additions, and full architectural services from feasibility through permit and construction administration. Equal attention to plan, fixture and site.",
-    svc_arch_b: ["Concept & feasibility", "Planning & permit", "Construction administration", "Site supervision"],
-    svc_reno: "Renovation",
-    svc_reno_d: "Whole-floor and whole-building renovations of post-war housing, commercial shells, and listed structures. We work as much with what is there as with what is added.",
-    svc_reno_b: ["Heritage and post-war housing", "Structural reorganisation", "Material reclamation", "Permit-grade conversions"],
-    svc_ret: "Retail & hospitality",
-    svc_ret_d: "Quick-service shops, bakeries, kiosks, restaurants and counter-led hospitality. Single-site work and roll-out systems for operators with multiple locations.",
-    svc_ret_b: ["Single-site fit-out", "Multi-site roll-out systems", "Operator handover documentation", "Brand-aligned fixturing"],
-    svc_wp: "Workplace",
-    svc_wp_d: "Small and mid-sized studios, professional practices, and headquarters fit-outs for owner-led businesses.",
-    svc_wp_b: ["Floor planning", "Acoustic & lighting strategy", "Bespoke joinery"],
 
     work_with_us: "/ Work with us",
-    arch_cta: "Briefing for",
     cta_2026: "2026",
-    arch_cta_tail: "commissions — renovation, additions, new-build.",
     agency_cta: "Open for",
     agency_cta_tail: "commissions — retail, renovation, one or two new-builds.",
 
@@ -250,21 +208,13 @@ const DICT = {
     pd_engineer: "Engineer",
     pd_lead_architect: "Lead Architect",
     pd_design_team: "Design Team",
-    next_project: "Next project",
     view: "View",
 
     // footer
-    foot_studio: "Studio",
-    foot_thess: "Thessaloniki",
-    foot_athens: "Athens",
     foot_copy_left: "© 2025 — 2026 Project58 Architecture",
-    foot_copy_mid: "Architecture · Renovation · Retail",
     foot_copy_right: "Designed in-house · v1.0",
-    foot_addr_thess: "Vasilissis Olgas 84\n546 43 Thessaloniki\nGreece",
-    foot_addr_athens: "Akademias 76\n106 76 Athens\nGreece",
     foot_big: "Let’s design your",
     foot_big_em: "next space!",
-    foot_instagram: "Instagram → @project.58",
     foot_meet: "Let’s meet!",
 
     // appointment form — the "step 0" screen shown before the four questions
@@ -312,8 +262,6 @@ const DICT = {
 
   gr: {
     // nav
-    retail: "Λιανική",
-    residential: "Κατοικίες",
     agency: "Άνθρωποι",
     contact: "Επικοινωνία",
     home: "Αρχική",
@@ -324,13 +272,11 @@ const DICT = {
     nav: "πλοήγηση",
     open_kbd: "άνοιγμα",
     close_kbd: "κλείσιμο",
-    retail_brands: "Brands λιανικής",
     project_types: "Τύποι έργων",
     projects: "Έργα",
     categories_view: "Κατηγορίες",
     all_projects_view: "Όλα τα έργα",
     all: "Όλα",
-    all_brands: "Όλα τα brands",
     sort: "Ταξινόμηση",
     sort_date: "Ημερομηνία ολοκλήρωσης",
     sort_region: "Περιοχή · Πόλη",
@@ -358,18 +304,8 @@ const DICT = {
     studio_location: "Αθήνα",
 
     // home
-    home_strip_eyebrow: "/01 — Εσωτερικοί χώροι · Λιανική σε πολλαπλά σημεία στην Αθήνα και τον Πειραιά",
-    home_strip_h: "Επιλεγμένα έργα.",
-    see_more_projects: "Δείτε περισσότερα έργα",
     see_all_projects: "Δείτε όλα τα έργα",
-    all_rooms_cta: "Όλα τα έργα",
-    view_project: "Δες το έργο",
-    home_note_eyebrow: "/02 — Σημείωση",
-    home_note: "Ένα γραφείο για κτίρια, καταστήματα",
-    home_note_em: "& τα δωμάτια",
-    home_note_tail: "στο ενδιάμεσο.",
     location: "Τοποθεσία",
-    year: "Έτος",
     size: "Μέγεθος",
     status: "Κατάσταση",
     home_hero_kicker: "Project58 Αρχιτεκτονική & Σχεδιασμός",
@@ -392,43 +328,16 @@ const DICT = {
     residential_coming_soon: "Τα έργα κατοικίας θα παρουσιαστούν σύντομα.",
 
     // interiors
-    interiors_h: "Λιανική.",
     interiors_eyebrow: "/ Δώδεκα δωμάτια · 2023 — 2026  ·  Λιανική πολλαπλών σημείων · Έπιπλα · Roll-out",
     interiors_brand_eyebrow_a: "/",
     interiors_brand_eyebrow_b: " δωμάτια · Λιανική πολλαπλών σημείων",
-    two_operators: "Δύο operators",
-    rooms_plus_rooms: "δωμάτια",
     proj_word: "έργα",
-    pg_rollout: "Roll-out Protein Garden",
-    dn_rollout: "Roll-out Dinas",
 
-    // architecture
-    arch_h: "Κατοικίες.",
-    arch_eyebrow: "/ Κτίρια · Ανακαινίσεις · Νέα κατασκευή  ·  Σε εξέλιξη",
-    arch_meta_a: "2026 — και μετά",
     arch_meta_b: "Δεκτές αναθέσεις",
-    arch_note_eyebrow: "/01 — Σημείωση",
-    arch_note_a: "Το χαρτοφυλάκιό μας σε",
-    arch_note_em: "αρχιτεκτονική & ανακαίνιση",
-    arch_note_b: "αναπτύσσεται. Τα πρώτα έργα παρουσιάζονται στο 2026.",
 
-    svc_arch: "Αρχιτεκτονική",
-    svc_arch_d: "Νέα κτίρια, προσθήκες, και πλήρης αρχιτεκτονική υπηρεσία από τη σύλληψη έως την άδεια και τη διαχείριση κατασκευής. Ίση προσοχή σε κάτοψη, έπιπλο και χώρο.",
-    svc_arch_b: ["Σύλληψη & σκοπιμότητα", "Σχεδιασμός & άδεια", "Διαχείριση κατασκευής", "Επίβλεψη εργοταξίου"],
-    svc_reno: "Ανακαίνιση",
-    svc_reno_d: "Ανακαινίσεις ορόφων και ολόκληρων κτιρίων σε μεταπολεμικές κατοικίες, εμπορικά κελύφη και διατηρητέα κτίρια. Δουλεύουμε εξίσου με αυτό που υπάρχει και αυτό που προστίθεται.",
-    svc_reno_b: ["Διατηρητέα & μεταπολεμικές κατοικίες", "Δομική αναδιοργάνωση", "Επανάχρηση υλικών", "Μετατροπές αδειοδότησης"],
-    svc_ret: "Λιανική & φιλοξενία",
-    svc_ret_d: "Καταστήματα γρήγορου σερβίς, αρτοποιεία, περίπτερα, εστιατόρια και bar-led φιλοξενία. Έργα ενός σημείου και συστήματα roll-out για operators πολλαπλών τοποθεσιών.",
-    svc_ret_b: ["Έργα ενός σημείου", "Συστήματα roll-out", "Τεκμηρίωση παράδοσης", "Έπιπλα brand-aligned"],
-    svc_wp: "Χώροι εργασίας",
-    svc_wp_d: "Μικρά και μεσαία στούντιο, επαγγελματικά γραφεία και έδρες εταιρειών για ιδιοκτήτες επιχειρήσεων.",
-    svc_wp_b: ["Διάταξη χώρου", "Στρατηγική ακουστικής & φωτισμού", "Custom ξυλουργικά"],
 
     work_with_us: "/ Συνεργαστείτε μαζί μας",
-    arch_cta: "Briefing για αναθέσεις",
     cta_2026: "2026",
-    arch_cta_tail: "— ανακαίνιση, προσθήκες, νέα κατασκευή.",
     agency_cta: "Δεκτές αναθέσεις",
     agency_cta_tail: "— λιανική, ανακαίνιση, μία-δύο νέες κατασκευές.",
 
@@ -464,21 +373,13 @@ const DICT = {
     pd_engineer: "Μηχανολόγος",
     pd_lead_architect: "Επικεφαλής Αρχιτέκτονας",
     pd_design_team: "Ομάδα Μελέτης",
-    next_project: "Επόμενο έργο",
     view: "Δες",
 
     // footer
-    foot_studio: "Στούντιο",
-    foot_thess: "Θεσσαλονίκη",
-    foot_athens: "Αθήνα",
     foot_copy_left: "© 2025 — 2026 Project58 Αρχιτεκτονική",
-    foot_copy_mid: "Αρχιτεκτονική · Ανακαίνιση · Λιανική",
     foot_copy_right: "Σχεδιασμός από το γραφείο · v1.0",
-    foot_addr_thess: "Βασιλίσσης Όλγας 84\n546 43 Θεσσαλονίκη\nΕλλάδα",
-    foot_addr_athens: "Ακαδημίας 76\n106 76 Αθήνα\nΕλλάδα",
     foot_big: "Ας σχεδιάσουμε τον",
     foot_big_em: "επόμενο χώρο σας!",
-    foot_instagram: "Instagram → @project.58",
     foot_meet: "Ας γνωριστούμε!",
 
     // appointment form — the "step 0" screen shown before the four questions

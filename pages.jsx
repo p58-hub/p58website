@@ -1,8 +1,6 @@
 // ===== pages.jsx — Home, Brand index, Project detail, Studio, News =====
 const { useState: useS, useEffect: useE, useRef: useR, useMemo: useM } = React;
 
-const BRAND_OF = { pg: "Protein Garden", dn: "Dinas" };
-
 /* Project slots accept a still or an MP4. Clips play silently on loop so they
    read as moving imagery rather than a video the visitor has to start. */
 function SiteMedia({ src, alt, className, lazy }) {
@@ -58,14 +56,6 @@ function useHomeMobile() {
   }, []);
   return isMobile;
 }
-
-// service translation map — each SERVICE has an `i18n` key linking to dictionary entries
-const SERVICE_I18N_MAP = {
-  "01": { t: "svc_arch", d: "svc_arch_d", b: "svc_arch_b" },
-  "02": { t: "svc_reno", d: "svc_reno_d", b: "svc_reno_b" },
-  "03": { t: "svc_ret", d: "svc_ret_d", b: "svc_ret_b" },
-  "04": { t: "svc_wp", d: "svc_wp_d", b: "svc_wp_b" }
-};
 
 /* ================== HOME — vertical scroll: full-screen hero → project cards ================== */
 function HomePage({ go }) {
@@ -226,16 +216,22 @@ function HomePage({ go }) {
   const activeIndex = featured.length ? i % featured.length : 0;
   const cur = featured[activeIndex];
   if (!cur) return null;
-  const catOf = (p) => BRAND_KEY(p) === "pg" ? "Retail" : "Hospitality";
+  // The label under each hero pick is the project's own category, named where
+  // categories are named.
+  const catOf = (p) => pick(window.siteCategory(window.projectCategoryId(p)) || {}, "label");
 
   const pgLead = publicProjects().find((p) => BRAND_KEY(p) === "pg") || cur;
   const dnLead = publicProjects().find((p) => BRAND_KEY(p) === "dn") || cur;
   const storedSite = window.readP58Store ? window.readP58Store()?.site : null;
   const homeV2 = window.normaliseSiteSettings(storedSite || window.DEFAULT_SITE_SETTINGS).homeV2;
-  const bannerAction = (destination) => {
-    if (destination === "architecture") return () => go({ name: "architecture" });
-    if (destination === "protein-garden") return () => go({ name: "interiors", brand: "pg" });
-    if (destination === "dinas") return () => go({ name: "interiors", brand: "dn" });
+  const bannerAction = (banner) => {
+    const destination = banner.destination;
+    if (banner.id === "residences" || destination === "residential" || destination === "architecture") return () => go({ name: "projects", type: "residential", transition: "category-open" });
+    if (banner.id === "workplaces" || destination === "workplace") return () => go({ name: "projects", type: "workplace", transition: "category-open" });
+    if (destination === "hospitality") return () => go({ name: "projects", type: "hospitality", transition: "category-open" });
+    if (destination === "retail") return () => go({ name: "projects", type: "retail", transition: "category-open" });
+    if (banner.id === "protein-garden" || destination === "protein-garden") return () => go({ name: "projects", type: "retail", brand: "pg", transition: "category-open" });
+    if (banner.id === "dinas" || destination === "dinas") return () => go({ name: "projects", type: "retail", brand: "dn", transition: "category-open" });
     if (destination === "contact") return () => go({ name: "start" });
     return () => go({ name: "projects" });
   };
@@ -244,7 +240,7 @@ function HomePage({ go }) {
     .map((banner) => ({
       ...banner,
       image: banner.image || (banner.id === "protein-garden" ? pgLead?.hero : banner.id === "dinas" ? dnLead?.hero : ""),
-      action: bannerAction(banner.destination),
+      action: bannerAction(banner),
     }))
     .sort((a, b) => {
       const order = { residences: 0, workplaces: 1, "protein-garden": 2, dinas: 3 };
@@ -466,15 +462,18 @@ function InteriorsPage({ go, brand, sort }) {
   const t = window.useT();
   const pick = window.usePick();
   const order = window.PROJECT_SORTS[sort] ? sort : window.PROJECT_SORT_DEFAULT;
-  const filtered = (brand ?
-  publicProjects().filter((p) => BRAND_KEY(p) === brand) :
+  // Both the heading and the filter come from the dashboard's Categories
+  // section: this page is the retail category under an older URL.
+  const sub = window.siteSubcategory("retail", brand);
+  const filtered = (sub ?
+  publicProjects().filter((p) => String(p.brand || "").trim() === sub.label) :
   publicProjects()).sort(window.PROJECT_SORTS[order].compare(pick));
-  const title = brand ? BRAND_OF[brand] : t("interiors_h");
-  const eyebrow = brand ?
-  `${t("interiors_brand_eyebrow_a")} ${BRAND_OF[brand]} · ${filtered.length}${t("interiors_brand_eyebrow_b")}` :
+  const title = sub ? sub.label : pick(window.siteCategory("retail") || {}, "label");
+  const eyebrow = sub ?
+  `${t("interiors_brand_eyebrow_a")} ${sub.label} · ${filtered.length}${t("interiors_brand_eyebrow_b")}` :
   t("interiors_eyebrow");
   return (
-    <div className="page-enter" key={`${brand || "all"}:${order}`}>
+    <div className="page-enter" key={`${(sub && sub.id) || "all"}:${order}`}>
       <div className="proj-list">
         {filtered.map((p, i) =>
         <ProjListRow key={p.id} project={p} go={go} idx={i + 1} />
@@ -483,14 +482,16 @@ function InteriorsPage({ go, brand, sort }) {
     </div>);
 }
 
-/* ================== PROJECTS — horizontal rail (desktop) ==================
+/* ================== PROJECTS — the works landing ==================
    The v1 home page, repurposed as the works landing: an opening gallery pane,
-   then the categories as portrait cards you scroll through sideways. Picking a
-   category hands over to ProjectsPage, which lists that category's projects the
-   ordinary way — scrolling down. Phones go straight to ProjectsPage. */
+   then the categories as portrait cards. On a desktop wheel the panes run
+   sideways; a phone gets the same panes stacked into one vertical scroll.
+   Picking a category hands over to ProjectsPage, which lists that category's
+   projects the ordinary way — scrolling down. */
 function ProjectsRail({ go, transition }) {
   const pick = window.usePick();
   const t = window.useT();
+  const isMobile = useHomeMobile();
   const [openingCategory, setOpeningCategory] = useS(false);
   const storedSite = (window.readP58Store ? window.readP58Store() : null)?.site || {};
   const projectsPage = window.normaliseSiteSettings(storedSite).projectsPage;
@@ -530,9 +531,25 @@ function ProjectsRail({ go, transition }) {
 
   const rail = window.useHorizontalRail({
     storageKey: "hzone_scroll",
+    enabled: !isMobile,
     // the header stays out of the way while the opening pane fills the screen
     onScroll: (el) => document.body.classList.toggle("hz-at-hero", el.scrollLeft < el.clientWidth * 0.62),
   });
+
+  // on a phone the same panes are stacked, so the opening one is measured
+  // against the page scroll instead of the rail's
+  const [pageProgress, setPageProgress] = useS(0);
+  useE(() => {
+    if (!isMobile) return undefined;
+    const onScroll = () => {
+      const past = window.innerHeight ? window.scrollY / window.innerHeight : 0;
+      setPageProgress(past);
+      document.body.classList.toggle("hz-at-hero", past < 0.62);
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [isMobile]);
 
   useE(() => {
     document.body.dataset.route = "projects";
@@ -544,11 +561,12 @@ function ProjectsRail({ go, transition }) {
   }, []);
 
   // the opening gallery only advances while it is the pane in view
+  const openingPaneInView = isMobile ? pageProgress < 0.5 : rail.progress <= 0.04;
   useE(() => {
-    if (paused || !gallery.length || rail.progress > 0.04) return undefined;
+    if (paused || !gallery.length || !openingPaneInView) return undefined;
     const id = setTimeout(() => setI((x) => (x + 1) % gallery.length), galleryIntervalMs);
     return () => clearTimeout(id);
-  }, [i, paused, gallery.length, rail.progress, galleryIntervalMs]);
+  }, [i, paused, gallery.length, openingPaneInView, galleryIntervalMs]);
 
   const activeIndex = gallery.length ? i % gallery.length : 0;
   const cur = gallery[activeIndex];
@@ -657,6 +675,112 @@ function ProjectsRail({ go, transition }) {
       </section>
 
       <div className="hz-progress"><i style={{ width: `${rail.progress * 100}%` }} /></div>
+    </div>
+  );
+}
+
+/* The phone's category control: one button that names the section you are in,
+   opens the full list when tapped, and steps a category at a time when you
+   scroll or swipe across it. The label follows the page's own scroll — the
+   sheet's observer keeps activeCategory in step with what is on screen. */
+function MobileCategoryPicker({ categories, activeId, onPick }) {
+  const pick = window.usePick();
+  const [open, setOpen] = useS(false);
+  const wrapRef = useR(null);
+  const stepLockRef = useR(0);
+  const touchRef = useR(null);
+  const index = Math.max(0, categories.findIndex((category) => category.id === activeId));
+  const active = categories[index] || categories[0];
+
+  useE(() => {
+    if (!open) return undefined;
+    const onPointerDown = (event) => {
+      if (wrapRef.current && !wrapRef.current.contains(event.target)) setOpen(false);
+    };
+    const onKey = (event) => { if (event.key === "Escape") setOpen(false); };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  useE(() => {
+    const el = wrapRef.current;
+    if (!el) return undefined;
+    // one category per gesture, or a trackpad flings through the whole set
+    const step = (direction) => {
+      const now = Date.now();
+      if (now < stepLockRef.current) return;
+      const next = categories[index + direction];
+      if (!next) return;
+      stepLockRef.current = now + 420;
+      onPick(next.id);
+    };
+    const onWheel = (event) => {
+      const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+      if (!delta) return;
+      event.preventDefault(); // the button steps instead of scrolling the page
+      step(delta > 0 ? 1 : -1);
+    };
+    const onTouchStart = (event) => {
+      const touch = event.touches[0];
+      touchRef.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+    };
+    const onTouchMove = (event) => {
+      const start = touchRef.current;
+      const touch = event.touches[0];
+      if (!start || !touch) return;
+      const dx = touch.clientX - start.x;
+      const dy = touch.clientY - start.y;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+      event.preventDefault();
+      touchRef.current = null;
+      // dragging left, or up, moves forward — the direction the page travels
+      step((Math.abs(dx) > Math.abs(dy) ? -dx : -dy) > 0 ? 1 : -1);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+    };
+  }, [index, categories.length]);
+
+  if (!active) return null;
+
+  return (
+    <div className={`cat-picker ${open ? "on" : ""}`} ref={wrapRef}>
+      <button
+        type="button"
+        className="cat-picker-btn"
+        aria-haspopup="listbox"
+        aria-expanded={open ? "true" : "false"}
+        onClick={() => setOpen((value) => !value)}>
+        <span className="cat-picker-name">{pick(active, "label")}</span>
+        <span className="cat-picker-count">{active.projects.length}</span>
+        <span className="cat-picker-chev" aria-hidden="true" />
+      </button>
+      {open ? (
+        <div className="cat-picker-menu" role="listbox">
+          {categories.map((category, categoryIndex) => (
+            <button
+              key={category.id}
+              type="button"
+              role="option"
+              aria-selected={category.id === active.id ? "true" : "false"}
+              className={`cat-picker-item ${category.id === active.id ? "on" : ""}`}
+              onClick={() => { setOpen(false); onPick(category.id); }}>
+              <span className="cat-picker-item-num">N°{String(categoryIndex + 1).padStart(2, "0")}</span>
+              <span className="cat-picker-item-name">{pick(category, "label")}</span>
+              <span className="cat-picker-item-count">{category.projects.length}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -810,13 +934,26 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
   }, [categoryGroups.map((category) => `${category.id}:${category.subcategories.length}`).join("|")]);
 
   useE(() => {
-    if (!normalisedType) return undefined;
+    if (!normalisedType || normalisedBrand) return undefined;
     const timer = window.setTimeout(() => {
       const section = document.getElementById(`projects-category-${normalisedType}`);
       if (section) section.scrollIntoView({ block: "start", behavior: "instant" });
     }, 40);
     return () => window.clearTimeout(timer);
-  }, [normalisedType]);
+  }, [normalisedType, normalisedBrand]);
+
+  useE(() => {
+    if (!normalisedBrand) return undefined;
+    const subcategoryId = normalisedBrand === "pg" ? "protein-garden" : "dinas";
+    const timer = window.setTimeout(() => {
+      const section = document.getElementById(`projects-subcategory-retail-${subcategoryId}`);
+      if (!section) return;
+      setActiveCategory("retail");
+      setActiveSubcategory(`retail:${subcategoryId}`);
+      section.scrollIntoView({ block: "start", behavior: "instant" });
+    }, 40);
+    return () => window.clearTimeout(timer);
+  }, [normalisedBrand]);
 
   const jumpToCategory = (categoryId) => {
     const section = document.getElementById(`projects-category-${categoryId}`);
@@ -922,15 +1059,10 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
       ) : null}
       <div className="projects-sheet">
         <div className="mobile-projects-sheet-head">
-          <div className="project-filter-groups">
-            <div className="interiors-filter">
-              {categoryGroups.map((category) => (
-                <button key={category.id} className={`filter-btn ${activeCategory === category.id ? "on" : ""}`} onClick={() => jumpToCategory(category.id)}>
-                  {pick(category, "label")}
-                </button>
-              ))}
-            </div>
-          </div>
+          <MobileCategoryPicker
+            categories={categoryGroups}
+            activeId={activeCategory}
+            onPick={jumpToCategory} />
           <window.ProjectSort route={sheetRoute} go={go} />
         </div>
         <div className="projects-category-browser">
@@ -960,7 +1092,7 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
                           <header className="projects-subcategory-heading">
                             {subcategory.icon ? <img src={subcategory.icon} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
                             <div>
-                              <span>{pick(category, "subLabel") || t("subcategory")}</span>
+                              <span>{pick(category, "subLabel")}</span>
                               <h3>{subcategory.label}</h3>
                             </div>
                             <b>{subcategory.projects.length}</b>
@@ -1008,11 +1140,11 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
               </section>
             ))}
           </div>
-          <aside className="projects-category-jump" aria-label={t("categories") || "Categories"}>
+          <aside className="projects-category-jump" aria-label={t("categories_view")}>
             <div className="projects-category-sort">
               <window.ProjectSort route={sheetRoute} go={go} />
             </div>
-            <div className="projects-category-jump-label">{t("categories") || "Categories"}</div>
+            <div className="projects-category-jump-label">{t("categories_view")}</div>
             {categoryGroups.map((category, index) => (
               <div className="projects-category-jump-group" key={category.id}>
                 <button

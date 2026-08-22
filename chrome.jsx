@@ -194,8 +194,11 @@ function Nav({ route, go }) {
   // A project opened from a deep link has no referrer — the index is the useful
   // way out, and on phones it is the only one.
   const backRoute = route.from || { name: "projects" };
-  const backLabel = backRoute.name === "interiors" ? t("retail")
-    : backRoute.name === "architecture" ? t("residential")
+  // The two legacy index routes are category views. Their names come from the
+  // dashboard's Categories section, never from the website-text dictionary.
+  const categoryName = (id) => pick(window.siteCategory(id) || {}, "label") || t("projects");
+  const backLabel = backRoute.name === "interiors" ? categoryName("retail")
+    : backRoute.name === "architecture" ? categoryName("residential")
     : backRoute.name === "agency" ? t("agency")
     : backRoute.name === "home" ? t("home")
     : t("projects");
@@ -354,13 +357,19 @@ function Nav({ route, go }) {
 
         {/* Filter row — lives inside nav so both share one backdrop-filter */}
         {isInteriors ? (() => {
-          const activeBrand = route.brand;
+          // The filter row is the retail category's sub-category list, as the
+          // dashboard publishes it — no second copy of the brand names here.
+          const activeSub = window.siteSubcategory("retail", route.brand);
           return (
             <div className="nav-filter-row">
               <div className="interiors-filter">
-                <button className={`filter-btn ${!activeBrand ? "on" : ""}`} onClick={() => go(keepSort({ name: "interiors" }))}>{t("all")}</button>
-                <button className={`filter-btn ${activeBrand === "pg" ? "on" : ""}`} onClick={() => go(keepSort({ name: "interiors", brand: "pg" }))}>Protein Garden</button>
-                <button className={`filter-btn ${activeBrand === "dn" ? "on" : ""}`} onClick={() => go(keepSort({ name: "interiors", brand: "dn" }))}>Dinas</button>
+                <button className={`filter-btn ${!activeSub ? "on" : ""}`} onClick={() => go(keepSort({ name: "interiors" }))}>{t("all")}</button>
+                {window.siteSubcategories("retail").map((sub) => (
+                  <button
+                    key={sub.id}
+                    className={`filter-btn ${activeSub && activeSub.id === sub.id ? "on" : ""}`}
+                    onClick={() => go(keepSort({ name: "interiors", brand: sub.id }))}>{sub.label}</button>
+                ))}
               </div>
               <ProjectSort route={route} go={go} />
             </div>
@@ -876,14 +885,13 @@ function Footer({ go }) {
   const { lang } = window.useLang();
   const site = useSiteSettings();
   const contact = site.contact || {};
-  const siteCopy = (key) => site.websiteTexts?.[lang]?.[key] || (lang === "gr" ? t(key) : site[key] || t(key));
   const contactCopy = (key) => lang === "gr" ? (contact[`${key}_gr`] || contact[key] || "") : (contact[key] || "");
   return (
     <footer className="foot">
       <div className="foot-top foot-top-2col" style={{ padding: "0px", textAlign: "left" }}>
         <div className="foot-big">
           <img src="assets/logo-black.svg" alt="Project58" className="foot-logo" style={{ height: 28, marginBottom: 24, display: "block", filter: "invert(1)" }} />
-          {siteCopy("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }}>{siteCopy("foot_big_em")}</em>
+          {t("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }}>{t("foot_big_em")}</em>
           <div className="foot-cta foot-cta-center">
             <button className="foot-start-btn" onClick={() => go({ name: "start" })}>{t("foot_meet")}<span className="ar">→</span></button>
           </div>
@@ -901,8 +909,8 @@ function Footer({ go }) {
         </div>
       </div>
       <div className="foot-bot foot-bot-2">
-        <span>{siteCopy("foot_copy_left")}</span>
-        <span className="right">{siteCopy("foot_copy_right")}</span>
+        <span>{t("foot_copy_left")}</span>
+        <span className="right">{t("foot_copy_right")}</span>
       </div>
     </footer>);
 
@@ -914,13 +922,12 @@ function ContactPage({ go }) {
   const { lang } = window.useLang();
   const site = useSiteSettings();
   const contact = site.contact || {};
-  const siteCopy = (key) => site.websiteTexts?.[lang]?.[key] || (lang === "gr" ? t(key) : site[key] || t(key));
   const contactCopy = (key) => lang === "gr" ? (contact[`${key}_gr`] || contact[key] || "") : (contact[key] || "");
   return (
     <div className="contact-page page-enter">
       <div className="foot-top foot-top-2col" style={{ padding: "0px", textAlign: "left" }}>
         <div className="foot-big">
-          {siteCopy("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }}>{siteCopy("foot_big_em")}</em>
+          {t("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }}>{t("foot_big_em")}</em>
           <div className="foot-cta foot-cta-center">
             <button className="foot-start-btn" onClick={() => go({ name: "start" })}>{t("foot_meet")}<span className="ar">→</span></button>
           </div>
@@ -938,8 +945,8 @@ function ContactPage({ go }) {
         </div>
       </div>
       <div className="foot-bot foot-bot-2">
-        <span>{siteCopy("foot_copy_left")}</span>
-        <span className="right">{siteCopy("foot_copy_right")}</span>
+        <span>{t("foot_copy_left")}</span>
+        <span className="right">{t("foot_copy_right")}</span>
       </div>
     </div>);
 

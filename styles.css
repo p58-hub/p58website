@@ -1485,7 +1485,7 @@ body.interiors-page .brand-head {
   .mobile-projects-cover-cue {
     position: absolute;
     left: 50%;
-    bottom: max(70px, calc(env(safe-area-inset-bottom) + 64px));
+    bottom: max(104px, calc(env(safe-area-inset-bottom) + 98px));
     z-index: 2;
     transform: translateX(-50%);
     display: flex;
@@ -1505,12 +1505,14 @@ body.interiors-page .brand-head {
     0%, 100% { transform: translateY(0); opacity: 0.75; }
     50% { transform: translateY(6px); opacity: 1; }
   }
+  /* the location gets its own line above the dots: capped to a third of the
+     screen it wrapped into the dots on longer place names */
   .mobile-projects-cover-loc {
     position: absolute;
     left: var(--gutter);
-    bottom: max(28px, calc(env(safe-area-inset-bottom) + 24px));
+    right: var(--gutter);
+    bottom: max(56px, calc(env(safe-area-inset-bottom) + 52px));
     z-index: 3;
-    max-width: 34vw;
     color: #fff;
     font-family: var(--mono);
     font-size: 9px;
@@ -1573,12 +1575,86 @@ body.interiors-page .brand-head {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }
-  .mobile-projects-sheet-head .project-filter-groups {
-    min-width: 0;
+  /* one control instead of a chip row: it names the section you are in, opens
+     the whole list on tap, and steps a category per scroll or swipe across it */
+  .cat-picker { position: relative; flex: 1 1 auto; min-width: 0; }
+  .cat-picker-btn {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    width: 100%;
+    padding: 7px 11px;
+    border: 1px solid var(--ink);
+    background: var(--ink);
+    color: var(--paper);
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    text-align: left;
+    cursor: pointer;
+    touch-action: none;
   }
-  .mobile-projects-sheet-head .interiors-filter {
-    flex-wrap: nowrap;
-    gap: 4px;
+  .cat-picker-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .cat-picker-count { flex: 0 0 auto; opacity: 0.62; }
+  .cat-picker-chev {
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    border-right: 1.4px solid currentColor;
+    border-bottom: 1.4px solid currentColor;
+    transform: translateY(-2px) rotate(45deg);
+    transition: transform 220ms ease;
+  }
+  .cat-picker.on .cat-picker-chev { transform: translateY(1px) rotate(-135deg); }
+  .cat-picker-menu {
+    position: absolute;
+    z-index: 14;
+    top: calc(100% + 9px);
+    left: 0;
+    right: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--paper);
+    border: 1px solid var(--rule-strong);
+    box-shadow: 0 18px 44px rgba(20, 19, 15, 0.18);
+  }
+  .cat-picker-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 11px;
+    padding: 12px;
+    border: 0;
+    border-top: 1px solid var(--rule);
+    background: none;
+    color: var(--ink);
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    text-align: left;
+    cursor: pointer;
+  }
+  .cat-picker-item:first-child { border-top: 0; }
+  .cat-picker-item.on { background: var(--ink); color: var(--paper); }
+  .cat-picker-item-num,
+  .cat-picker-item-count { opacity: 0.6; }
+  .cat-picker-item-name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--sans);
+    font-size: 16px;
+    font-weight: 500;
+    letter-spacing: -0.02em;
   }
   .mobile-projects-sheet-head .filter-btn {
     padding: 7px 9px;
@@ -1759,12 +1835,18 @@ body.interiors-page .brand-head {
     padding-top: 38px;
     scroll-margin-top: calc(var(--project-mobile-header-height) + 78px);
   }
+  /* the category name pins under the filter bar for as long as its own section
+     lasts; the next section's heading then pushes it out of the way */
   .projects-category-heading {
+    position: sticky;
+    top: calc(var(--project-mobile-header-height) + 69px);
+    z-index: 6;
     width: auto;
-    margin: 0 var(--gutter) 20px;
-    padding-bottom: 14px;
+    margin: 0 0 20px;
+    padding: 9px var(--gutter) 12px;
     grid-template-columns: 40px minmax(0, 1fr) auto;
     gap: 10px;
+    background: var(--paper);
   }
   .projects-category-heading h2 { font-size: clamp(34px, 10vw, 52px); }
   .projects-category-heading span { font-size: 8px; }
@@ -1846,6 +1928,14 @@ body.interiors-page .brand-head {
     position: relative;
   }
   .proj-list-arrow { display: none; }
+  /* the desktop rail reads the scroll-driven scale as depth; stacked full-width
+     cards just end up with ragged, mismatched edges, so keep them flush */
+  @supports (animation-timeline: view()) {
+    .proj-list-row {
+      animation: none;
+      transform: none;
+    }
+  }
 }
 
 .proj-list-empty {
@@ -1855,6 +1945,13 @@ body.interiors-page .brand-head {
   font-size: 12px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+/* three empty categories in a row is most of a phone screen of blank paper */
+@media (max-width: 720px) {
+  .proj-list-empty {
+    padding: 30px var(--gutter) 44px;
+    font-size: 10px;
+  }
 }
 
 .brand-grid {
@@ -3273,6 +3370,10 @@ a.agency-foot-contact-item:hover { color: var(--clay); }
   overflow: visible;
   display: block;
   background: #fff;
+  /* the clearance under the nav lives here rather than as a margin on the
+     image: a top margin on the first child collapses out of this block and
+     drags the card — and the nav it contains — down with it */
+  padding-top: max(108px, calc(env(safe-area-inset-top) + 100px));
   animation: people-modal-card-in 280ms cubic-bezier(.2,.7,.2,1) both;
 }
 .people-profile-modal-nav {
@@ -3310,11 +3411,19 @@ a.agency-foot-contact-item:hover { color: var(--clay); }
   max-width: 600px;
   min-height: 0;
   aspect-ratio: 1;
-  margin: max(92px, calc(env(safe-area-inset-top) + 78px)) auto 0;
+  margin: 0 auto;
   overflow: hidden;
   background: #f1efea;
 }
-.people-profile-modal-image img { width: 100%; height: 100%; display: block; object-fit: cover; }
+/* portraits are shot tall (3:4) and crop to a square here — anchoring the top
+   means the square eats into the chest rather than the top of the head */
+.people-profile-modal-image img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: center top;
+}
 .people-profile-modal-copy {
   width: calc(100% - 96px);
   max-width: 600px;
@@ -3357,7 +3466,6 @@ a.agency-foot-contact-item:hover { color: var(--clay); }
   .people-mosaic-caption h2 { font-size: clamp(17px, 4.7vw, 24px); line-height: 1.02; }
   .people-profile-modal-nav { padding-inline: 14px; }
   .people-profile-modal-back span { display: none; }
-  .people-profile-modal-image img { object-position: center 24%; }
   .people-profile-modal-copy p { margin: 0 0 28px; }
 }
 
@@ -3723,6 +3831,13 @@ main h3 em {
 
   /* ===== Mobile bottom tab bar — floating island ===== */
   body.mobile-tabbar-page { padding-bottom: calc(env(safe-area-inset-bottom) + 96px); }
+  /* that reserve sits below the dark footer, so the page used to end on a white
+     strip; once the footer is in view the body carries its colour instead —
+     which also darkens the bottom overscroll */
+  body.mobile-tabbar-page.at-footer {
+    background: var(--ink);
+    transition: background-color 320ms ease;
+  }
   .mobile-tab-bar {
     position: fixed;
     left: 50%;
@@ -4919,12 +5034,28 @@ body.desktop-presentation-home[data-route="home"] .nav {
   background: var(--ink);
   cursor: pointer;
 }
+/* Wordmark sits in the hero's top-left corner, where the hidden header's
+   logo would be, instead of stacking above the headline copy. */
 .dhome-hero .vhome-brand {
   position: absolute;
-  z-index: 6;
-  top: 26px;
+  z-index: 4;
+  top: clamp(22px, 4.5vh, 52px);
   left: var(--gutter);
+  width: clamp(190px, 20vw, 320px);
+  margin: 0;
   line-height: 0;
+  cursor: pointer;
+  pointer-events: auto;
+  transform-origin: left center;
+  transition: transform 600ms cubic-bezier(.2,.7,.2,1), opacity 300ms ease;
+}
+.dhome-hero .vhome-brand:hover {
+  transform: scale(1.015);
+}
+.dhome-hero .vhome-brand img {
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 3px 24px rgba(0,0,0,.34));
 }
 .dhome-hero-veil {
   position: absolute;
@@ -5214,12 +5345,20 @@ body.desktop-presentation-home[data-route="home"] .nav {
     min-height: 620px;
     height: 100svh;
   }
-  .dhome-hero .vhome-brand,
   .dhome-hero .vhome-cue { display: none; }
+  /* the mobile header already shows the wordmark over the hero, so the
+     corner mark would sit on top of it */
+  .dhome-hero .vhome-brand { display: none; }
   .dhome-hero-copy {
     right: var(--gutter);
-    bottom: max(76px, calc(env(safe-area-inset-bottom) + 58px));
+    /* clear breathing room between the copy and the location/dots row */
+    bottom: max(124px, calc(env(safe-area-inset-bottom) + 106px));
     width: auto;
+  }
+  /* the location reads as the last line of the copy stack rather than sitting
+     on the dots row, which stays alone at the bottom edge */
+  .dhome-hero .vhome-loc {
+    bottom: max(86px, calc(env(safe-area-inset-bottom) + 68px));
   }
   .dhome-hero-copy .dhome-kicker {
     max-width: 32ch;
@@ -5227,9 +5366,12 @@ body.desktop-presentation-home[data-route="home"] .nav {
     font-size: 9px;
     line-height: 1.35;
   }
+  /* the display headings are capped at 80% of the screen; the type sizes come
+     down with them so a long single word still fits inside that width instead
+     of running past the right edge */
   .dhome-hero-copy h1 {
-    max-width: 11ch;
-    font-size: clamp(46px, 14vw, 68px);
+    max-width: 80vw;
+    font-size: clamp(36px, 11.2vw, 56px);
     line-height: .86;
   }
   .dhome-hero-copy p {
@@ -5242,13 +5384,13 @@ body.desktop-presentation-home[data-route="home"] .nav {
     padding: max(112px, calc(env(safe-area-inset-top) + 92px)) var(--gutter) 44px;
   }
   .dhome .dhome-statement h2 {
-    max-width: none;
+    max-width: 80vw;
     margin: 52px 0 68px;
-    font-size: clamp(38px, 10.8vw, 52px);
+    font-size: clamp(34px, 9.6vw, 48px);
     line-height: .96;
   }
   .dhome .dhome-statement--practice h2 {
-    font-size: clamp(34px, 9.4vw, 46px);
+    font-size: clamp(30px, 8.3vw, 42px);
     line-height: 1.04;
     letter-spacing: -.04em;
   }
@@ -5288,18 +5430,22 @@ body.desktop-presentation-home[data-route="home"] .nav {
     margin-bottom: 42px;
   }
   .dhome-work-head h2 {
+    max-width: 80vw;
     margin-top: 20px;
-    font-size: clamp(48px, 15vw, 68px);
+    font-size: clamp(44px, 14.2vw, 64px);
     line-height: .88;
   }
   .dhome-banners { gap: 18px; }
   .dhome-banners-statement {
     min-height: 70svh;
     padding: 72px 20px;
+    border-top: 0;
+    border-bottom: 0;
   }
   .dhome-banners-statement p {
+    max-width: 80vw;
     margin-top: 32px;
-    font-size: clamp(36px, 10vw, 48px);
+    font-size: clamp(34px, 9.4vw, 46px);
     line-height: .96;
   }
   .dhome-banner,
@@ -5448,11 +5594,38 @@ body.desktop-presentation-home[data-route="home"] .nav {
     max-width: none;
     padding: 0 var(--gutter) 34px;
   }
-  .hz-card .vhome-hpic { width: 100%; height: auto; aspect-ratio: 4 / 5; }
+  /* on a phone the category cards read as banners: shorter than the desktop
+     portrait, with the name set inside the image rather than underneath it */
+  .hz-card .vhome-hpic { width: 100%; height: auto; aspect-ratio: 3 / 2; }
+  .hz-card .vhome-hpic,
+  .hz-card .vhome-hpic:has(> .vhome-hcap) {
+    overflow: hidden;
+    margin-bottom: 0;
+  }
   .hz-card .vhome-hpic img {
     position: absolute;
     height: 100% !important;
     width: 100% !important;
+  }
+  .hz-card .vhome-hpic::after {
+    background: linear-gradient(
+      180deg,
+      rgba(20, 19, 15, 0.34) 0%,
+      rgba(20, 19, 15, 0) 38%,
+      rgba(20, 19, 15, 0.08) 58%,
+      rgba(20, 19, 15, 0.74) 100%
+    );
+  }
+  /* the caption is a sibling of the picture, so it is lifted onto the banner
+     from the card box: its bottom edge lines up with the image's */
+  .hz-cat { position: relative; }
+  .hz-cat > .vhome-hcap {
+    position: absolute;
+    left: var(--gutter);
+    right: var(--gutter);
+    bottom: 40px;
+    z-index: 3;
+    padding: 0 16px 15px;
   }
   .vhome-hcap { padding-top: 13px; }
   .mhome-all-projects {
@@ -5480,9 +5653,78 @@ body.desktop-presentation-home[data-route="home"] .nav {
     height: auto;
     padding: 20px var(--gutter) 56px;
   }
-  .hz-foot,
   .hz-ctrl,
   .hz-progress { display: none; }
+
+  /* ===== works landing: the desktop rail's panes, stacked into one scroll =====
+     the route normally pins main to a single viewport so the panes can run
+     sideways; on a phone they run down the page instead. */
+  body[data-route="projects"] main {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  /* the opening pane's furniture stacks the way the home hero does:
+     title, then the location, then the dots on the bottom edge */
+  .hz-hero-title {
+    left: var(--gutter);
+    right: var(--gutter);
+    bottom: max(104px, calc(env(safe-area-inset-bottom) + 96px));
+    font-size: clamp(46px, 15vw, 92px);
+  }
+  .hz-hero .vhome-loc {
+    bottom: max(64px, calc(env(safe-area-inset-bottom) + 58px));
+  }
+  .hz-hero .vhome-cue { display: none; }
+  /* the opening pane is full-bleed, so the tab bar steps aside with the header */
+  body[data-route="projects"].hz-at-hero .mobile-tab-bar {
+    opacity: 0;
+    transform: translate(-50%, 22px);
+    pointer-events: none;
+  }
+  .hz-center-copy {
+    width: 100%;
+    height: auto;
+    padding: 44px var(--gutter) 10px;
+  }
+  .hz-center-copy p { max-width: none; font-size: clamp(22px, 6.5vw, 30px); }
+  .hz-card { margin-top: 0; padding-bottom: 40px; }
+  .hz-cat .vhome-name { color: #fff; font-size: clamp(24px, 6.8vw, 34px); }
+  .hz-cat .vhome-loc-2 {
+    margin-top: 5px;
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.74);
+  }
+  /* the closing pane keeps its full-screen footer, just further down the page */
+  .hz-foot {
+    width: 100%;
+    height: auto;
+    min-height: 100dvh;
+    display: block;
+  }
+  .hz-foot footer.foot {
+    height: auto;
+    min-height: 100dvh;
+    /* the floating tab bar sits over the last ~76px of the viewport */
+    padding: max(96px, calc(env(safe-area-inset-top) + 80px)) var(--gutter)
+             max(112px, calc(env(safe-area-inset-bottom) + 104px));
+  }
+  .hz-foot footer.foot > .foot-top { transform: none; }
+  /* same centred contact block the home footer uses on a phone — two columns
+     leave the email touching the screen edge at this width */
+  .hz-foot footer.foot .foot-col.foot-col-split {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 8px;
+    text-align: center;
+  }
+  .hz-foot footer.foot .foot-col-split .foot-col-b { padding-top: 6px; }
+  .hz-foot footer.foot .foot-bot {
+    grid-template-columns: 1fr !important;
+    justify-items: center;
+    gap: 6px;
+    text-align: center;
+  }
   .vhome-mark { width: clamp(190px, 66vw, 300px); }
   .hz-intro .vhome-rail-title { font-size: clamp(40px, 14vw, 76px); }
 }

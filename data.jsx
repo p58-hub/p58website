@@ -611,8 +611,8 @@ TIMELINE.forEach((r, i) => { if (TIMELINE_GR[i]) Object.assign(r, TIMELINE_GR[i]
 const P58_STORE_KEY = "p58_data_v1";
 const P58_PROJECT_PREVIEW_PREFIX = "p58_project_preview_v1:";
 const DEFAULT_HOME_V2_BANNERS = [
-  { id: "residences", visible: true, eyebrow: "Architecture / Living", eyebrow_gr: "Αρχιτεκτονική / Κατοικία", title: "Residential", title_gr: "Κατοικίες", note: "Human-centered places for everyday life.", note_gr: "Ανθρωποκεντρικοί χώροι για την καθημερινή ζωή.", tone: "sand", image: "", destination: "architecture" },
-  { id: "workplaces", visible: true, eyebrow: "Architecture / Work", eyebrow_gr: "Αρχιτεκτονική / Εργασία", title: "Business & Workplaces", title_gr: "Επιχειρήσεις & Χώροι εργασίας", note: "Studios and workplaces designed around focus, collaboration and identity.", note_gr: "Στούντιο και χώροι εργασίας σχεδιασμένοι για συγκέντρωση, συνεργασία και ταυτότητα.", tone: "ink", image: "", destination: "contact" },
+  { id: "residences", visible: true, eyebrow: "Architecture / Living", eyebrow_gr: "Αρχιτεκτονική / Κατοικία", title: "Residential", title_gr: "Κατοικίες", note: "Human-centered places for everyday life.", note_gr: "Ανθρωποκεντρικοί χώροι για την καθημερινή ζωή.", tone: "sand", image: "", destination: "residential" },
+  { id: "workplaces", visible: true, eyebrow: "Architecture / Work", eyebrow_gr: "Αρχιτεκτονική / Εργασία", title: "Business & Workplaces", title_gr: "Επιχειρήσεις & Χώροι εργασίας", note: "Studios and workplaces designed around focus, collaboration and identity.", note_gr: "Στούντιο και χώροι εργασίας σχεδιασμένοι για συγκέντρωση, συνεργασία και ταυτότητα.", tone: "ink", image: "", destination: "workplace" },
   { id: "protein-garden", visible: true, eyebrow: "Scalable retail systems", eyebrow_gr: "Κλιμακούμενα συστήματα λιανικής", title: "proteingarden", title_gr: "proteingarden", note: "Protein Garden is a Greek fast-casual restaurant chain centered on high-protein, customizable meals, with a spatial identity that reflects freshness, health, and simplicity.", note_gr: "Η Protein Garden είναι μια ελληνική αλυσίδα γρήγορης εστίασης με γεύματα υψηλής πρωτεΐνης και μια χωρική ταυτότητα που εκφράζει φρεσκάδα, υγεία και απλότητα.", tone: "image", image: "", destination: "protein-garden" },
   { id: "dinas", visible: true, eyebrow: "Hospitality / Brand experience", eyebrow_gr: "Φιλοξενία / Εμπειρία ταυτότητας", title: "DINAS eat real", title_gr: "DINAS eat real", note: "Warm, fluid spaces translating care and Mediterranean references into a growing system.", note_gr: "Ζεστοί, ρευστοί χώροι που μεταφράζουν τη φροντίδα και τις μεσογειακές αναφορές σε ένα αναπτυσσόμενο σύστημα.", tone: "image", image: "", destination: "dinas" },
 ];
@@ -622,7 +622,7 @@ function normaliseHomeV2(homeV2) {
     ? homeV2.banners
     : DEFAULT_HOME_V2_BANNERS;
   const validTones = new Set(["sand", "ink", "image"]);
-  const validDestinations = new Set(["architecture", "projects", "protein-garden", "dinas", "contact"]);
+  const validDestinations = new Set(["architecture", "projects", "retail", "hospitality", "residential", "workplace", "protein-garden", "dinas", "contact"]);
   const rawTitle = String(homeV2 && homeV2.title || "Design in Practice");
   const defaultsById = Object.fromEntries(DEFAULT_HOME_V2_BANNERS.map((banner) => [banner.id, banner]));
   return {
@@ -642,6 +642,12 @@ function normaliseHomeV2(homeV2) {
         : id === "workplaces" && rawBannerTitle === "Workplaces"
           ? "Business & Workplaces"
           : rawBannerTitle;
+      const rawDestination = validDestinations.has(banner && banner.destination) ? banner.destination : "projects";
+      const destination = id === "residences" && rawDestination === "architecture"
+        ? "residential"
+        : id === "workplaces" && rawDestination === "contact"
+          ? "workplace"
+          : rawDestination;
       return {
         id,
         visible: !banner || banner.visible !== false,
@@ -655,11 +661,28 @@ function normaliseHomeV2(homeV2) {
         note_gr: String(banner && banner.note_gr || defaults.note_gr || rawNote),
         tone: validTones.has(banner && banner.tone) ? banner.tone : "sand",
         image: String(banner && banner.image || ""),
-        destination: validDestinations.has(banner && banner.destination) ? banner.destination : "projects",
+        destination,
         order,
       };
     }),
   };
+}
+
+/* Footer strings that older saved documents kept as top-level English-only
+   site fields. They are now ordinary website-text keys. */
+const LEGACY_FOOTER_TEXT_KEYS = ["foot_big", "foot_big_em", "foot_copy_left", "foot_copy_right"];
+
+function migrateLegacyFooterTexts(site) {
+  const texts = site && typeof site.websiteTexts === "object" && site.websiteTexts ? site.websiteTexts : {};
+  const en = { ...(texts.en || {}) };
+  let moved = false;
+  LEGACY_FOOTER_TEXT_KEYS.forEach((key) => {
+    const legacy = typeof (site || {})[key] === "string" ? site[key].trim() : "";
+    if (!legacy || (en[key] != null && en[key] !== "")) return;
+    en[key] = legacy;
+    moved = true;
+  });
+  return moved ? { ...texts, en } : texts;
 }
 
 const DEFAULT_SITE_SETTINGS = {
@@ -693,11 +716,6 @@ const DEFAULT_SITE_SETTINGS = {
     title_gr: "Άνθρωποι",
     hero: "assets/people/people-hero-v2.png",
   },
-  foot_big: "Let's design your",
-  foot_big_em: "next space!",
-  foot_copy_left: "© 2025 — 2026 Project58 Architecture",
-  foot_copy_mid: "Architecture · Renovation · Retail",
-  foot_copy_right: "Designed in-house · v1.0",
   contact: {
     location_label: "ATHENS",
     location_label_gr: "ΑΘΗΝΑ",
@@ -800,11 +818,16 @@ function normaliseSiteSettings(site = {}) {
     favicon: typeof site.favicon === "string" && site.favicon
       ? site.favicon
       : DEFAULT_SITE_SETTINGS.favicon,
-    foot_big: site.foot_big || DEFAULT_SITE_SETTINGS.foot_big,
-    foot_big_em: site.foot_big_em || DEFAULT_SITE_SETTINGS.foot_big_em,
-    foot_copy_left: site.foot_copy_left || DEFAULT_SITE_SETTINGS.foot_copy_left,
-    foot_copy_mid: site.foot_copy_mid || DEFAULT_SITE_SETTINGS.foot_copy_mid,
-    foot_copy_right: site.foot_copy_right || DEFAULT_SITE_SETTINGS.foot_copy_right,
+    // Footer copy used to sit here as English-only fields while the same
+    // strings also lived in the website-text dictionary. The dictionary owns
+    // them now: a legacy value is folded into the English overrides once, and
+    // the top-level fields are retired so there is nothing left to drift.
+    websiteTexts: migrateLegacyFooterTexts(site),
+    foot_big: undefined,
+    foot_big_em: undefined,
+    foot_copy_left: undefined,
+    foot_copy_mid: undefined,
+    foot_copy_right: undefined,
     heroGallery: {
       interval: Math.max(2000, Number((site.heroGallery || {}).interval) || 5200),
       // Display order for the home gallery, by project id. Kept separate from
@@ -1113,6 +1136,31 @@ function siteCategories() {
   return normaliseCategories(stored && stored.categories);
 }
 
+/* One published category, by id. Everything on the site that prints a category
+   name goes through here, so Categories in the dashboard stays the only place
+   a name is written. */
+function siteCategory(id) {
+  const wanted = String(id || "").toLowerCase();
+  return siteCategories().find((category) => category.id === wanted) || null;
+}
+
+/* The sub-categories of one category, in the dashboard's order. */
+function siteSubcategories(categoryId) {
+  const category = siteCategory(categoryId);
+  return category ? category.subcategories : [];
+}
+
+/* The older /interiors route addresses sub-categories by a two-letter key.
+   Map those onto the ids the dashboard publishes so old links keep working
+   without a second copy of the names. */
+const LEGACY_SUBCATEGORY_ALIASES = { pg: "protein-garden", dn: "dinas" };
+
+function siteSubcategory(categoryId, key) {
+  if (!key) return null;
+  const wanted = LEGACY_SUBCATEGORY_ALIASES[key] || String(key).toLowerCase();
+  return siteSubcategories(categoryId).find((sub) => sub.id === wanted) || null;
+}
+
 /* Which category a project belongs to, tolerating the older `typology` field
    and the "architecture" id that pre-dates "residential". */
 function projectCategoryId(project) {
@@ -1174,4 +1222,4 @@ const PROJECT_SORTS = {
 applyP58ContentFromStore();
 const P58_CONTENT_READY = loadRemoteContent();
 
-Object.assign(window, { P58_STORE_KEY, P58_CONTENT_READY, DEFAULT_SITE_SETTINGS, DEFAULT_HOME_V2_BANNERS, DEFAULT_INQUIRY_FORM, INQUIRY_FORM_GROUPS, normaliseHomeV2, normaliseInquiryForm, normaliseSiteSettings, applySiteFavicon, projectSlugFromFields, applyP58ContentFromStore, readP58Store, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor, isProjectVisible, visibleProjects, isVideoSrc, DEFAULT_CATEGORIES, normaliseCategories, siteCategories, projectCategoryId });
+Object.assign(window, { P58_STORE_KEY, P58_CONTENT_READY, DEFAULT_SITE_SETTINGS, DEFAULT_HOME_V2_BANNERS, DEFAULT_INQUIRY_FORM, INQUIRY_FORM_GROUPS, normaliseHomeV2, normaliseInquiryForm, normaliseSiteSettings, applySiteFavicon, projectSlugFromFields, applyP58ContentFromStore, readP58Store, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor, isProjectVisible, visibleProjects, isVideoSrc, DEFAULT_CATEGORIES, normaliseCategories, siteCategories, siteCategory, siteSubcategories, siteSubcategory, projectCategoryId });

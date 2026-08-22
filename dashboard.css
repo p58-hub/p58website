@@ -851,6 +851,18 @@ a { color: inherit; }
 .website-texts-menu button.on { background: var(--ink); color: var(--paper); }
 .website-texts-menu small { font-family: var(--mono); font-size: 9px; color: var(--ink-3); }
 .website-texts-menu button.on small { color: rgba(255,255,255,0.55); }
+/* Cards that name the one section a piece of copy is edited in, shown where
+   somebody would otherwise look for it. */
+.text-owner-notes { display: grid; gap: 8px; padding: 12px; border-bottom: 1px solid var(--rule); background: var(--paper-2); }
+.text-owner-note { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 12px 14px; border: 1px solid var(--rule-strong); border-radius: 10px; background: var(--paper); }
+.text-owner-note b { display: block; margin-bottom: 4px; font-size: 12px; }
+.text-owner-note p { margin: 0; max-width: 62ch; color: var(--ink-3); font-size: 11.5px; line-height: 1.45; }
+.text-owner-note .btn { flex: none; font-size: 10px; white-space: nowrap; }
+.form-section > .text-owner-note { margin-top: 4px; background: var(--paper-2); }
+@media (max-width: 760px) {
+  .text-owner-note { flex-direction: column; align-items: flex-start; }
+}
+
 .website-texts-sheet { overflow: hidden; border: 1px solid var(--rule-strong); border-radius: 12px; background: var(--paper); }
 .website-texts-table-scroll { overflow: auto; max-height: calc(100vh - 300px); overscroll-behavior: contain; scrollbar-color: var(--ink-3) var(--paper-2); scrollbar-width: thin; outline: none; }
 .website-texts-table-scroll:focus-visible { box-shadow: inset 0 0 0 2px var(--clay); }

@@ -220,20 +220,6 @@ function App() {
   // so a viewport that grows back past the breakpoint can restore the hero
   const scrollMemory = aUseRef(new Map());
   const restoreRef = aUseRef(null);
-  // the works rail needs a wheel; phones fall back to the scrolling list
-  const [railOnDesktop, setRailOnDesktop] = aUseState(() =>
-    typeof window !== "undefined" && !window.matchMedia("(max-width: 720px)").matches
-  );
-  aUseEffect(() => {
-    const mq = window.matchMedia("(max-width: 720px)");
-    const onChange = (e) => setRailOnDesktop(!e.matches);
-    if (mq.addEventListener) mq.addEventListener("change", onChange);
-    else mq.addListener(onChange);
-    return () => {
-      if (mq.removeEventListener) mq.removeEventListener("change", onChange);
-      else mq.removeListener(onChange);
-    };
-  }, []);
   const [zoom, setZoom] = aUseState(null);
   const [contentVersion, setContentVersion] = aUseState(0);
   const [introVisible, setIntroVisible] = aUseState(true);
@@ -431,9 +417,10 @@ function App() {
 
   let page = null;
   if (route.name === "home")         page = (window.visibleProjects ? window.visibleProjects() : PROJECTS.filter((p) => p.visible !== false)).length ? <HomePage go={go} /> : <ProjectsPage go={go} />;
-  // Unfiltered /projects is the horizontal category rail on desktop; picking a
-  // category adds a filter and hands over to the ordinary vertical list.
-  if (route.name === "projects")     page = railOnDesktop && route.view !== "all" && !route.type && !route.brand
+  // Unfiltered /projects is the category rail on every viewport — sideways on a
+  // desktop wheel, stacked vertically on a phone; picking a category adds a
+  // filter and hands over to the ordinary vertical list.
+  if (route.name === "projects")     page = route.view !== "all" && !route.type && !route.brand
     ? <ProjectsRail go={go} transition={route.transition} />
     : <ProjectsPage go={go} type={route.type} brand={route.brand} sort={route.sort} view={route.view} transition={route.transition} />;
   if (route.name === "architecture") page = <ArchitecturePage go={go} sort={route.sort} />;

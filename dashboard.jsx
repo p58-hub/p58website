@@ -44,6 +44,7 @@ const normaliseSubcategories = (subs) => (Array.isArray(subs) ? subs : [])
     return {
       id: (s && s.id) || slugifyId(label) || newId("sub"),
       label: label || (s && s.id) || "Sub-category",
+      label_gr: (s && s.label_gr) || label || (s && s.id) || "Υποκατηγορία",
       order: Number.isFinite(Number(s && s.order)) ? Number(s.order) : order,
       // The badge this brand shows beside its projects. Empty means the
       // lettered monogram, which is also the fallback for a broken URL.
@@ -58,10 +59,13 @@ const normaliseCategories = (items) => {
     .map((c, order) => ({
       id: c.id || slugifyId(c.label) || newId("cat"),
       label: c.label || c.id || "Category",
+      label_gr: c.label_gr || c.label || c.id || "Κατηγορία",
       description: c.description || "",
+      description_gr: c.description_gr || c.description || "",
       cover: c.cover || "",
       order: Number.isFinite(Number(c.order)) ? Number(c.order) : order,
       subLabel: c.subLabel || "Sub-category",
+      subLabel_gr: c.subLabel_gr || c.subLabel || "Υποκατηγορία",
       subcategories: normaliseSubcategories(c.subcategories),
     }))
     .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
@@ -1094,10 +1098,10 @@ function App({ session }) {
             <InquiryFormSettings inquiryForm={normaliseSite(data.site || DEFAULT_SITE).inquiryForm} onSave={onSaveInquiryForm} />
           )}
           {section === "site" && can("siteSettings") && (
-            <SiteSettings site={normaliseSite(data.site || DEFAULT_SITE)} onSave={onSaveSite} />
+            <SiteSettings site={normaliseSite(data.site || DEFAULT_SITE)} onSave={onSaveSite} onGoSection={goSection} />
           )}
           {section === "website-texts" && can("siteSettings") && (
-            <WebsiteTextsSettings site={normaliseSite(data.site || DEFAULT_SITE)} onSave={onSaveWebsiteTexts} />
+            <WebsiteTextsSettings site={normaliseSite(data.site || DEFAULT_SITE)} onSave={onSaveWebsiteTexts} onGoSection={goSection} />
           )}
           {section === "hero" && can("heroGallery") && (
             <HeroGallerySettings
@@ -1578,7 +1582,7 @@ function CategoriesList({ data, projects, onEdit, onDelete, onMove, onNew }) {
         </div>
         {data.map((c, i) => (
           <div className="row row-categories" key={c.id} onClick={() => onEdit(c.id)}>
-            <div className="name">{c.label}<span className="sub">/{c.id}</span></div>
+            <div className="name">{c.label}<span className="sub">{c.label_gr ? `${c.label_gr} · ` : ""}/{c.id}</span></div>
             <div className="meta">{c.description || "No description"}</div>
             <div className="meta">{projects.filter((p) => (p.category || p.typology || "retail") === c.id).length}</div>
             <div className="row-actions">
@@ -2036,27 +2040,73 @@ const WEBSITE_TEXT_GROUPS = [
   { id: "navigation", label: "Navigation", route: "home" },
   { id: "home", label: "Home", route: "home" },
   { id: "projects", label: "Project indexes", route: "projects" },
-  { id: "architecture", label: "Architecture & services", route: "architecture" },
   { id: "studio", label: "People & studio", route: "agency" },
   { id: "project-ui", label: "Project interface", route: "projects" },
-  { id: "footer", label: "Footer & contact", route: "contact" },
+  { id: "footer", label: "Footer & copyright", route: "contact" },
   { id: "inquiry", label: "Inquiry introduction", route: "start" },
   { id: "general", label: "General labels", route: "home" },
 ];
 
+/* Text this section deliberately does not own. Every string the website shows
+   has exactly one editing point; these ones live in another section, and the
+   cards below say which, so nobody edits the same words in two places. */
+const TEXT_OWNED_ELSEWHERE = [
+  {
+    group: "navigation",
+    title: "Category and sub-category names",
+    note: "Retail, Residential, the brand names under them, and their Greek versions are written once in Categories and read from there everywhere on the site.",
+    section: "categories",
+    cta: "Open Categories",
+  },
+  {
+    group: "projects",
+    title: "Category and sub-category names",
+    note: "Every category heading in the project indexes is the name saved in Categories.",
+    section: "categories",
+    cta: "Open Categories",
+  },
+  {
+    group: "projects",
+    title: "Project titles, summaries and captions",
+    note: "A project's own copy, in both languages, is edited in Project texts.",
+    section: "texts",
+    cta: "Open Project texts",
+  },
+  {
+    group: "home",
+    title: "Home banner titles and notes",
+    note: "The banner copy on the home page belongs to the banners themselves, in Home V2.",
+    section: "v2",
+    cta: "Open Home V2",
+  },
+  {
+    group: "footer",
+    title: "Address, phone, email and Instagram",
+    note: "The contact block under the footer headline is edited in Site settings, together with the links behind it.",
+    section: "site",
+    cta: "Open Site settings",
+  },
+  {
+    group: "inquiry",
+    title: "Form questions and answer options",
+    note: "The questions themselves, in both languages, are edited in Inquiry form.",
+    section: "inquiry-form",
+    cta: "Open Inquiry form",
+  },
+];
+
 function websiteTextGroup(key) {
-  if (["retail", "residential", "agency", "contact", "home", "menu", "more", "search_placeholder", "no_results", "nav", "open_kbd", "close_kbd", "retail_brands", "project_types", "projects", "all", "all_brands", "sort", "sort_date", "sort_region", "menu_eyebrow", "studio_location"].includes(key)) return "navigation";
-  if (key.startsWith("home_") || ["see_more_projects", "see_all_projects", "all_rooms_cta", "view_project", "location", "year", "size", "status"].includes(key)) return "home";
-  if (key.startsWith("interiors_") || ["two_operators", "rooms_plus_rooms", "proj_word", "pg_rollout", "dn_rollout"].includes(key)) return "projects";
-  if (key.startsWith("arch_") || key.startsWith("svc_") || key === "work_with_us" || key === "cta_2026") return "architecture";
-  if (key.startsWith("agency_") || ["team_eyebrow", "team_h", "headcount", "headcount_unit", "studios", "updated_label", "practice_eyebrow", "short_history", "news_eyebrow", "recently"].includes(key)) return "studio";
-  if (key.startsWith("pd_") || ["next_project", "view"].includes(key)) return "project-ui";
+  if (["agency", "contact", "home", "menu", "more", "search_placeholder", "no_results", "nav", "open_kbd", "close_kbd", "project_types", "projects", "all", "sort", "sort_date", "sort_region", "menu_eyebrow", "studio_location"].includes(key)) return "navigation";
+  if (key.startsWith("home_") || ["see_all_projects", "location", "size", "status"].includes(key)) return "home";
+  if (key.startsWith("interiors_") || ["proj_word", "arch_meta_b", "residential_coming_soon", "no_projects_category", "recent_projects"].includes(key)) return "projects";
+  if (key.startsWith("agency_") || ["team_eyebrow", "team_h", "headcount", "headcount_unit", "studios", "updated_label", "practice_eyebrow", "short_history", "news_eyebrow", "recently", "work_with_us", "cta_2026"].includes(key)) return "studio";
+  if (key.startsWith("pd_") || key === "view") return "project-ui";
   if (key.startsWith("foot_")) return "footer";
   if (key.startsWith("inquiry_")) return "inquiry";
   return "general";
 }
 
-function WebsiteTextsSettings({ site, onSave }) {
+function WebsiteTextsSettings({ site, onSave, onGoSection }) {
   const dictionaries = window.DICT_I18N || { en: {}, gr: {} };
   const makeDraft = (settings) => ({
     en: Object.fromEntries(Object.keys(dictionaries.en || {}).map((key) => [key, Array.isArray((settings.websiteTexts?.en || {})[key] ?? dictionaries.en[key]) ? ((settings.websiteTexts?.en || {})[key] ?? dictionaries.en[key]).join("\n") : String((settings.websiteTexts?.en || {})[key] ?? dictionaries.en[key] ?? "")])),
@@ -2071,6 +2121,7 @@ function WebsiteTextsSettings({ site, onSave }) {
   useEffect(() => { setDraft(makeDraft(site)); }, [site]);
 
   const keys = Object.keys(dictionaries.en || {}).filter((key) => websiteTextGroup(key) === group && (!query || `${key} ${draft.en[key]} ${draft.gr[key]}`.toLowerCase().includes(query.toLowerCase())));
+  const ownedElsewhere = query ? [] : TEXT_OWNED_ELSEWHERE.filter((item) => item.group === group);
   const serialise = () => ({
     en: Object.fromEntries(Object.keys(draft.en).map((key) => [key, Array.isArray(dictionaries.en[key]) ? draft.en[key].split("\n").map((line) => line.trim()).filter(Boolean) : draft.en[key]])),
     gr: Object.fromEntries(Object.keys(draft.gr).map((key) => [key, Array.isArray(dictionaries.gr?.[key] || dictionaries.en[key]) ? draft.gr[key].split("\n").map((line) => line.trim()).filter(Boolean) : draft.gr[key]])),
@@ -2105,6 +2156,19 @@ function WebsiteTextsSettings({ site, onSave }) {
           })}
         </nav>
         <div className="website-texts-sheet">
+          {ownedElsewhere.length ? (
+            <div className="text-owner-notes">
+              {ownedElsewhere.map((item) => (
+                <div className="text-owner-note" key={`${item.group}-${item.section}-${item.title}`}>
+                  <div>
+                    <b>{item.title}</b>
+                    <p>{item.note}</p>
+                  </div>
+                  <button className="btn ghost" type="button" onClick={() => onGoSection && onGoSection(item.section)}>{item.cta} →</button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <div className="website-texts-table-scroll" tabIndex="0" aria-label="Scrollable website texts table">
             <div className="website-texts-table">
               <div className="website-texts-head"><span>Text key</span><span>English</span><span>Ελληνικά</span><span>Location</span></div>
@@ -2340,7 +2404,7 @@ function HomeV2Settings({ homeV2, onSave }) {
                   </Field>
                   <Field label="Opens">
                     <select value={banner.destination || "projects"} onChange={(event) => updateBanner(banner.id, { destination: event.target.value })}>
-                      <option value="projects">All projects</option><option value="architecture">Architecture</option><option value="protein-garden">Protein Garden</option><option value="dinas">DINAS</option><option value="contact">Contact / inquiry</option>
+                      <option value="projects">All projects</option><option value="retail">Retail</option><option value="hospitality">Hospitality</option><option value="residential">Residential</option><option value="workplace">Workplace</option><option value="protein-garden">Protein Garden</option><option value="dinas">DINAS</option><option value="contact">Contact / inquiry</option>
                     </select>
                   </Field>
                 </div>
@@ -2361,7 +2425,7 @@ function HomeV2Settings({ homeV2, onSave }) {
   );
 }
 
-function SiteSettings({ site, onSave }) {
+function SiteSettings({ site, onSave, onGoSection }) {
   const [s, setS] = useState(site);
   const contact = s.contact || DEFAULT_SITE.contact;
   const projectsPage = s.projectsPage || DEFAULT_SITE.projectsPage;
@@ -2478,28 +2542,13 @@ function SiteSettings({ site, onSave }) {
           </div>
         </div>
         <div className="form-section">
-          <div className="form-section-title">Footer CTA text</div>
-          <div className="field-group">
-            <Field label="Lead-in text" hint="The smaller line above the big CTA.">
-              <input type="text" value={s.foot_big || ""} onChange={(e) => setField("foot_big", e.target.value)} placeholder="Let's design your" />
-            </Field>
-            <Field label="CTA highlight" hint="The big bold coloured line.">
-              <input type="text" value={s.foot_big_em || ""} onChange={(e) => setField("foot_big_em", e.target.value)} placeholder="next space!" />
-            </Field>
-          </div>
-          <div className="form-section-title" style={{ marginTop: 20 }}>Copyright bar</div>
-          <div className="field-group">
-            <Field label="Left text">
-              <input type="text" value={s.foot_copy_left || ""} onChange={(e) => setField("foot_copy_left", e.target.value)} placeholder="© 2025 — 2026 Project58 Architecture" />
-            </Field>
-            <Field label="Centre text">
-              <input type="text" value={s.foot_copy_mid || ""} onChange={(e) => setField("foot_copy_mid", e.target.value)} placeholder="Architecture · Renovation · Retail" />
-            </Field>
-          </div>
-          <div className="field-group cols-1">
-            <Field label="Right text">
-              <input type="text" value={s.foot_copy_right || ""} onChange={(e) => setField("foot_copy_right", e.target.value)} placeholder="Designed in-house · v1.0" />
-            </Field>
+          <div className="form-section-title">Footer CTA & copyright</div>
+          <div className="text-owner-note">
+            <div>
+              <b>Edited in Website texts</b>
+              <p>The footer headline and the copyright bar are website copy, so they live in Website texts with the rest of it — English and Greek side by side. This section keeps the contact details below them.</p>
+            </div>
+            <button className="btn ghost" type="button" onClick={() => onGoSection && onGoSection("website-texts")}>Open Website texts →</button>
           </div>
         </div>
         <div className="form-section">
@@ -3235,9 +3284,12 @@ function CategorySheet({ category, onSave, onClose }) {
   const [c, setC] = useState(() => category ? { ...category, subcategories: (category.subcategories || []).map((s) => ({ ...s })) } : ({
     id: "",
     label: "",
+    label_gr: "",
     description: "",
+    description_gr: "",
     cover: "",
     subLabel: "Sub-category",
+    subLabel_gr: "Υποκατηγορία",
     subcategories: [],
   }));
   const set = (k, v) => setC((x) => ({ ...x, [k]: v }));
@@ -3268,9 +3320,14 @@ function CategorySheet({ category, onSave, onClose }) {
 
         <div className="sheet-body">
           <div className="field-group">
-            <Field label="Label" required>
+            <Field label="Label (EN)" required>
               <input type="text" value={c.label} onChange={(e) => set("label", e.target.value)} placeholder="Retail" />
             </Field>
+            <Field label="Label (EL)" hint="Displayed when the site language is Greek.">
+              <input type="text" value={c.label_gr || ""} onChange={(e) => set("label_gr", e.target.value)} placeholder="Λιανική" />
+            </Field>
+          </div>
+          <div className="field-group">
             <Field label="ID" hint="Used by projects and URLs. Lowercase letters, numbers, and hyphens.">
               <input type="text" value={c.id || slugFromLabel} onChange={(e) => set("id", e.target.value)} placeholder="retail" />
             </Field>
