@@ -3315,6 +3315,11 @@ main h3 em {
     box-shadow: 0 10px 32px rgba(0, 0, 0, 0.16), 0 1px 3px rgba(0, 0, 0, 0.08);
     transition: opacity 260ms ease, transform 320ms cubic-bezier(.2,.7,.2,1);
   }
+  .mobile-tab-bar.mobile-tab-bar--intro-hidden {
+    opacity: 0;
+    transform: translate(-50%, calc(100% + 32px));
+    pointer-events: none;
+  }
   [data-paper="dark"] .mobile-tab-bar,
   body.contact-page-active .mobile-tab-bar {
     background: rgba(20, 20, 18, 0.82);

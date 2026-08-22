@@ -416,7 +416,7 @@ function Nav({ route, go }) {
 
       {searchOpen ? <SearchOverlay go={go} onClose={() => setSearchOpen(false)} /> : null}
 
-      {showTabBar ? <MobileTabBar route={route} go={go} onMore={() => setMenuOpen(true)} /> : null}
+      {showTabBar ? <MobileTabBar route={route} go={go} onMore={() => setMenuOpen(true)} introHidden={isHome && atTop} /> : null}
     </React.Fragment>);
 
 }
@@ -690,13 +690,17 @@ function TabMoreIcon() {
   );
 }
 
-function MobileTabBar({ route, go, onMore }) {
+function MobileTabBar({ route, go, onMore, introHidden = false }) {
   const t = window.useT();
   const { lang, setLang } = window.useLang();
   const isHome = route.name === "home";
   const isProjects = route.name === "projects" || route.name === "interiors" || route.name === "architecture";
   return (
-    <nav className="mobile-tab-bar" aria-label="Mobile primary">
+    <nav
+      className={`mobile-tab-bar ${introHidden ? "mobile-tab-bar--intro-hidden" : ""}`}
+      aria-label="Mobile primary"
+      aria-hidden={introHidden ? "true" : undefined}
+      inert={introHidden ? true : undefined}>
       <button
         className={`mobile-tab ${isHome ? "on" : ""}`}
         type="button"
