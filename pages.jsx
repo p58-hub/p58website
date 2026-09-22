@@ -314,7 +314,7 @@ function HomePage({ go }) {
           ))}
         </div>
         <div className="home-selected-actions">
-          <button type="button" className="home-explore-more" onClick={() => go({ name: "projects", view: "all" })}>
+          <button type="button" className="home-explore-more" onClick={() => go({ name: "projects" })}>
             <span className="home-explore-label">{t("home_explore_more")}</span> <span className="ui-arrow-up-right" aria-hidden="true" />
           </button>
         </div>
