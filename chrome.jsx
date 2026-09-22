@@ -528,7 +528,8 @@ function SearchOverlay({ go, onClose }) {
   const pick = window.usePick();
   const sourceProjects = window.visibleProjects ? window.visibleProjects() : (window.PROJECTS || []).filter((p) => p.visible !== false);
   const categoryBanners = (() => {
-    const categories = window.siteCategories ? window.siteCategories() : [];
+    const categories = (window.siteCategories ? window.siteCategories() : [])
+      .filter((category) => sourceProjects.some((project) => window.projectCategoryId(project) === category.id));
     const fallbackImages = sourceProjects.map((project) => project.hero).filter(Boolean);
     return categories.map((category, index) => {
       const projects = sourceProjects.filter((project) => window.projectCategoryId(project) === category.id);

@@ -513,7 +513,7 @@ function App({ session }) {
   const can = (capability) => window.P58Auth.can(user, capability);
 
   const [data, setData] = useState(load);
-  const [section, setSection] = useState("projects");
+  const [section, setSection] = useState("overview");
   const [textsProject, setTextsProject] = useState("all");
   const [editing, setEditing] = useState(null); // { kind, id|null }
   const [toast, setToast] = useState(null);
@@ -566,6 +566,7 @@ function App({ session }) {
      tells us which projects carry unpublished edits — "dirty" only says that
      something changed somewhere, which is no use per row. */
   const [publishedSnapshot, setPublishedSnapshot] = useState(null);
+  const [publishedCheck, setPublishedCheck] = useState("loading");
 
   const uploads = useUploads();
 
@@ -657,7 +658,9 @@ function App({ session }) {
   useEffect(() => {
     let cancelled = false;
     fetchPublished().then((published) => {
-      if (cancelled || !published) return;
+      if (cancelled) return;
+      setPublishedCheck(published ? "connected" : "unavailable");
+      if (!published) return;
       setPublishedSnapshot(published); // safe even mid-edit: it is what the site has
       if (dirtyRef.current) return;    // edited while in flight
       persist(published);              // keep the local copy in step
@@ -916,6 +919,11 @@ function App({ session }) {
           <button className="side-close" aria-label="Close menu" onClick={() => setSideOpen(false)}>{Ic.close}</button>
         </div>
 
+        <div className="side-section-title">Workspace</div>
+        <button className={`side-btn ${section === "overview" ? "on" : ""}`} onClick={() => goSection("overview")}>
+          <span>Overview</span><span className="count">⌂</span>
+        </button>
+
         <div className="side-section-title">Content</div>
         <button className={`side-btn ${section === "projects" ? "on" : ""}`} onClick={() => goSection("projects")}>
           <span>Projects</span><span className="count">{counts.projects}</span>
@@ -1024,7 +1032,7 @@ function App({ session }) {
                 <span className="ic">{Ic.reset}</span><span>Reset</span>
               </button>
             )}
-            <button className="btn primary new-content-btn" style={(section === "texts" || section === "site" || section === "website-texts" || section === "v2" || section === "hero" || section === "inquiries" || section === "inquiry-form" || section === "media") ? { display: "none" } : null} onClick={() => setEditing({ kind: section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news" : "team", id: null })}>
+            <button className="btn primary new-content-btn" style={(section === "overview" || section === "texts" || section === "site" || section === "website-texts" || section === "v2" || section === "hero" || section === "inquiries" || section === "inquiry-form" || section === "media") ? { display: "none" } : null} onClick={() => setEditing({ kind: section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news" : "team", id: null })}>
               <span className="ic">{Ic.plus}</span><span>New {section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news item" : section === "site" ? "—" : "person"}</span>
             </button>
           </div>
@@ -1057,6 +1065,20 @@ function App({ session }) {
         </div>
 
         <div className="content">
+          {section === "overview" && (
+            <Overview
+              data={data}
+              inquiries={inquiries}
+              unreadInquiries={unreadInquiries}
+              pendingIds={pendingIds}
+              hasUnpublishedChanges={hasUnpublishedChanges}
+              publishState={publishState}
+              publishedCheck={publishedCheck}
+              uploads={uploads}
+              onGo={goSection}
+              onNewProject={() => { goSection("projects"); setEditing({ kind: "project", id: null }); }}
+            />
+          )}
           {section === "projects" && (
             <ProjectsList data={data.projects} categories={data.categories} onEdit={(id) => setEditing({ kind: "project", id })} onDelete={(id) => onDelete("project", id)} onMove={onMoveProject} onToggleVisibility={onToggleProjectVisibility} onNew={() => setEditing({ kind: "project", id: null })} pendingIds={pendingIds} uploads={uploads} onPublishOne={(id) => publishOneProject(id).catch(() => { /* shown in the header */ })} publishBusy={publishState.status === "busy"} />
           )}
@@ -1119,11 +1141,11 @@ function App({ session }) {
       </main>
 
       <nav className="mobile-bottom-nav" aria-label="Primary dashboard navigation">
-        <button className={section === "projects" ? "on" : ""} type="button" onClick={() => goSection("projects")}><span className="mobile-nav-icon" aria-hidden="true">▤</span><span>Projects</span></button>
+        <button className={section === "overview" ? "on" : ""} type="button" onClick={() => goSection("overview")}><span className="mobile-nav-icon" aria-hidden="true">⌂</span><span>Overview</span></button>
         <button className={section === "media" ? "on" : ""} type="button" onClick={() => goSection("media")}><span className="mobile-nav-icon" aria-hidden="true">▦</span><span>Media</span></button>
         <button className="mobile-create-project" type="button" aria-label="Create new project" onClick={() => { goSection("projects"); setEditing({ kind: "project", id: null }); }}><span aria-hidden="true">+</span></button>
         <button className={(section === "site" || section === "website-texts" || section === "v2" || section === "hero") ? "on" : ""} type="button" disabled={!can("siteSettings")} onClick={() => can("siteSettings") && goSection("site")}><span className="mobile-nav-icon" aria-hidden="true">⚙</span><span>Settings</span></button>
-        <button className={(sideOpen || !["projects", "media", "site", "website-texts", "v2", "hero"].includes(section)) ? "on" : ""} type="button" onClick={() => setSideOpen(true)}><span className="mobile-nav-icon mobile-nav-more" aria-hidden="true">•••</span><span>More{unreadInquiries ? ` · ${unreadInquiries}` : ""}</span></button>
+        <button className={(sideOpen || !["overview", "media", "site", "website-texts", "v2", "hero"].includes(section)) ? "on" : ""} type="button" onClick={() => setSideOpen(true)}><span className="mobile-nav-icon mobile-nav-more" aria-hidden="true">•••</span><span>More{unreadInquiries ? ` · ${unreadInquiries}` : ""}</span></button>
       </nav>
 
       {editing && editing.kind === "project" && (
@@ -1178,6 +1200,145 @@ function App({ session }) {
 /* ============================================================
    LISTS
    ============================================================ */
+function Overview({ data, inquiries, unreadInquiries, pendingIds, hasUnpublishedChanges, publishState, publishedCheck, uploads, onGo, onNewProject }) {
+  const projects = data.projects || [];
+  const categories = data.categories || [];
+  const visibleProjects = projects.filter((project) => project.visible !== false);
+  const hiddenProjects = projects.filter((project) => project.visible === false);
+  const featuredProjects = projects.filter((project) => project.featured);
+  const missingImages = projects.filter((project) => !project.hero || !(project.gallery || []).length);
+  const missingTranslations = projects.filter((project) => !String(project.name_gr || "").trim() || !String(project.summary_gr || "").trim());
+  const uncategorised = projects.filter((project) => !categories.some((category) => category.id === (project.category || project.typology || "retail")));
+  const emptyCategories = categories.filter((category) => !projects.some((project) => (project.category || project.typology || "retail") === category.id));
+
+  const attention = [
+    hasUnpublishedChanges && {
+      level: "warning",
+      title: `${pendingIds.length || "Some"} unpublished ${pendingIds.length === 1 ? "project" : "changes"}`,
+      text: "Saved locally, but not yet visible on the live website.",
+      action: "Review projects",
+      section: "projects",
+    },
+    uploads.active && {
+      level: "warning",
+      title: `${uploads.total - uploads.done} media ${uploads.total - uploads.done === 1 ? "file" : "files"} still uploading`,
+      text: "Publishing is paused until every upload has finished.",
+      action: "Open media",
+      section: "media",
+    },
+    unreadInquiries > 0 && {
+      level: "info",
+      title: `${unreadInquiries} unread ${unreadInquiries === 1 ? "inquiry" : "inquiries"}`,
+      text: "New requests are waiting for review.",
+      action: "View inbox",
+      section: "inquiries",
+    },
+    missingImages.length > 0 && {
+      level: "danger",
+      title: `${missingImages.length} ${missingImages.length === 1 ? "project needs" : "projects need"} imagery`,
+      text: "A hero image or gallery is missing, so the project page is incomplete.",
+      action: "Fix projects",
+      section: "projects",
+    },
+    missingTranslations.length > 0 && {
+      level: "warning",
+      title: `${missingTranslations.length} incomplete Greek ${missingTranslations.length === 1 ? "translation" : "translations"}`,
+      text: "Project name or short description is missing in Greek.",
+      action: "Open texts",
+      section: "texts",
+    },
+    uncategorised.length > 0 && {
+      level: "danger",
+      title: `${uncategorised.length} uncategorised ${uncategorised.length === 1 ? "project" : "projects"}`,
+      text: "The assigned category does not exist in the category list.",
+      action: "Review projects",
+      section: "projects",
+    },
+    emptyCategories.length > 0 && {
+      level: "info",
+      title: `${emptyCategories.length} empty ${emptyCategories.length === 1 ? "category" : "categories"}`,
+      text: "These categories currently have no projects assigned to them.",
+      action: "View categories",
+      section: "categories",
+    },
+  ].filter(Boolean);
+
+  const syncLabel = publishedCheck === "loading"
+    ? "Checking live website…"
+    : publishedCheck === "unavailable"
+      ? "Live publishing unavailable"
+      : publishState.status === "busy"
+        ? "Publishing changes…"
+        : hasUnpublishedChanges
+          ? "Local changes waiting to publish"
+          : "Website and dashboard are in sync";
+  const syncTone = publishedCheck === "unavailable" ? "danger" : hasUnpublishedChanges ? "warning" : publishedCheck === "connected" ? "ok" : "neutral";
+  const recentProjects = projects.slice().sort((a, b) => Number(a.order || 0) - Number(b.order || 0)).slice(0, 5);
+
+  return (
+    <div className="overview">
+      <SectionHead eyebrow="/ Admin command centre" title="Overview">
+        <div className="overview-head-actions">
+          <a className="btn ghost" href="index.html" target="_blank" rel="noopener">View live site ↗</a>
+          <button className="btn primary" type="button" onClick={onNewProject}>{Ic.plus}<span>New project</span></button>
+        </div>
+      </SectionHead>
+
+      <div className={`overview-sync overview-sync--${syncTone}`}>
+        <span className="overview-sync-dot" aria-hidden="true"></span>
+        <div><b>{syncLabel}</b><span>{publishedCheck === "unavailable" ? "The content API or Blob store did not answer. Changes remain on this device." : publishState.message || "Content API connected and ready."}</span></div>
+        {publishedCheck === "connected" && <span className="overview-sync-meta">Live connection</span>}
+      </div>
+
+      <div className="overview-metrics">
+        <button type="button" onClick={() => onGo("projects")}><span>Live projects</span><strong>{visibleProjects.length}</strong><small>{hiddenProjects.length} hidden</small></button>
+        <button type="button" onClick={() => onGo("hero")}><span>Featured</span><strong>{featuredProjects.length}</strong><small>on home gallery</small></button>
+        <button type="button" onClick={() => onGo("categories")}><span>Categories</span><strong>{categories.length}</strong><small>{emptyCategories.length} without projects</small></button>
+        <button type="button" onClick={() => onGo("inquiries")}><span>Inquiries</span><strong>{inquiries.length}</strong><small>{unreadInquiries} unread</small></button>
+      </div>
+
+      <div className="overview-grid">
+        <section className="overview-panel">
+          <div className="overview-panel-head"><div><span>Content health</span><h2>Needs attention</h2></div><b className={attention.length ? "has-issues" : "is-clear"}>{attention.length}</b></div>
+          <div className="overview-issues">
+            {attention.length ? attention.map((item, index) => (
+              <div className="overview-issue" key={`${item.title}-${index}`}>
+                <span className={`overview-issue-mark ${item.level}`} aria-hidden="true"></span>
+                <div><b>{item.title}</b><p>{item.text}</p></div>
+                <button type="button" onClick={() => onGo(item.section)}>{item.action} →</button>
+              </div>
+            )) : (
+              <div className="overview-empty"><span>✓</span><div><b>Everything looks healthy</b><p>No content issues need attention right now.</p></div></div>
+            )}
+          </div>
+        </section>
+
+        <section className="overview-panel">
+          <div className="overview-panel-head"><div><span>Roadmap</span><h2>Open work</h2></div><b className="has-issues">2</b></div>
+          <div className="overview-roadmap">
+            <div><span className="roadmap-priority">Next</span><b>Category-only projects view</b><p>Add a switch that collapses project rows and displays only categories.</p></div>
+            <div><span className="roadmap-priority">Planned</span><b>External collaborators</b><p>Add a dedicated group to People and explain collaborators in the page copy.</p></div>
+          </div>
+        </section>
+      </div>
+
+      <section className="overview-panel overview-recent">
+        <div className="overview-panel-head"><div><span>Content</span><h2>Projects at a glance</h2></div><button type="button" onClick={() => onGo("projects")}>View all {projects.length} →</button></div>
+        <div className="overview-projects">
+          {recentProjects.map((project) => (
+            <button type="button" key={project.id} onClick={() => onGo("projects")}>
+              <span className="overview-project-thumb">{project.hero ? <img src={project.hero} alt="" /> : <span>{(project.name || "P").slice(0, 1)}</span>}</span>
+              <span className="overview-project-name"><b>{project.name || "Untitled project"}</b><small>{project.location || project.code || "No location"}</small></span>
+              <span className={`overview-project-state ${project.visible === false ? "hidden" : "live"}`}>{project.visible === false ? "Hidden" : "Live"}</span>
+              <span className="overview-project-arrow">→</span>
+            </button>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 const PROJECT_TEXT_FIELDS = [
   { key: "name", label: "Project name", greek: "name_gr", compact: true },
   { key: "location", label: "Location", greek: "location_gr", compact: true },

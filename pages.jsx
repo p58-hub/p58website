@@ -62,6 +62,18 @@ function HomePage({ go }) {
   const t = window.useT();
   const pick = window.usePick();
   const isMobile = useHomeMobile();
+  const selectedSectionRef = useR(null);
+  useE(() => {
+    const section = selectedSectionRef.current;
+    const nav = document.querySelector(".nav");
+    if (!section || !nav) return;
+    const updateHeight = () => section.style.setProperty("--selected-nav-height", `${nav.getBoundingClientRect().height}px`);
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(nav);
+    updateHeight();
+    return () => observer.disconnect();
+  });
+
 
   // PROJECTS is updated in place when dashboard content changes. Do not cache
   // this list: an open home page must drop a newly hidden project immediately.
@@ -236,7 +248,7 @@ function HomePage({ go }) {
     return () => go({ name: "projects" });
   };
   const banners = homeV2.banners
-    .filter((banner) => banner.visible !== false)
+    .filter((banner) => banner.visible !== false && ["protein-garden", "dinas"].includes(banner.id))
     .map((banner) => ({
       ...banner,
       image: banner.image || (banner.id === "protein-garden" ? pgLead?.hero : banner.id === "dinas" ? dnLead?.hero : ""),
@@ -267,7 +279,6 @@ function HomePage({ go }) {
         <div className="dhome-hero-copy">
           <span className="dhome-kicker">{t("home_hero_kicker")}</span>
           <h1>{t("home_hero_title")}</h1>
-          <p>{t("home_hero_body")}</p>
         </div>
         <div className="vhome-loc">{pick(cur, "location")}</div>
         <div className="vhome-cue">
@@ -287,50 +298,57 @@ function HomePage({ go }) {
       <section className="dhome-statement dhome-statement--practice">
         <span className="dhome-kicker">{t("home_practice_kicker")}</span>
         <h2>{t("home_practice_title")}</h2>
-        <div className="dhome-methods" aria-label={t("home_method_human")}>
-          <span>{t("home_method_computational")}</span>
-          <span>{t("home_method_human")}</span>
-          <span>{t("home_method_data")}</span>
-          <span>{t("home_method_research")}</span>
-          <span>{t("home_method_environmental")}</span>
+      </section>
+
+      <section className="home-selected" ref={selectedSectionRef} aria-label={t("home_selected_title")}>
+        <div className="home-selected-grid">
+          {featured.slice(0, 4).map((project) => (
+            <button key={project.id} className="home-selected-card" onClick={() => go({ name: "project", id: project.slug || project.id, from: { name: "home" } })}>
+              <div className="home-selected-photo"><SiteMedia src={project.hero} alt="" lazy /></div>
+              <div className="home-selected-caption">
+              <span className="dhome-kicker">{catOf(project)}</span>
+              <h3>{pick(project, "name")}</h3>
+              <p>{pick(project, "location")}</p>
+              </div>
+            </button>
+          ))}
+        </div>
+        <div className="home-selected-actions">
+          <button type="button" className="home-explore-more" onClick={() => go({ name: "projects", view: "all" })}>
+            <span className="home-explore-label">{t("home_explore_more")}</span> <span className="ui-arrow-up-right" aria-hidden="true" />
+          </button>
         </div>
       </section>
 
-      {homeV2.enabled && banners.length ? <section className="dhome-work" aria-labelledby="dhome-work-title">
+      <section className="dhome-statement dhome-statement--systems home-approach home-conversation">
+        <h2>{t("home_systems_body")}</h2>
+      </section>
+
+      {homeV2.enabled && banners.length ? <section className="dhome-work home-scalable" aria-label={t("home_scalable_title")}>
         <header className="dhome-work-head">
-          <span className="dhome-kicker">{pick(homeV2, "kicker")}</span>
-          <h2 id="dhome-work-title">{pick(homeV2, "title")}</h2>
+          <span className="dhome-kicker">{t("home_scalable_section")}</span>
         </header>
-        <div className="dhome-banners">
-          {banners.map((banner, index) => (
-            <React.Fragment key={banner.id}>
-              <button className={`dhome-banner dhome-banner--${banner.tone}`} onClick={banner.action}>
-                {banner.image ? <img src={banner.image} alt="" loading="lazy" /> : null}
-                <span className="dhome-banner-shade" aria-hidden="true" />
-                <span className="dhome-banner-number">{String(index + 1).padStart(2, "0")}</span>
-                <span className="dhome-banner-copy">
-                  <span>{pick(banner, "eyebrow")}</span>
+        <div className="home-scalable-layout">
+          <div className="home-scalable-statement" tabIndex={0}>
+            <span className="dhome-kicker">{t("home_scalable_kicker")}</span>
+            <p>{t("home_scalable_text")}</p>
+          </div>
+          <div className="home-scalable-brands">
+            {banners.map((banner) => (
+              <button key={banner.id} className="home-brand-card" onClick={banner.action}>
+                {banner.image ? <SiteMedia src={banner.image} alt="" lazy /> : null}
+                <span className="home-brand-shade" aria-hidden="true" />
+                <span className="home-brand-copy">
+                  <span className="dhome-kicker">{pick(banner, "eyebrow")}</span>
                   <strong>{pick(banner, "title")}</strong>
-                  <small>{pick(banner, "note")}</small>
                 </span>
-                <span className="dhome-banner-arrow ui-arrow-up-right" aria-hidden="true" />
+                <span className="ui-arrow-up-right" aria-hidden="true" />
               </button>
-              {index === 1 ? (
-                <aside className="dhome-banners-statement">
-                  <span className="dhome-kicker">{t("home_scalable_kicker")}</span>
-                  <p>{t("home_scalable_text")}</p>
-                </aside>
-              ) : null}
-            </React.Fragment>
-          ))}
+            ))}
+          </div>
         </div>
       </section> : null}
 
-      <section className="dhome-statement dhome-statement--systems">
-        <span className="dhome-kicker">{t("home_systems_kicker")}</span>
-        <h2>{t("home_systems_title")}</h2>
-        <button onClick={() => go({ name: "projects" })}>{t("view_all_projects")} <span className="ui-arrow-up-right" aria-hidden="true" /></button>
-      </section>
 
       <section className="dhome-contact hz-foot">
         {window.Footer ? <window.Footer go={go} /> : null}
@@ -504,7 +522,7 @@ function ProjectsRail({ go, transition }) {
     const members = visible.filter((p) => window.projectCategoryId(p) === c.id);
     const automaticCover = members.find((p) => p.hero);
     return { ...c, count: members.length, cover: c.cover ? { hero: c.cover } : automaticCover };
-  });
+  }).filter((category) => category.count > 0);
 
   // the opening pane cycles the featured set, in the order the dashboard pins
   const gallery = (() => {
@@ -795,7 +813,8 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
   const t = window.useT();
   // `type` is a dashboard category id — anything the dashboard publishes is a
   // valid filter here, not just the two the nav's category row happens to show.
-  const categoryList = window.siteCategories();
+  const categoryList = window.siteCategories().filter((category) =>
+    publicProjects().some((project) => window.projectCategoryId(project) === category.id));
   const categoryIds = categoryList.map((c) => c.id);
   const normalisedType = categoryIds.includes(type) ? type : null;
   const normalisedBrand = normalisedType === "retail" && (brand === "pg" || brand === "dn") ? brand : null;
