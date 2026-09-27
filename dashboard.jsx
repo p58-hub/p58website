@@ -870,6 +870,17 @@ function App({ session }) {
     setToast("Website texts saved — ready to publish");
   };
 
+  const saveVisualTexts = (patch) => {
+    update({ ...data, site: normaliseSite({ ...data.site, ...patch }) });
+  };
+  const publishVisualTexts = async (patch) => {
+    const live = await fetchPublished();
+    if (!live) throw new Error("Publishing needs the live content API and an existing published site. Your draft is saved locally.");
+    const payload = { ...live, site: { ...live.site, ...patch } };
+    const result = await runPublish(payload);
+    if (result !== "published") throw new Error("Not published: content API unavailable. Your draft is saved locally.");
+  };
+
   /* The gallery is driven by each project's `featured` flag, so this is the
      same switch as "Show on home rail" in the project editor — just reachable
      from the one screen that shows the whole selection at once. */
@@ -1123,7 +1134,7 @@ function App({ session }) {
             <SiteSettings site={normaliseSite(data.site || DEFAULT_SITE)} onSave={onSaveSite} onGoSection={goSection} />
           )}
           {section === "website-texts" && can("siteSettings") && (
-            <WebsiteTextsSettings site={normaliseSite(data.site || DEFAULT_SITE)} onSave={onSaveWebsiteTexts} onGoSection={goSection} />
+            <WebsiteTextsSettings onSaveVisual={saveVisualTexts} onPublishVisual={publishVisualTexts} site={normaliseSite(data.site || DEFAULT_SITE)} onSave={onSaveWebsiteTexts} onGoSection={goSection} />
           )}
           {section === "hero" && can("heroGallery") && (
             <HeroGallerySettings
@@ -2267,7 +2278,7 @@ function websiteTextGroup(key) {
   return "general";
 }
 
-function WebsiteTextsSettings({ site, onSave, onGoSection }) {
+function WebsiteTextsSettings({ site, onSave, onGoSection, onSaveVisual, onPublishVisual }) {
   const dictionaries = window.DICT_I18N || { en: {}, gr: {} };
   const makeDraft = (settings) => ({
     en: Object.fromEntries(Object.keys(dictionaries.en || {}).map((key) => [key, Array.isArray((settings.websiteTexts?.en || {})[key] ?? dictionaries.en[key]) ? ((settings.websiteTexts?.en || {})[key] ?? dictionaries.en[key]).join("\n") : String((settings.websiteTexts?.en || {})[key] ?? dictionaries.en[key] ?? "")])),
@@ -2317,6 +2328,7 @@ function WebsiteTextsSettings({ site, onSave, onGoSection }) {
       <SectionHead eyebrow="/ All website copy · English + Greek" title="Website texts">
         <div className="website-text-preview-lang" aria-label="Preview language"><button className={previewLang === "en" ? "on" : ""} onClick={() => setPreviewLang("en")}>EN</button><button className={previewLang === "gr" ? "on" : ""} onClick={() => setPreviewLang("gr")}>GR</button></div>
       </SectionHead>
+      <window.VisualTextEditor site={site} onSave={onSaveVisual} onPublish={onPublishVisual} />
       <div className="website-texts-toolbar">
         <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search every website text — English or Greek…" />
         {needle

@@ -1,0 +1,17 @@
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+const listeners = {}, properties = {};
+const element = {dataset:{p58Text:'title'},textContent:'Original',getAttribute:()=>null,removeAttribute:()=>{for(const k in properties)delete properties[k]},setAttribute:()=>{},style:{setProperty:(k,v)=>properties[k]=v},classList:{toggle:()=>{}}};
+const parent = {postMessage:()=>{}};
+const document = {documentElement:{lang:'en'},getElementById:()=>({}),querySelectorAll:()=>[element],createElement:()=>({}),head:{append:()=>{}},addEventListener:()=>{}};
+const context={URLSearchParams,location:{search:'?visualTextEditor=1',origin:'https://example.test'},parent,document,MutationObserver:class{observe(){}},requestAnimationFrame:fn=>fn(),window:{addEventListener:(k,fn)=>listeners[k]=fn,DICT_I18N:{en:{title:'Original'}}}};
+vm.runInNewContext(readFileSync('visual-text-runtime.js','utf8'),context);
+const send=(origin,source,typography,text)=>listeners.message({origin,source,data:{type:'p58:text-preview',websiteTexts:{en:{title:text}},websiteTypography:{en:{title:typography}}}});
+send('https://evil.test',parent,{},'Wrong');assert.equal(element.textContent,'Original');
+send('https://example.test',{}, {},'Wrong');assert.equal(element.textContent,'Original');
+send('https://example.test',parent,{size:42,font:'serif',weight:500},'<b>Literal text</b>');
+assert.equal(element.textContent,'<b>Literal text</b>');assert.equal(properties['font-size'],'42px');assert.equal(properties['font-family'],'Georgia, serif');
+send('https://example.test',parent,{size:999,font:'url(evil)',weight:999,padding:'50px'},'Safe');assert.deepEqual(properties,{});
+send('https://example.test',parent,{},'');assert.equal(element.textContent,'');
+console.log('Passed: origin/source checks, literal text, typography allowlist, reset, empty text.');

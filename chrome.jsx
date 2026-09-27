@@ -320,7 +320,7 @@ function Nav({ route, go }) {
                 onMouseEnter={() => setMenuPreviewKey("home")}
                 onFocus={() => setMenuPreviewKey("home")}
                 onClick={() => {setMenuOpen(false);go({ name: "home" });}}>
-                  <span>{t("home")}</span><span className="ar">→</span>
+                  <span data-p58-text="home">{t("home")}</span><span className="ar">→</span>
                 </button>
                 <button
                 className={`nav-menu-item ${isProjects || isRetail || isResidential ? "on" : ""}`}
@@ -328,7 +328,7 @@ function Nav({ route, go }) {
                 onMouseEnter={() => setMenuPreviewKey("projects")}
                 onFocus={() => setMenuPreviewKey("projects")}
                 onClick={() => {setMenuOpen(false);go({ name: "projects" });}}>
-                  <span>{t("projects")}</span><span className="ar">→</span>
+                  <span data-p58-text="projects">{t("projects")}</span><span className="ar">→</span>
                 </button>
                 <button
                 className={`nav-menu-item ${isAgency ? "on" : ""}`}
@@ -336,7 +336,7 @@ function Nav({ route, go }) {
                 onMouseEnter={() => setMenuPreviewKey("agency")}
                 onFocus={() => setMenuPreviewKey("agency")}
                 onClick={() => {setMenuOpen(false);go({ name: "agency" });}}>
-                  <span>{t("agency")}</span><span className="ar ui-arrow-up-right" aria-hidden="true" />
+                  <span data-p58-text="agency">{t("agency")}</span><span className="ar ui-arrow-up-right" aria-hidden="true" />
                 </button>
                 <button
                 className={`nav-menu-item ${isContact ? "on" : ""}`}
@@ -344,7 +344,7 @@ function Nav({ route, go }) {
                 onMouseEnter={() => setMenuPreviewKey("contact")}
                 onFocus={() => setMenuPreviewKey("contact")}
                 onClick={goToProjectsContact}>
-                  <span>{t("contact")}</span><span className="ar ui-arrow-up-right" aria-hidden="true" />
+                  <span data-p58-text="contact">{t("contact")}</span><span className="ar ui-arrow-up-right" aria-hidden="true" />
                 </button>
               </div>
               {menuImageSrc ? (
@@ -414,24 +414,24 @@ function Nav({ route, go }) {
               <line x1="16" y1="4" x2="4" y2="16" />
             </svg>
           </button>
-          <div className="mobile-drawer-eyebrow">{t("menu_eyebrow")}</div>
+          <div className="mobile-drawer-eyebrow" data-p58-text="menu_eyebrow">{t("menu_eyebrow")}</div>
           <button
           className={`mobile-drawer-link ${isProjects || isRetail || isResidential ? "on" : ""}`}
           onClick={() => {setMenuOpen(false);go({ name: "projects" });}}>
-            <span>{t("projects")}</span><span className="ar">→</span>
+            <span data-p58-text="projects">{t("projects")}</span><span className="ar">→</span>
           </button>
           <button
           className={`mobile-drawer-link ${isAgency ? "on" : ""}`}
           onClick={() => {setMenuOpen(false);go({ name: "agency" });}}>
-            <span>{t("agency")}</span><span className="ar">→</span>
+            <span data-p58-text="agency">{t("agency")}</span><span className="ar">→</span>
           </button>
           <button
           className={`mobile-drawer-link ${isContact ? "on" : ""}`}
           onClick={goToProjectsContact}>
-            <span>{t("contact")}</span><span className="ar ui-arrow-up-right" aria-hidden="true" />
+            <span data-p58-text="contact">{t("contact")}</span><span className="ar ui-arrow-up-right" aria-hidden="true" />
           </button>
           <div className="mobile-drawer-footer">
-            <span>{t("studio_location")}</span>
+            <span data-p58-text="studio_location">{t("studio_location")}</span>
             <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
               <window.LangToggle compact />
               <span>v1.0</span>
@@ -490,7 +490,7 @@ function ProjectSort({ route, go }) {
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}>
         <SortIcon />
-        <span>{t("sort")}</span>
+        <span data-p58-text="sort">{t("sort")}</span>
       </button>
       {open ? (
         <div className="sort-menu" role="listbox" aria-label={t("sort")}>
@@ -619,7 +619,7 @@ function SearchOverlay({ go, onClose }) {
           {!q.trim() && filtered.length ? (
             <React.Fragment>
               <div className="spot-category-banners">
-                <div className="spot-group-title">{t("project_types")}</div>
+                <div className="spot-group-title" data-p58-text="project_types">{t("project_types")}</div>
                 <div className="spot-category-grid">
                   {categoryBanners.map((category, index) => (
                   <button
@@ -646,7 +646,7 @@ function SearchOverlay({ go, onClose }) {
               </div>
               {newsResults.length ? (
                 <div className="spot-news-preview">
-                  <div className="spot-group-title">{t("search_news")}</div>
+                  <div className="spot-group-title" data-p58-text="search_news">{t("search_news")}</div>
                   <div className="spot-news-grid">
                     {newsResults.map((item, newsIndex) => {
                       const index = categoryBanners.length + newsIndex;
@@ -805,7 +805,7 @@ function MobileTabBar({ route, go, onMore, introHidden = false }) {
           go({ name: "home" });
         }}>
         <TabHomeIcon on={isHome} />
-        <span>{t("home")}</span>
+        <span data-p58-text="home">{t("home")}</span>
       </button>
       <button
         className="mobile-tab mobile-tab-language"
@@ -817,15 +817,15 @@ function MobileTabBar({ route, go, onMore, introHidden = false }) {
           <i>/</i>
           <b className={lang === "gr" ? "on" : ""}>GR</b>
         </span>
-        <span>{t("language")}</span>
+        <span data-p58-text="language">{t("language")}</span>
       </button>
       <button className={`mobile-tab ${isProjects ? "on" : ""}`} aria-label={t("projects")} aria-current={isProjects ? "page" : undefined} onClick={() => go({ name: "projects" })}>
         <TabProjectsIcon on={isProjects} />
-        <span>{t("projects")}</span>
+        <span data-p58-text="projects">{t("projects")}</span>
       </button>
       <button className="mobile-tab" aria-label={t("more")} aria-haspopup="dialog" onClick={onMore}>
         <TabMoreIcon />
-        <span>{t("more")}</span>
+        <span data-p58-text="more">{t("more")}</span>
       </button>
     </nav>);
 }
@@ -896,7 +896,7 @@ function Footer({ go }) {
       <div className="foot-top foot-top-2col" style={{ padding: "0px", textAlign: "left" }}>
         <div className="foot-big">
           <img src="assets/logo-black.svg" alt="Project58" className="foot-logo" style={{ height: 28, marginBottom: 24, display: "block", filter: "invert(1)" }} />
-          {t("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }}>{t("foot_big_em")}</em>
+          {t("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }} data-p58-text="foot_big_em">{t("foot_big_em")}</em>
           <div className="foot-cta foot-cta-center">
             <button className="foot-start-btn" onClick={() => go({ name: "start" })}>{t("foot_meet")}<span className="ar">→</span></button>
           </div>
@@ -914,8 +914,8 @@ function Footer({ go }) {
         </div>
       </div>
       <div className="foot-bot foot-bot-2">
-        <span>{t("foot_copy_left")}</span>
-        <span className="right">{t("foot_copy_right")}</span>
+        <span data-p58-text="foot_copy_left">{t("foot_copy_left")}</span>
+        <span className="right" data-p58-text="foot_copy_right">{t("foot_copy_right")}</span>
       </div>
     </footer>);
 
@@ -932,7 +932,7 @@ function ContactPage({ go }) {
     <div className="contact-page page-enter">
       <div className="foot-top foot-top-2col" style={{ padding: "0px", textAlign: "left" }}>
         <div className="foot-big">
-          {t("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }}>{t("foot_big_em")}</em>
+          {t("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }} data-p58-text="foot_big_em">{t("foot_big_em")}</em>
           <div className="foot-cta foot-cta-center">
             <button className="foot-start-btn" onClick={() => go({ name: "start" })}>{t("foot_meet")}<span className="ar">→</span></button>
           </div>
@@ -950,8 +950,8 @@ function ContactPage({ go }) {
         </div>
       </div>
       <div className="foot-bot foot-bot-2">
-        <span>{t("foot_copy_left")}</span>
-        <span className="right">{t("foot_copy_right")}</span>
+        <span data-p58-text="foot_copy_left">{t("foot_copy_left")}</span>
+        <span className="right" data-p58-text="foot_copy_right">{t("foot_copy_right")}</span>
       </div>
     </div>);
 
@@ -1082,18 +1082,18 @@ function StartProjectPage({ go }) {
   const body = done ? (
     <div className="inquiry-done">
       <div className="inquiry-done-mark">✓</div>
-      <h2>{t("inquiry_success_title")}</h2>
-      <p>{t("inquiry_success_body")}</p>
+      <h2 data-p58-text="inquiry_success_title">{t("inquiry_success_title")}</h2>
+      <p data-p58-text="inquiry_success_body">{t("inquiry_success_body")}</p>
       {phone ? (
         <p className="inquiry-call">{t("inquiry_call")} <a href={phoneUrl}>{phone}</a>.</p>
       ) : null}
-      <button className="inquiry-btn primary" onClick={onClose}>{t("inquiry_close")}</button>
+      <button className="inquiry-btn primary" onClick={onClose} data-p58-text="inquiry_close">{t("inquiry_close")}</button>
     </div>
   ) : intro ? (
     <div className="inquiry-intro">
-      <div className="inquiry-step-kind">{t("inquiry_intro_kicker")}</div>
-      <h2 className="inquiry-title">{t("inquiry_intro_title")}</h2>
-      <p className="inquiry-intro-body">{t("inquiry_intro_body")}</p>
+      <div className="inquiry-step-kind" data-p58-text="inquiry_intro_kicker">{t("inquiry_intro_kicker")}</div>
+      <h2 className="inquiry-title" data-p58-text="inquiry_intro_title">{t("inquiry_intro_title")}</h2>
+      <p className="inquiry-intro-body" data-p58-text="inquiry_intro_body">{t("inquiry_intro_body")}</p>
       <div className="inquiry-nav">
         <span />
         <button className="inquiry-btn primary" onClick={() => setIntro(false)}>{t("inquiry_intro_cta")}</button>
@@ -1106,7 +1106,7 @@ function StartProjectPage({ go }) {
       </div>
       <div className="inquiry-step-kind">{t("inquiry_step")} {step + 1} {t("inquiry_of")} {steps.length}</div>
       <h2 className="inquiry-title">{activeStep ? activeStep.title : t("inquiry_title")}</h2>
-      <div className="inquiry-fields inquiry-dynamic-fields">{activeStep ? activeStep.questions.map(renderQuestion) : <p>{t("inquiry_empty")}</p>}</div>
+      <div className="inquiry-fields inquiry-dynamic-fields">{activeStep ? activeStep.questions.map(renderQuestion) : <p data-p58-text="inquiry_empty">{t("inquiry_empty")}</p>}</div>
 
       <div className="inquiry-nav">
         <button className="inquiry-btn ghost" onClick={() => (step > 0 ? setStep(step - 1) : setIntro(true))}>{t("inquiry_back")}</button>

@@ -277,8 +277,8 @@ function HomePage({ go }) {
           <img src="assets/logo-white.png" alt="Project58" />
         </div>
         <div className="dhome-hero-copy">
-          <span className="dhome-kicker">{t("home_hero_kicker")}</span>
-          <h1>{t("home_hero_title")}</h1>
+          <span className="dhome-kicker" data-p58-text="home_hero_kicker">{t("home_hero_kicker")}</span>
+          <h1 data-p58-text="home_hero_title">{t("home_hero_title")}</h1>
         </div>
         <div className="vhome-loc">{pick(cur, "location")}</div>
         <div className="vhome-cue">
@@ -286,7 +286,7 @@ function HomePage({ go }) {
             <rect x="1" y="1" width="16" height="26" rx="8" stroke="white" strokeWidth="1.5" strokeOpacity="0.85" />
             <rect className="mouse-wheel" x="8" y="5" width="2" height="5" rx="1" fill="white" />
           </svg>
-          <span>{t("scroll")}</span>
+          <span data-p58-text="scroll">{t("scroll")}</span>
         </div>
         <div className="vhome-dots" onClick={(event) => event.stopPropagation()}>
           {featured.map((p, idx) => (
@@ -296,8 +296,8 @@ function HomePage({ go }) {
       </section>
 
       <section className="dhome-statement dhome-statement--practice">
-        <span className="dhome-kicker">{t("home_practice_kicker")}</span>
-        <h2>{t("home_practice_title")}</h2>
+        <span className="dhome-kicker" data-p58-text="home_practice_kicker">{t("home_practice_kicker")}</span>
+        <h2 data-p58-text="home_practice_title">{t("home_practice_title")}</h2>
       </section>
 
       <section className="home-selected" ref={selectedSectionRef} aria-label={t("home_selected_title")}>
@@ -315,23 +315,23 @@ function HomePage({ go }) {
         </div>
         <div className="home-selected-actions">
           <button type="button" className="home-explore-more" onClick={() => go({ name: "projects" })}>
-            <span className="home-explore-label">{t("home_explore_more")}</span> <span className="ui-arrow-up-right" aria-hidden="true" />
+            <span className="home-explore-label" data-p58-text="home_explore_more">{t("home_explore_more")}</span> <span className="ui-arrow-up-right" aria-hidden="true" />
           </button>
         </div>
       </section>
 
       <section className="dhome-statement dhome-statement--systems home-approach home-conversation">
-        <h2>{t("home_systems_body")}</h2>
+        <h2 data-p58-text="home_systems_body">{t("home_systems_body")}</h2>
       </section>
 
       {homeV2.enabled && banners.length ? <section className="dhome-work home-scalable" aria-label={t("home_scalable_title")}>
         <header className="dhome-work-head">
-          <span className="dhome-kicker">{t("home_scalable_section")}</span>
+          <span className="dhome-kicker" data-p58-text="home_scalable_section">{t("home_scalable_section")}</span>
         </header>
         <div className="home-scalable-layout">
           <div className="home-scalable-statement" tabIndex={0}>
-            <span className="dhome-kicker">{t("home_scalable_kicker")}</span>
-            <p>{t("home_scalable_text")}</p>
+            <span className="dhome-kicker" data-p58-text="home_scalable_kicker">{t("home_scalable_kicker")}</span>
+            <p data-p58-text="home_scalable_text">{t("home_scalable_text")}</p>
           </div>
           <div className="home-scalable-brands">
             {banners.map((banner) => (
@@ -389,7 +389,7 @@ function MobileHomePage({ go, featured, active, setActive, cur, catOf }) {
       </section>
 
       <section className="mhome-intro">
-        <h2>{t("recent_projects")}</h2>
+        <h2 data-p58-text="recent_projects">{t("recent_projects")}</h2>
       </section>
 
       <section className="mhome-list">
@@ -421,7 +421,7 @@ function MobileHomePage({ go, featured, active, setActive, cur, catOf }) {
             e.preventDefault();
             go({ name: "projects" });
           }}>
-          <span>{t("see_all_projects")}</span><span aria-hidden="true">→</span>
+          <span data-p58-text="see_all_projects">{t("see_all_projects")}</span><span aria-hidden="true">→</span>
         </a>
       </div>
     </div>);
@@ -468,7 +468,7 @@ function Tile({ project, cls, go, idx }) {
             </div>
           </div>
           <div className="ovr-tag" style={{ alignSelf: "end" }}>
-            <span>{t("view")}</span><span className="ui-arrow-up-right" aria-hidden="true" />
+            <span data-p58-text="view">{t("view")}</span><span className="ui-arrow-up-right" aria-hidden="true" />
           </div>
         </div>
       </div>
@@ -627,7 +627,7 @@ function ProjectsRail({ go, transition }) {
             <rect x="1" y="1" width="16" height="26" rx="8" stroke="white" strokeWidth="1.5" strokeOpacity="0.85" />
             <rect className="mouse-wheel" x="8" y="5" width="2" height="5" rx="1" fill="white" />
           </svg>
-          <span>{t("scroll")}</span>
+          <span data-p58-text="scroll">{t("scroll")}</span>
         </div>
         <div className="vhome-dots" onClick={(e) => e.stopPropagation()}>
           {gallery.map((p, idx) => (
@@ -652,7 +652,7 @@ function ProjectsRail({ go, transition }) {
 
       {/* labels the run of category banners on a phone, where they follow the
           opening pane directly instead of a rail of separate columns */}
-      <h2 className="hz-cat-heading">{t("categories_view")}</h2>
+      <h2 className="hz-cat-heading" data-p58-text="categories_view">{t("categories_view")}</h2>
 
       {categories.map((c, idx) => (
         <a
@@ -686,8 +686,8 @@ function ProjectsRail({ go, transition }) {
       ))}
 
       <div className="vhome-endcard hz-end">
-        <div className="eyebrow">{t("rail_end_eyebrow")}</div>
-        <h3>{t("rail_end_h")}</h3>
+        <div className="eyebrow" data-p58-text="rail_end_eyebrow">{t("rail_end_eyebrow")}</div>
+        <h3 data-p58-text="rail_end_h">{t("rail_end_h")}</h3>
         <button onClick={() => go({ name: "start" })}>{t("rail_end_cta")} <span className="ui-arrow-up-right" aria-hidden="true" /></button>
       </div>
 
@@ -1059,7 +1059,7 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
           <div className="mobile-projects-cover-veil" aria-hidden="true" />
           <div className="mobile-projects-cover-loc">{pick(coverProject, "location")}</div>
           <div className="mobile-projects-cover-cue" aria-hidden="true">
-            <span>{t("scroll")}</span>
+            <span data-p58-text="scroll">{t("scroll")}</span>
             <svg viewBox="0 0 16 26" width="16" height="26" fill="none">
               <path d="M8 1v22M3 18l5 5 5-5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -1129,7 +1129,7 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
                                 idx={projectIndex + 1}
                                 from={keepSort({ name: "projects", type: category.id })} />
                             ))}
-                            {subcategory.projects.length === 0 ? <div className="proj-list-empty">{t("no_projects_category")}</div> : null}
+                            {subcategory.projects.length === 0 ? <div className="proj-list-empty" data-p58-text="no_projects_category">{t("no_projects_category")}</div> : null}
                           </div>
                         </section>
                       );
@@ -1157,7 +1157,7 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
                         idx={projectIndex + 1}
                         from={keepSort({ name: "projects", type: category.id })} />
                     ))}
-                    {category.projects.length === 0 ? <div className="proj-list-empty">{t("no_projects_category")}</div> : null}
+                    {category.projects.length === 0 ? <div className="proj-list-empty" data-p58-text="no_projects_category">{t("no_projects_category")}</div> : null}
                   </div>
                 )}
               </section>
@@ -1167,7 +1167,7 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
             <div className="projects-category-sort">
               <window.ProjectSort route={sheetRoute} go={go} />
             </div>
-            <div className="projects-category-jump-label">{t("categories_view")}</div>
+            <div className="projects-category-jump-label" data-p58-text="categories_view">{t("categories_view")}</div>
             {categoryGroups.map((category, index) => (
               <div className="projects-category-jump-group" key={category.id}>
                 <button
@@ -1267,7 +1267,7 @@ function ArchitecturePage({ go, sort }) {
         )}
         {filtered.length === 0 && (
           <div className="proj-list-empty">
-            <p>{t("residential_coming_soon")}</p>
+            <p data-p58-text="residential_coming_soon">{t("residential_coming_soon")}</p>
           </div>
         )}
       </div>
@@ -1379,7 +1379,7 @@ function ProjectPage({ id, go, from, transitionDirection }) {
       {/* Info + gallery in a centered container */}
       <div className="pd-page">
         <h1 className="pd-page-title-outside">{pick(p, "name")}</h1>
-        <h2 className="pd-section-title">{t("pd_details")}</h2>
+        <h2 className="pd-section-title" data-p58-text="pd_details">{t("pd_details")}</h2>
         <dl className="pd-meta-grid">
           {projectMeta.map(([label, value]) => (
             <div className="pd-meta-card" key={label}>
@@ -1390,7 +1390,7 @@ function ProjectPage({ id, go, from, transitionDirection }) {
         </dl>
         {pick(p, "summary") ? (
           <section className="pd-description">
-            <h2 className="pd-section-title">{t("pd_description")}</h2>
+            <h2 className="pd-section-title" data-p58-text="pd_description">{t("pd_description")}</h2>
             <p className="pd-split-summary">{pick(p, "summary")}</p>
           </section>
         ) : null}
@@ -1488,7 +1488,7 @@ function AgencyPage() {
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M10.5 2.5L5 8l5.5 5.5" />
                 </svg>
-                <span>{t("back")}</span>
+                <span data-p58-text="back">{t("back")}</span>
               </button>
               <img className="people-profile-modal-logo" src="assets/logo-black.svg" alt="Project58" />
               <span aria-hidden="true" />
@@ -1517,19 +1517,19 @@ function LegacyAgencyPage({ go }) {
   return (
     <div className="page-enter">
       <section className="studio-hero" style={{ padding: "80px var(--gutter) 32px" }}>
-        <div className="eyebrow">{t("agency_eyebrow")}</div>
-        <h1>{t("agency_h_a")} <em>{t("agency_h_em")}</em> {t("agency_h_b")}</h1>
+        <div className="eyebrow" data-p58-text="agency_eyebrow">{t("agency_eyebrow")}</div>
+        <h1>{t("agency_h_a")} <em data-p58-text="agency_h_em">{t("agency_h_em")}</em> {t("agency_h_b")}</h1>
       </section>
 
       <section className="bleed">
         <div className="studio-cols">
           <div className="col">
             <p>
-              {t("agency_p1")} <em>{t("agency_p1_em")}</em>{t("agency_p1_b")} <em>{t("agency_p1_em2")}</em>{t("agency_p1_c")}
+              {t("agency_p1")} <em data-p58-text="agency_p1_em">{t("agency_p1_em")}</em>{t("agency_p1_b")} <em data-p58-text="agency_p1_em2">{t("agency_p1_em2")}</em>{t("agency_p1_c")}
             </p>
           </div>
           <div className="col">
-            <p>{t("agency_p2")}</p>
+            <p data-p58-text="agency_p2">{t("agency_p2")}</p>
           </div>
         </div>
       </section>
@@ -1544,10 +1544,10 @@ function LegacyAgencyPage({ go }) {
       {/* Team */}
       <section className="bleed">
         <div className="hero-meta-row" style={{ borderBottom: 0, marginTop: 24 }}>
-          <div><span>{t("team_eyebrow")}</span><span className="v">{t("team_h")}</span></div>
-          <div><span>{t("headcount")}</span><span className="v">{TEAM.length} {t("headcount_unit")}</span></div>
-          <div><span>{t("studios")}</span><span className="v">{t("studio_location")}</span></div>
-          <div style={{ justifyContent: "flex-end" }}><span className="muted mono" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.14em" }}>{t("updated_label")}</span></div>
+          <div><span data-p58-text="team_eyebrow">{t("team_eyebrow")}</span><span className="v" data-p58-text="team_h">{t("team_h")}</span></div>
+          <div><span data-p58-text="headcount">{t("headcount")}</span><span className="v">{TEAM.length} {t("headcount_unit")}</span></div>
+          <div><span data-p58-text="studios">{t("studios")}</span><span className="v" data-p58-text="studio_location">{t("studio_location")}</span></div>
+          <div style={{ justifyContent: "flex-end" }}><span className="muted mono" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.14em" }} data-p58-text="updated_label">{t("updated_label")}</span></div>
         </div>
 
         <div className="team-grid">
@@ -1566,7 +1566,7 @@ function LegacyAgencyPage({ go }) {
 
       {/* Timeline */}
       <section className="bleed timeline">
-        <div className="eyebrow">{t("practice_eyebrow")}</div>
+        <div className="eyebrow" data-p58-text="practice_eyebrow">{t("practice_eyebrow")}</div>
         <h2 style={{ fontFamily: "var(--sans)", fontWeight: 500, fontSize: "clamp(40px, 5vw, 76px)", letterSpacing: "-0.04em", margin: "12px 0 32px" }}>
           {t("short_history")}
         </h2>
@@ -1581,7 +1581,7 @@ function LegacyAgencyPage({ go }) {
 
       {/* News */}
       <section className="bleed agency-news-head" style={{ padding: "60px var(--gutter) 24px", borderTop: "1px solid var(--rule-strong)", marginTop: 40 }}>
-        <div className="eyebrow">{t("news_eyebrow")}</div>
+        <div className="eyebrow" data-p58-text="news_eyebrow">{t("news_eyebrow")}</div>
         <h2 style={{ fontFamily: "var(--sans)", fontWeight: 500, fontSize: "clamp(40px, 5vw, 76px)", letterSpacing: "-0.04em", margin: "12px 0 32px" }}>
           {t("recently")}
         </h2>
@@ -1604,9 +1604,9 @@ function LegacyAgencyPage({ go }) {
       <section className="bleed" style={{ padding: "60px var(--gutter) 96px", borderTop: "1px solid var(--rule-strong)" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--gutter)", alignItems: "end" }}>
           <div>
-            <div className="eyebrow">{t("work_with_us")}</div>
+            <div className="eyebrow" data-p58-text="work_with_us">{t("work_with_us")}</div>
             <h3 style={{ fontFamily: "var(--sans)", fontWeight: 500, fontSize: "clamp(36px, 4.5vw, 64px)", letterSpacing: "-0.04em", margin: "12px 0 0", lineHeight: 1.05 }}>
-              {t("agency_cta")} <em style={{ color: "var(--clay)" }}>{t("cta_2026")}</em> {t("agency_cta_tail")}
+              {t("agency_cta")} <em style={{ color: "var(--clay)" }} data-p58-text="cta_2026">{t("cta_2026")}</em> {t("agency_cta_tail")}
             </h3>
           </div>
           <div style={{ textAlign: "right" }}>

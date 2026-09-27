@@ -53,7 +53,7 @@ function useT() {
     : {};
   return React.useCallback((key) => {
     if (textPreview && textPreview.key === key) return textPreview.value;
-    if (websiteTexts[key] != null && websiteTexts[key] !== "") return websiteTexts[key];
+    if (websiteTexts[key] != null) return websiteTexts[key];
     const dict = DICT[lang] || DICT.en;
     if (dict[key] != null) return dict[key];
     if (DICT.en[key] != null) return DICT.en[key];
