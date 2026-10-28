@@ -1047,6 +1047,282 @@ function applyP58ContentFromStore() {
   } catch (e) { /* ignore malformed overrides */ }
 }
 
+// Old galleries keep their full-width appearance until a scale is chosen.
+function projectGalleryScale(image) {
+  const scale = Number(image?.scale);
+  return [25, 50, 75, 100].includes(scale) ? scale : 100;
+}
+window.projectGalleryScale = projectGalleryScale;
+
+function galleryGridBox(value = {}) {
+  const unit = (number, fallback, max) => Number.isFinite(Number(number)) && Number(number) >= 1 ? Math.min(Math.round(max * 10), Math.round(Number(number) * 10)) / 10 : fallback;
+  const w = unit(value?.w, 6, 12);
+  return { x: unit(value?.x, 1, 13 - w), y: unit(value?.y, 1, 10000), w, h: unit(value?.h, 4, 24) };
+}
+// Ten CSS tracks per saved unit keep legacy geometry unchanged while allowing fine resizing.
+function galleryGridStyle(box) {
+  return { gridColumn: `${Math.round((box.x - 1) * 10) + 1} / span ${Math.round(box.w * 10)}`, gridRow: `${Math.round((box.y - 1) * 10) + 1} / span ${Math.round(box.h * 10)}` };
+}
+// Exact pixel geometry: fractional heights keep the frame tight to the media.
+function galleryImageStyle(box) {
+  const unit = '(100cqw + var(--gallery-gap)) / 12';
+  return {
+    left: `calc(${box.x - 1} * (${unit}))`,
+    top: `calc(${box.y - 1} * (${unit}))`,
+    width: `calc(${box.w} * (${unit}) - var(--gallery-gap))`,
+    height: `calc(${box.h} * (${unit}) - var(--gallery-gap))`,
+  };
+}
+function galleryImageCanvasStyle(layout) {
+  const bottom = Math.max(0, ...layout.map(box => box.y + box.h - 1));
+  return { height: bottom ? `calc(${bottom} * (100cqw + var(--gallery-gap)) / 12 - var(--gallery-gap))` : 0 };
+}
+function galleryImageBox(value, ratio, gap = 0.6) {
+  const box = galleryGridBox(value);
+  // Derived image edges are fractional. Rounding them would create tiny
+  // overlaps and could push the photo above an insertion target down a row.
+  if (Number.isFinite(value?.x)) box.x = Math.min(13 - box.w, Math.max(1, value.x));
+  if (Number.isFinite(value?.y)) box.y = Math.min(10000, Math.max(1, value.y));
+  const gutter = 12 * gap / (100 + gap);
+  if (Number.isFinite(ratio) && ratio > 0) box.h = (box.w - gutter) / ratio + gutter;
+  return box;
+}
+function galleryImageOverlaps(a, b) {
+  const epsilon = 1e-7;
+  return a.x < b.x + b.w - epsilon && a.x + a.w > b.x + epsilon
+    && a.y < b.y + b.h - epsilon && a.y + a.h > b.y + epsilon;
+}
+function resizeGalleryImage(box, dx, dy, ratio, gap = 0.6) {
+  const gutter = 12 * gap / (100 + gap);
+  const aspect = ratio > 0 ? ratio : (box.w - gutter) / (box.h - gutter);
+  // Project diagonal motion onto the image's aspect-ratio axis. Keyboard uses
+  // one axis at a time so each press always advances by one saved width step.
+  const delta = dx && dy ? (dx + dy / aspect) / (1 + 1 / (aspect * aspect)) : dx || dy * aspect;
+  return galleryImageBox({ ...box, w: Math.min(12, Math.max(3, box.w + delta)) }, aspect, gap);
+}
+function projectGalleryImageLayout(gallery, ratios, gap = 0.6) {
+  const layout = gallery.map(image => galleryImageBox(image.grid, ratios[image.src], gap));
+  const placed = [];
+  layout.map((box, i) => ({ box, i })).sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x || a.i - b.i).forEach(({ box }) => {
+    box.y = placed.reduce((bottom, other) => box.x < other.x + other.w - 1e-7 && box.x + box.w > other.x + 1e-7
+      ? Math.max(bottom, other.y + other.h) : bottom, 1);
+    placed.push(box);
+  });
+  return layout;
+}
+// Build justified rows, then rank arrangements by unused area. The source
+// array stays intact: only geometry changes, so captions and media stay paired.
+function galleryLayoutSignature(layout) {
+  return layout.map(box => [box.x, box.y, box.w, box.h].map(value => Math.round(value * 10000)).join(',')).join(';');
+}
+function galleryAutoLayouts(gallery, ratios, gap = .6) {
+  if (gallery.length < 2) return [];
+  const gutter = 12 * gap / (100 + gap);
+  const patterns = [[2], [3], [1,2], [2,1], [1,3], [3,1], [2,3], [3,2], [1,2,3]];
+  const indices = gallery.map((_, i) => i);
+  const candidates = new Map();
+  for (let shift = 0; shift < Math.min(gallery.length, 8); shift++) {
+    const rotated = indices.slice(shift).concat(indices.slice(0, shift));
+    for (const order of [rotated, rotated.slice().reverse()]) for (const pattern of patterns) {
+      const layout = new Array(gallery.length);
+      let cursor = 0, row = 0, y = 1, valid = true;
+      while (cursor < order.length) {
+        const group = order.slice(cursor, cursor + pattern[row % pattern.length]);
+        const aspects = group.map(i => ratios[gallery[i].src] > 0 ? ratios[gallery[i].src] : 1.5);
+        const total = aspects.reduce((sum, value) => sum + value, 0);
+        const raw = aspects.map(ratio => ((12 - group.length * gutter) * ratio / total + gutter) * 10);
+        const ticks = raw.map(Math.floor);
+        const fractions = raw.map((value, i) => ({i, remainder: value - ticks[i]})).sort((a,b) => b.remainder - a.remainder);
+        for (let remaining = 120 - ticks.reduce((a,b) => a+b,0), k = 0; remaining > 0; remaining--, k++) ticks[fractions[k % group.length].i]++;
+        if (ticks.some(width => width < 30)) { valid = false; break; }
+        let x = 1, height = 0;
+        group.forEach((i, j) => {
+          const box = galleryImageBox({x, y, w:ticks[j]/10}, aspects[j], gap);
+          layout[i] = box; x += box.w; height = Math.max(height, box.h);
+        });
+        y += height; cursor += group.length; row++;
+      }
+      if (!valid) continue;
+      const packed = projectGalleryImageLayout(gallery.map((image, i) => ({ ...image, grid: layout[i] })), ratios, gap);
+      const signature = galleryLayoutSignature(packed);
+      const area = packed.reduce((sum, box) => sum + box.w * box.h, 0);
+      const height = Math.max(...packed.map(box => box.y + box.h - 1));
+      const waste = Math.max(0, 1 - area / (12 * height));
+      if (!candidates.has(signature)) candidates.set(signature, {layout: packed, signature, waste});
+    }
+  }
+  return [...candidates.values()].sort((a,b) => a.waste - b.waste);
+}
+// Partition unoccupied canvas space into non-overlapping rectangles. Only
+// useful image-sized spaces become insertion targets; gutters stay empty.
+function galleryImageEmptySlots(layout, center = 0) {
+  if (!layout.length) return [{ x: 1, y: 1, w: 12, h: 4 }];
+  const boxes = layout.map(box => ({ ...box, x: box.x + center }));
+  const edges = [...new Set([1, ...boxes.flatMap(box => [box.y, box.y + box.h])])].sort((a, b) => a - b);
+  const slots = [];
+  for (let band = 0; band < edges.length - 1; band++) {
+    const y = edges[band], bottom = edges[band + 1];
+    const occupied = boxes.filter(box => box.y < bottom - 1e-7 && box.y + box.h > y + 1e-7).sort((a, b) => a.x - b.x);
+    let x = 1;
+    const add = end => {
+      if (end - x < 1e-7) return;
+      const previous = slots.find(slot => Math.abs(slot.x - x) < 1e-7 && Math.abs(slot.w - (end - x)) < 1e-7 && Math.abs(slot.y + slot.h - y) < 1e-7);
+      if (previous) previous.h = bottom - previous.y;
+      else slots.push({ x, y, w: end - x, h: bottom - y });
+    };
+    occupied.forEach(box => { add(Math.max(x, box.x)); x = Math.max(x, box.x + box.w); });
+    add(13);
+  }
+  return slots.filter(box => box.w >= 3 - 1e-7 && box.h >= 2 - 1e-7);
+}
+function insertGalleryImageInSlot(gallery, image, slot, ratios, gap) {
+  const layout = projectGalleryImageLayout(gallery, ratios, gap);
+  const center = galleryGridCenterOffset(layout);
+  const gutter = 12 * gap / (100 + gap);
+  const ratio = ratios[image.src];
+  const width = ratio > 0 ? Math.min(slot.w, Math.max(3, (slot.h - gutter) * ratio + gutter)) : slot.w;
+  // Round down so the new photo never crosses the slot's right edge.
+  const w = Math.floor((width + 1e-7) * 10) / 10;
+  const box = galleryImageBox({ ...slot, w }, ratio, gap);
+  const next = gallery.map((entry, i) => ({ ...entry, grid: { ...layout[i], x: layout[i].x + center } }));
+  next.push({ ...image, grid: box });
+  return placeGalleryImage(next, next.length - 1, box, ratios, gap, true);
+}
+function placeGalleryImage(gallery, index, candidate, ratios, gap, reflow = false) {
+  if (!gallery[index]) return gallery;
+  const layout = projectGalleryImageLayout(gallery, ratios, gap);
+  const box = galleryImageBox(candidate, ratios[gallery[index].src], gap);
+  if (!reflow && layout.some((other, i) => i !== index && galleryImageOverlaps(box, other))) return gallery;
+  layout[index] = box;
+  const placed = [box];
+  layout.forEach((other, i) => {
+    if (i === index) return;
+    let collision;
+    while ((collision = placed.find(item => galleryImageOverlaps(other, item)))) other.y = collision.y + collision.h;
+    placed.push(other);
+  });
+  return gallery.map((image, i) => ({ ...image, grid: layout[i] }));
+}
+
+// Cache source dimensions, not card dimensions: replacing a photo also replaces
+// its aspect ratio. Both the dashboard and public gallery use this hook.
+const galleryMediaRatios = {};
+function useGalleryMediaRatios(gallery) {
+  const [ratios, setRatios] = React.useState(() => ({ ...galleryMediaRatios }));
+  const sources = JSON.stringify([...new Set(gallery.map(image => image.src).filter(Boolean))]);
+  React.useEffect(() => {
+    let active = true;
+    const pending = [];
+    JSON.parse(sources).forEach(src => {
+      if (galleryMediaRatios[src]) return;
+      const video = isVideoSrc(src);
+      const media = video ? document.createElement('video') : new Image();
+      const loaded = () => {
+        const width = video ? media.videoWidth : media.naturalWidth;
+        const height = video ? media.videoHeight : media.naturalHeight;
+        if (!active || !width || !height) return;
+        galleryMediaRatios[src] = width / height;
+        setRatios(current => ({ ...current, [src]: width / height }));
+      };
+      if (video) { media.preload = 'metadata'; media.onloadedmetadata = loaded; }
+      else media.onload = loaded;
+      media.src = src;
+      pending.push(media);
+    });
+    setRatios(current => ({ ...current, ...galleryMediaRatios }));
+    return () => {
+      active = false;
+      pending.forEach(media => {
+        media.onload = null; media.onloadedmetadata = null;
+        if (media.tagName === 'VIDEO') { media.removeAttribute('src'); media.load(); }
+      });
+    };
+  }, [sources]);
+  return ratios;
+}
+Object.assign(window, { galleryAutoLayouts, galleryLayoutSignature, galleryImageEmptySlots, insertGalleryImageInSlot, galleryImageStyle, galleryImageCanvasStyle, galleryImageBox, galleryImageOverlaps, resizeGalleryImage, projectGalleryImageLayout, placeGalleryImage, useGalleryMediaRatios });
+function galleryGridCenterOffset(layout) {
+  if (!layout.length) return 0;
+  const left = Math.min(...layout.map(box => box.x));
+  const right = Math.max(...layout.map(box => box.x + box.w));
+  return Math.round((14 - left - right) * 10) / 20;
+}
+function resizeGalleryGridBox(box, dx, dy) {
+  return galleryGridBox({ ...box, w: Math.min(12, Math.max(1, box.w + dx)), h: Math.min(24, Math.max(1, box.h + dy)) });
+}
+function galleryGridOverlaps(a, b) {
+  const tick = value => Math.round(value * 10);
+  return tick(a.x) < tick(b.x + b.w) && tick(a.x + a.w) > tick(b.x) && tick(a.y) < tick(b.y + b.h) && tick(a.y + a.h) > tick(b.y);
+}
+function projectGalleryLayout(gallery = []) {
+  const placed = [];
+  return gallery.map(image => {
+    const box = galleryGridBox(image.grid || { y: placed.reduce((end, item) => Math.max(end, item.y + item.h), 1) });
+    // Legacy, newly added and malformed entries always get an unoccupied slot.
+    let collision;
+    while ((collision = placed.find(item => galleryGridOverlaps(box, item)))) box.y = Math.round((collision.y + collision.h) * 10) / 10;
+    placed.push(box);
+    return box;
+  });
+}
+function packGalleryGrid(gallery = []) {
+  let x = 10, y = 10, rowHeight = 0;
+  return gallery.map(image => {
+    const { w, h } = galleryGridBox(image.grid);
+    const width = Math.round(w * 10), height = Math.round(h * 10);
+    if (x + width > 130) { x = 10; y += rowHeight; rowHeight = 0; }
+    const result = { ...image, grid: { x: x / 10, y: y / 10, w, h } };
+    x += width;
+    rowHeight = Math.max(rowHeight, height);
+    return result;
+  });
+}
+// Gravity closes vertical holes while retaining horizontal placement and image size.
+function compactProjectGalleryLayout(gallery = []) {
+  const layout = projectGalleryLayout(gallery);
+  const placed = [];
+  layout.map((box, i) => ({ box, i })).sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x || a.i - b.i).forEach(({ box }) => {
+    box.y = placed.reduce((bottom, other) => {
+      const overlapsX = Math.round(box.x * 10) < Math.round((other.x + other.w) * 10)
+        && Math.round((box.x + box.w) * 10) > Math.round(other.x * 10);
+      return overlapsX ? Math.max(bottom, Math.round((other.y + other.h) * 10) / 10) : bottom;
+    }, 1);
+    placed.push(box);
+  });
+  return layout;
+}
+function projectGalleryGap(project) {
+  const gap = project?.galleryGap;
+  return typeof gap === 'number' && Number.isFinite(gap) ? Math.round(Math.min(3, Math.max(0, gap)) * 10) / 10 : 0.6;
+}
+function placeGalleryGridImage(gallery, index, candidate, reflow = false) {
+  if (!Number.isInteger(index) || index < 0 || index >= gallery.length) return gallery;
+  const layout = compactProjectGalleryLayout(gallery);
+  const box = galleryGridBox(candidate);
+  if (!reflow && layout.some((other, i) => i !== index && galleryGridOverlaps(box, other))) return gallery;
+  layout[index] = box;
+  const placed = [box];
+  layout.forEach((other, i) => {
+    if (i === index) return;
+    let collision;
+    while ((collision = placed.find(item => galleryGridOverlaps(other, item)))) other.y = Math.round((collision.y + collision.h) * 10) / 10;
+    placed.push(other);
+  });
+  return gallery.map((image, i) => ({ ...image, grid: layout[i] }));
+}
+function reorderGalleryGrid(gallery, from, to) {
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < 0 || from >= gallery.length || to >= gallery.length || from === to) return gallery;
+  const next = gallery.slice();
+  next.splice(to, 0, next.splice(from, 1)[0]);
+  return packGalleryGrid(next);
+}
+function galleryGridDropIndex(layout, from, point) {
+  const others = layout.filter((_, i) => i !== from);
+  const before = others.findIndex(box => point.y < box.y || (point.y < box.y + box.h && point.x < box.x + box.w / 2));
+  return before < 0 ? others.length : before;
+}
+Object.assign(window, { galleryGridBox, galleryGridStyle, galleryGridCenterOffset, resizeGalleryGridBox, galleryGridOverlaps, projectGalleryLayout, compactProjectGalleryLayout, projectGalleryGap, packGalleryGrid, placeGalleryGridImage, reorderGalleryGrid, galleryGridDropIndex });
+
 /* Legacy assets carry their extension in the path; Firestore media uses name. */
 function isVideoSrc(src) {
   if (typeof src !== "string" || !src) return false;

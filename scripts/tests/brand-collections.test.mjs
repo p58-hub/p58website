@@ -9,7 +9,7 @@ function declarations(file,names) {
 }
 const context=vm.createContext({encodeURIComponent,URLSearchParams,ALIAS:{},ROUTES:['home','projects'],BRAND_MAP_AREAS:[],BRAND_STORIES:{},URL,window:{}});
 vm.runInContext(declarations('data.jsx',['normaliseBrandSections','normaliseBrandInstagram','normaliseBrandPresentation','brandConceptCopy','brandStorySections','brandStoryImages','brandStoryIntro'])+'\nwindow.normaliseBrandPresentation=normaliseBrandPresentation;',context);
-vm.runInContext(declarations('brand-pages.jsx',['projectCollectionEntries','brandProjectPoint','brandMapColorMatrix'])+'\n'+declarations('app.jsx',['pathFromRoute','routeFromLocation','resolveRoute']),context);
+vm.runInContext(declarations('brand-pages.jsx',['projectCollectionEntries','brandProjectPoint','brandMapColorMatrix','brandMapCardPosition'])+'\n'+declarations('app.jsx',['pathFromRoute','routeFromLocation','resolveRoute']),context);
 const retail={id:'retail',subcategories:[{id:'protein-garden',label:'Protein Garden'}]};
 test('retail chains appear once; independent and hidden projects stay separate',()=>{
  const projects=[{id:'a',brand:'Protein Garden'},{id:'b',brand:'Protein Garden'},{id:'c',brand:'Independent'},{id:'d',brand:'Other',visible:false},{id:'e'}];
@@ -196,4 +196,22 @@ test('applying the presentation transfers both intro edits and sections into the
  assert.equal(draft.label,'Garden');
  assert.equal(draft.icon,'logo.svg');
  assert.equal(closed,true);
+});
+
+
+test('mobile map card stays near its pin and inside the visible area above the dock', () => {
+  const card = {width:340,height:132}, bounds = {left:12,right:501,top:120,bottom:836};
+  const centered = context.brandMapCardPosition({x:256,y:500},card,bounds);
+  assert.equal(centered.left,86);
+  assert.equal(centered.top,340);
+  const nearTop = context.brandMapCardPosition({x:30,y:140},card,bounds);
+  assert.equal(nearTop.top,168);
+  assert.equal(nearTop.left,12);
+  for (const point of [{x:490,y:900},{x:-20,y:-100},{x:250,y:300}]) {
+    const result = context.brandMapCardPosition(point,card,bounds);
+    assert.ok(result.left >= bounds.left);
+    assert.ok(result.left + card.width <= bounds.right);
+    assert.ok(result.top >= bounds.top);
+    assert.ok(result.top + card.height <= bounds.bottom);
+  }
 });

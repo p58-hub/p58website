@@ -113,12 +113,21 @@ function brandMapColorMatrix(dark, light) {
     return `${.2126 * range} ${.7152 * range} ${.0722 * range} 0 ${start}`;
   }).join(" ") + " 0 0 0 1 0";
 }
-function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick, color, background }) {
+function brandMapCardPosition(point, card, bounds) {
+  const left = Math.max(bounds.left, Math.min(point.x - card.width / 2, bounds.right - card.width));
+  const above = point.y - card.height - 28;
+  const preferred = above >= bounds.top ? above : point.y + 28;
+  const top = Math.max(bounds.top, Math.min(preferred, bounds.bottom - card.height));
+  return { left, top };
+}
+function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick, color, background, children }) {
   const t = window.useT();
   const filterId = React.useId().replace(/:/g, "");
   const ref = React.useRef(null);
   const mapRef = React.useRef(null);
   const markersRef = React.useRef(new Map());
+  const detailRef = React.useRef(null);
+  const [cardPosition, setCardPosition] = React.useState(null);
   const [failed, setFailed] = React.useState(!window.L);
   React.useEffect(() => {
     if (!window.L || !ref.current) return;
@@ -149,9 +158,47 @@ function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick
     const marker = markersRef.current.get(selectedId);
     if (marker && panToSelection) mapRef.current?.panTo(marker.getLatLng());
   }, [selectedId, panToSelection, projects, pick]);
+  React.useEffect(() => {
+    const map = mapRef.current;
+    const card = detailRef.current;
+    if (!map || !card) return;
+    let frame;
+    const update = () => {
+      if (!window.matchMedia('(max-width: 720px)').matches) { setCardPosition(null); return; }
+      const rect = ref.current.getBoundingClientRect();
+      const viewport = window.visualViewport;
+      const viewportTop = viewport?.offsetTop || 0;
+      const viewportBottom = viewportTop + (viewport?.height || window.innerHeight);
+      const dock = document.querySelector('.mobile-tab-bar')?.getBoundingClientRect();
+      const dockTop = !document.fullscreenElement && dock?.height && dock.top < viewportBottom ? dock.top : viewportBottom;
+      const head = ref.current.closest('.brand-locations')?.querySelector('.brand-locations-head')?.getBoundingClientRect();
+      const top = Math.max(12, viewportTop - rect.top + 12, head && head.bottom > viewportTop ? head.bottom - rect.top + 12 : 0);
+      const bottom = Math.min(rect.height - 12, dockTop - rect.top - 12);
+      const marker = markersRef.current.get(selectedId);
+      const point = marker ? map.latLngToContainerPoint(marker.getLatLng()) : { x: rect.width / 2, y: rect.height / 2 };
+      const height = Math.min(card.scrollHeight, Math.max(0, bottom - top));
+      const position = brandMapCardPosition(point, { width: card.offsetWidth, height }, { left: 12, right: rect.width - 12, top, bottom });
+      setCardPosition({ ...position, maxHeight: Math.max(0, bottom - top), visibility: bottom - top < 80 ? 'hidden' : 'visible' });
+    };
+    const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(update); };
+    const observer = new ResizeObserver(schedule);
+    observer.observe(card);
+    map.on('move zoom resize', schedule);
+    window.addEventListener('scroll', schedule, true);
+    window.addEventListener('resize', schedule);
+    window.visualViewport?.addEventListener('resize', schedule);
+    window.visualViewport?.addEventListener('scroll', schedule);
+    update();
+    return () => {
+      cancelAnimationFrame(frame); observer.disconnect(); map.off('move zoom resize', schedule);
+      window.removeEventListener('scroll', schedule, true); window.removeEventListener('resize', schedule);
+      window.visualViewport?.removeEventListener('resize', schedule); window.visualViewport?.removeEventListener('scroll', schedule);
+    };
+  }, [selectedId, projects, pick]);
   return <div className="brand-map-wrap" style={{"--brand-map-filter":`url(#${filterId})`}}>
     <svg width="0" height="0" aria-hidden="true" style={{position:"absolute"}}><defs><filter id={filterId} colorInterpolationFilters="sRGB"><feColorMatrix type="matrix" values={brandMapColorMatrix(color,background)} /></filter></defs></svg>
     <div ref={ref} className="brand-map" role="region" aria-label={t("brand_map_of_project_areas")} />
+    <div ref={detailRef} className="brand-map-detail" style={cardPosition}>{children}</div>
     {failed && <p className="brand-map-error"><span data-p58-text={"brand_the_map_could_not_load_all_locations_are_available_in_list_view"}>{t("brand_the_map_could_not_load_all_locations_are_available_in_list_view")}</span></p>}
   </div>;
 }
@@ -289,8 +336,9 @@ function BrandPage({ id, go }) {
         </div>
       </header>
       {view === "map" ? <>
-        <div className="brand-map-layout"><BrandLocationMap projects={brand.projects} selectedId={selected.id} panToSelection={panToSelection} onSelect={selectLocation} pick={pick} color={brand.mapColor} background={brand.mapBackground} />
-          <div className="brand-map-detail"><SiteMedia src={selected.hero} alt={pick(selected,"name")} lazy /><div className="brand-map-detail-copy"><span className="collection-eyebrow"><span data-p58-text={window.siteContentKey("project",selected.id,"location")}>{pick(selected,"location")}</span></span><h3><span data-p58-text={window.siteContentKey("project",selected.id,"name")}>{pick(selected,"name")}</span></h3>{selected.address && <p>{selected.address}</p>}<p><span data-p58-text={window.siteContentKey("project",selected.id,"summary")}>{pick(selected,"summary")}</span></p><button onClick={() => openProject(selected)}><span data-p58-text={"brand_view_project"}>{t("brand_view_project")}</span> ↗</button></div></div>
+        <div className="brand-map-layout"><BrandLocationMap projects={brand.projects} selectedId={selected.id} panToSelection={panToSelection} onSelect={selectLocation} pick={pick} color={brand.mapColor} background={brand.mapBackground}>
+          <SiteMedia src={selected.hero} alt={pick(selected,"name")} lazy /><div className="brand-map-detail-copy"><span className="collection-eyebrow"><span data-p58-text={window.siteContentKey("project",selected.id,"location")}>{pick(selected,"location")}</span></span><h3><span data-p58-text={window.siteContentKey("project",selected.id,"name")}>{pick(selected,"name")}</span></h3>{selected.address && <p>{selected.address}</p>}<p><span data-p58-text={window.siteContentKey("project",selected.id,"summary")}>{pick(selected,"summary")}</span></p><button onClick={() => openProject(selected)}><span data-p58-text={"brand_view_project"}>{t("brand_view_project")}</span> ↗</button></div>
+          </BrandLocationMap>
         </div>
       </> : <div className="brand-location-list">{brand.projects.map((project,index) => <a key={project.id} href={pathFromRoute({name:"project",id:project.slug || project.id})} onClick={event => {if (event.metaKey || event.ctrlKey) return; event.preventDefault(); openProject(project);}}><span className="collection-eyebrow">{String(index+1).padStart(2,"0")}</span><SiteMedia src={project.hero} alt="" lazy /><div><h3><span data-p58-text={window.siteContentKey("project",project.id,"name")}>{pick(project,"name")}</span></h3><p><span data-p58-text={window.siteContentKey("project",project.id,"location")}>{pick(project,"location")}</span></p>{project.address && <p>{project.address}</p>}</div><span aria-hidden="true">↗</span></a>)}</div>}
     </section>

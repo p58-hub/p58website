@@ -1275,6 +1275,34 @@ function ArchitecturePage({ go, sort }) {
 }
 
 /* ================== PROJECT DETAIL — BIG-style centered rows ================== */
+function ProjectImageLightbox({ image, onClose }) {
+  const dialogRef = useR(null);
+  const t = window.useT();
+  const pick = window.usePick();
+  useE(() => {
+    const dialog = dialogRef.current;
+    const trigger = document.activeElement;
+    const overflow = document.body.style.overflow;
+    dialog.showModal();
+    document.body.style.overflow = "hidden";
+    return () => {
+      dialog.close();
+      document.body.style.overflow = overflow;
+      if (trigger instanceof HTMLElement && trigger.isConnected) trigger.focus({ preventScroll: true });
+    };
+  }, []);
+  return ReactDOM.createPortal(
+    <dialog ref={dialogRef} className="pd-image-lightbox" aria-label={pick(image, "tag") || t("gallery_enlarge")}
+      onCancel={event => { event.preventDefault(); onClose(); }}
+      onClick={event => { if (event.target === event.currentTarget) onClose(); }}>
+      <button type="button" className="pd-image-lightbox-close" autoFocus aria-label={t("gallery_close")} onClick={onClose}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+      </button>
+      <img src={image.src} alt={pick(image, "tag") || ""} />
+    </dialog>, document.body
+  );
+}
+
 function ProjectPage({ id, go, from, transitionDirection }) {
   const t = window.useT();
   const pick = window.usePick();
@@ -1284,10 +1312,17 @@ function ProjectPage({ id, go, from, transitionDirection }) {
   const prev = projects[(idx - 1 + projects.length) % projects.length];
   const next = projects[(idx + 1) % projects.length];
 
+  const galleryRatios = window.useGalleryMediaRatios(p.gallery);
+  const galleryLayout = window.projectGalleryImageLayout(p.gallery, galleryRatios, window.projectGalleryGap(p));
+  const galleryItems = p.gallery.map((image, i) => ({ image, i, box: galleryLayout[i] }));
+  if (p.galleryLayout === "grid") galleryItems.sort((a, b) => a.box.y - b.box.y || a.box.x - b.box.x);
+
   const [transitioning, setTransitioning] = useS(null);
   const [scrollProgress, setScrollProgress] = useS(0);
+  const [enlargedImage, setEnlargedImage] = useS(null);
   const swipeStartRef = useR(null);
 
+  useE(() => setEnlargedImage(null), [id]);
   useE(() => {window.scrollTo({ top: 0, behavior: "instant" });}, [id]);
   useE(() => {
     let frame = 0;
@@ -1395,13 +1430,24 @@ function ProjectPage({ id, go, from, transitionDirection }) {
         ) : null}
       </div>
 
-      {/* Gallery rows — full bleed */}
-      {p.gallery.map((g, i) =>
-      <div key={i} className="pd-page-gallery-row">
+      {/* The editor and public page use the same saved grid coordinates. */}
+      <div className={p.galleryLayout === "grid" ? "pd-gallery-grid-container" : undefined}>
+      <div className={p.galleryLayout === "grid" ? "pd-gallery-grid" : undefined}
+        style={p.galleryLayout === "grid" ? { "--gallery-center": window.galleryGridCenterOffset(galleryLayout), "--gallery-gap": `${window.projectGalleryGap(p)}cqw`, ...window.galleryImageCanvasStyle(galleryLayout) } : undefined}>
+      {galleryItems.map(({ image: g, i, box }) =>
+      <div key={i} className="pd-page-gallery-row" style={p.galleryLayout === "grid"
+        ? window.galleryImageStyle(box)
+        : { width: `${window.projectGalleryScale(g)}%` }}>
           <SiteMedia src={g.src} alt={pick(g, "tag")} lazy />
-          {pick(g, "tag") ? <span className="pd-page-tag"><span data-p58-text={window.siteContentKey("gallery",`${p.id}/${i}`,"tag")}>{pick(g, "tag")}</span></span> : null}
+          {g.src && !window.isVideoSrc(g.src) ? <button type="button" className="pd-gallery-enlarge"
+            aria-label={`${t("gallery_enlarge")}: ${pick(g, "tag") || `${pick(p, "name")} ${i + 1}`}`}
+            onClick={() => setEnlargedImage(g)} /> : null}
         </div>
       )}
+      </div>
+      </div>
+
+      {enlargedImage ? <ProjectImageLightbox image={enlargedImage} onClose={() => setEnlargedImage(null)} /> : null}
 
       {ReactDOM.createPortal(
         <div
