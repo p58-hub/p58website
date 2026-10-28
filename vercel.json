@@ -2,7 +2,13 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
   "trailingSlash": false,
+  "redirects": [
+    { "source": "/card", "destination": "/card/georgios", "permanent": false }
+  ],
   "rewrites": [
+    { "source": "/projects/brands/:id", "destination": "/index" },
+    { "source": "/card/member/:id", "destination": "/card/index" },
+    { "source": "/card/georgios", "destination": "/card/index" },
     { "source": "/", "destination": "/index" },
     { "source": "/projects", "destination": "/index" },
     { "source": "/projects/:slug", "destination": "/index" },
@@ -14,6 +20,10 @@
     { "source": "/contact", "destination": "/index" }
   ],
   "headers": [
+    {
+      "source": "/card/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    },
     {
       "source": "/assets/(.*)",
       "headers": [

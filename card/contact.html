@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f7f5f0">
+  <meta name="description" content="Georgios Grigoriadis · Project58. Στοιχεία επικοινωνίας και αποθήκευση επαφής.">
+  <title>Georgios Grigoriadis · Project58</title>
+  <link rel="icon" href="/assets/logo-black.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/card/card.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+  <script type="module" src="/card/contact.js"></script>
+</head>
+<body>
+  <script>if(location.pathname.startsWith('/card/member/') || new URLSearchParams(location.search).has('member')) document.documentElement.classList.add('loading-member');</script>
+  <main class="card-page recipient-page">
+    <header class="topbar"><a href="/" aria-label="Project58 — αρχική"><img src="/assets/logo-black.svg" alt="Project58" width="112" height="35"></a><div class="language-bar"><label for="card-language">Γλώσσα</label><select id="card-language" class="language-picker"><option value="el" lang="el">Ελληνικά</option><option value="en" lang="en">English</option><option value="fr" lang="fr">Français</option></select></div></header>
+    <section class="identity" aria-label="Ψηφιακή επαγγελματική κάρτα">
+      <div class="portrait-wrap"><img class="portrait" src="/assets/people/georgios-grigoriadis.jpg" alt="Georgios Grigoriadis" width="1200" height="1600"><span class="portrait-label">PERSONAL CONNECTION / P58</span></div>
+      <div class="identity-text"><p class="eyebrow">ATHENS, GREECE</p><h1><span id="first-name">Georgios</span><br><span id="last-name">Grigoriadis.</span></h1><p id="role" class="role">Founder · Project58</p></div><div class="personal-message"><p id="recipient-message" class="intro recipient-message" hidden></p><p id="default-message" class="intro">Spaces for life.<br><em>Connections that last.</em></p></div>
+    </section>
+    <p id="profile-description" class="profile-description" hidden></p>
+    <dl class="contact-details compact-details" aria-label="Στοιχεία επικοινωνίας">
+      <div id="detail-phone" hidden><dt>Τηλέφωνο</dt><dd class="phone-display"><svg id="phone-flag" class="country-flag" width="21" height="14" viewBox="0 0 27 18" role="img" aria-label="Ελλάδα" focusable="false" hidden><rect width="27" height="18" fill="#0d5eaf"/><path d="M0 3h27M0 7h27M0 11h27M0 15h27" stroke="#fff" stroke-width="2"/><path d="M0 0h10v10H0z" fill="#0d5eaf"/><path d="M5 0v10M0 5h10" stroke="#fff" stroke-width="2"/></svg><a id="phone-value"></a></dd></div>
+      <div id="detail-email"><dt>Email</dt><dd><a id="email-value">g.grigoriadis@project58.gr</a></dd></div>
+      <div id="detail-website"><dt>Website</dt><dd><a id="website-value">https://p58website.vercel.app/</a></dd></div>
+      <div id="detail-address"><dt>Διεύθυνση</dt><dd id="address-value">Ακαδημίας 76, Αθήνα</dd></div>
+    </dl>
+    <div class="connect-bar"><button id="save-contact" class="primary full" type="button" disabled><svg class="icon-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 4v16M5 13l7 7 7-7"/></svg><span>Αποθήκευση επαφής</span></button><span class="connect-caption">Πρόσθεσε τα στοιχεία στις επαφές του κινητού σου.</span></div>
+    <footer class="footer"><span></span><span id="connection-status">DIGITAL CARD</span></footer>
+    <p id="contact-status" class="notice" role="status" aria-live="polite"></p>
+    <noscript>Ενεργοποίησε τη JavaScript για να αποθηκεύσεις την επαφή.</noscript>
+  </main>
+</body>
+</html>

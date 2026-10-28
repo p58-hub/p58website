@@ -68,7 +68,7 @@ function usePick() {
     if (!obj) return "";
     if (lang === "gr") {
       const grKey = field + "_gr";
-      if (obj[grKey] != null && obj[grKey] !== "") return obj[grKey];
+      if (obj[grKey] != null) return obj[grKey];
     }
     return obj[field] != null ? obj[field] : "";
   }, [lang]);
@@ -212,7 +212,7 @@ const DICT = {
     pd_description: "Description",
     pd_type: "Type",
     pd_contractor: "Contractor",
-    pd_engineer: "Engineer",
+    pd_engineer: "Mechanical Engineer",
     pd_lead_architect: "Lead Architect",
     pd_design_team: "Design Team",
     view: "View",
@@ -474,5 +474,63 @@ const DICT = {
     "Inside": "Εσωτερικό",
   },
 };
+
+DICT.en["brand_brand_collection"] = "Brand collection";
+DICT.gr["brand_brand_collection"] = "Συλλογή brand";
+DICT.en["brand_explore_the_brand"] = "Explore the brand";
+DICT.gr["brand_explore_the_brand"] = "Γνώρισε το brand";
+DICT.en["brand_map_of_project_areas"] = "Map of project areas";
+DICT.gr["brand_map_of_project_areas"] = "Χάρτης περιοχών έργων";
+DICT.en["brand_the_map_could_not_load_all_locations_are_available_in_list_view"] = "The map could not load. All locations are available in List view.";
+DICT.gr["brand_the_map_could_not_load_all_locations_are_available_in_list_view"] = "Ο χάρτης δεν φορτώθηκε. Όλα τα καταστήματα είναι διαθέσιμα στη Λίστα.";
+DICT.en["brand_architecture"] = "Architecture";
+DICT.gr["brand_architecture"] = "Αρχιτεκτονική";
+DICT.en["brand_close_brand_story"] = "Close brand story";
+DICT.gr["brand_close_brand_story"] = "Κλείσιμο παρουσίασης brand";
+DICT.en["brand_behind_the_spaces"] = "Behind the spaces";
+DICT.gr["brand_behind_the_spaces"] = "Πίσω από τους χώρους";
+DICT.en["brand_a_shared_design_language"] = "A shared design language.";
+DICT.gr["brand_a_shared_design_language"] = "Μια κοινή σχεδιαστική γλώσσα.";
+DICT.en["brand_back_to_the_collection"] = "Back to the collection";
+DICT.gr["brand_back_to_the_collection"] = "Πίσω στη συλλογή";
+DICT.en["brand_collection_unavailable"] = "Collection unavailable";
+DICT.gr["brand_collection_unavailable"] = "Η συλλογή δεν είναι διαθέσιμη";
+DICT.en["brand_about_the_brand"] = "About the brand";
+DICT.gr["brand_about_the_brand"] = "Σχετικά με το brand";
+DICT.en["brand_architectural_details"] = "Architectural details";
+DICT.gr["brand_architectural_details"] = "Αρχιτεκτονικές λεπτομέρειες";
+DICT.en["brand_continue"] = "Continue";
+DICT.gr["brand_continue"] = "Συνέχεια";
+DICT.en["brand_explore_the_collection"] = "Explore the collection";
+DICT.gr["brand_explore_the_collection"] = "Ανακάλυψε τη συλλογή";
+DICT.en["brand_places_spaces"] = "Places & spaces";
+DICT.gr["brand_places_spaces"] = "Τόποι & χώροι";
+DICT.en["brand_location_view"] = "Location view";
+DICT.gr["brand_location_view"] = "Προβολή καταστημάτων";
+DICT.en["brand_map"] = "Map";
+DICT.gr["brand_map"] = "Χάρτης";
+DICT.en["brand_list"] = "List";
+DICT.gr["brand_list"] = "Λίστα";
+DICT.en["brand_view_project"] = "View project";
+DICT.gr["brand_view_project"] = "Προβολή έργου";
+DICT.en["brand_markers_indicate_neighbourhoods_not_exact_store_addresses_locatio"] = "Markers use the saved project address when available; otherwise they may indicate the neighbourhood. Locations awaiting address confirmation remain in the list.";
+DICT.gr["brand_markers_indicate_neighbourhoods_not_exact_store_addresses_locatio"] = "Τα σημεία χρησιμοποιούν την αποθηκευμένη διεύθυνση του έργου, όπου υπάρχει· διαφορετικά μπορεί να δείχνουν την περιοχή. Οι διευθύνσεις που δεν έχουν επιβεβαιωθεί παραμένουν στη λίστα.";
+DICT.en["brand_location"] = "location";
+DICT.gr["brand_location"] = "κατάστημα";
+DICT.en["brand_locations"] = "locations";
+DICT.gr["brand_locations"] = "καταστήματα";
+DICT.en["brand_show_less"] = "Show less";
+DICT.gr["brand_show_less"] = "Λιγότερα";
+DICT.en["brand_show_more"] = "Show more";
+DICT.gr["brand_show_more"] = "Περισσότερα";
+DICT.en["brand_exit_fullscreen"] = "Exit fullscreen";
+DICT.gr["brand_exit_fullscreen"] = "Έξοδος από πλήρη οθόνη";
+DICT.en["brand_fullscreen_map"] = "Fullscreen map";
+DICT.gr["brand_fullscreen_map"] = "Χάρτης πλήρους οθόνης";
+DICT.en["inquiry_select"] = "Select…";
+DICT.gr["inquiry_select"] = "Επιλέξτε…";
+
+DICT.en.brand_instagram = "Instagram";
+DICT.gr.brand_instagram = "Instagram";
 
 Object.assign(window, { LangProvider, useLang, useT, usePick, LangToggle, DICT_I18N: DICT });

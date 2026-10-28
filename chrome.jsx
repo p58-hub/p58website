@@ -197,7 +197,8 @@ function Nav({ route, go }) {
   // The two legacy index routes are category views. Their names come from the
   // dashboard's Categories section, never from the website-text dictionary.
   const categoryName = (id) => pick(window.siteCategory(id) || {}, "label") || t("projects");
-  const backLabel = backRoute.name === "interiors" ? categoryName("retail")
+  const backLabel = backRoute.name === "brand" ? (window.publishedBrand(backRoute.id)?.label || categoryName("retail"))
+    : backRoute.name === "interiors" ? categoryName("retail")
     : backRoute.name === "architecture" ? categoryName("residential")
     : backRoute.name === "agency" ? t("agency")
     : backRoute.name === "home" ? t("home")
@@ -236,21 +237,46 @@ function Nav({ route, go }) {
     }
     go({ name: "projects", transition: "category-back" }, { restoreScroll: true });
   };
+  const goToReception = (event) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    event.preventDefault();
+    setMenuOpen(false);
+    setSearchOpen(false);
+    go({ name: "home" });
+  };
+
+  const languageControl = (
+          <button
+            className={`nav-language${isMobile ? " nav-language-mobile" : ""}${isHome ? " nav-language-home" : ""}`}
+            aria-label={t("switch_language")}
+            onClick={() => setLang(lang === "en" ? "gr" : "en")}>
+            <span className={lang === "en" ? "on" : ""}>EN</span>
+            <i>/</i>
+            <span className={lang === "gr" ? "on" : ""}>GR</span>
+          </button>
+  );
 
   return (
     <React.Fragment>
       <nav className={`nav ${homeTop ? "home-top" : ""} ${isHome && isMobile && atTop ? "mobile-home-top" : ""} ${showProjectBar ? "nav-project-bar" : ""}`} aria-label={t("primary_navigation")}>
         {showProjectBar || showCategoryBack ? (
-          <button className="nav-back" onClick={() => showProjectBar ? go(backRoute, { restoreScroll: true }) : returnFromCategory()}>
+          <button className={`nav-back${isMobile ? " nav-back-mobile" : ""}`} aria-label={`${t("back")} · ${backLabel}`} onClick={() => showProjectBar ? go(backRoute, { restoreScroll: true }) : returnFromCategory()}>
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M9 2L4 7l5 5" />
             </svg>
-            <span>{showProjectBar ? backLabel : t("back")}</span>
+            {!isMobile && <span>{showProjectBar ? backLabel : t("back")}</span>}
           </button>
-        ) : (
-          <div className="nav-logo" onClick={() => go({ name: "home" })} role="button" aria-label="Project58 home">
-            <img src="assets/logo-black.svg" alt="Project58" style={{ objectFit: "contain" }} />
+        ) : isHome ? (
+          <div className="nav-home-left">
+            {isMobile && languageControl}
+            <a className="nav-logo" href="/" onClick={goToReception} aria-label="Project58 home">
+              <img src="assets/logo-black.svg" alt="Project58" style={{ objectFit: "contain" }} />
+            </a>
           </div>
+        ) : (
+          <a className="nav-logo" href="/" onClick={goToReception} aria-label="Project58 home">
+            <img src="assets/logo-black.svg" alt="Project58" style={{ objectFit: "contain" }} />
+          </a>
         )}
 
         <div className="nav-center">
@@ -258,26 +284,26 @@ function Nav({ route, go }) {
             showProjectTitle
               ? <span className="nav-project-title">{pick(projectForRoute, "name")}</span>
               : (
-                <button className="nav-project-home" onClick={() => go({ name: "home" })} aria-label="Project58 home">
+                <a className="nav-project-home" href="/" onClick={goToReception} aria-label="Project58 home">
                   <img className="nav-project-logo" src="assets/logo-black.svg" alt="Project58" />
-                </button>
+                </a>
               )
           ) : (
             showCategoryBack ? (
-              <button className="nav-project-home nav-category-logo" onClick={() => go({ name: "home" })} aria-label="Project58 home">
+              <a className="nav-project-home nav-category-logo" href="/" onClick={goToReception} aria-label="Project58 home">
                 <img className="nav-project-logo" src="assets/logo-black.svg" alt="Project58" />
-              </button>
+              </a>
             ) : (
               <React.Fragment>
                 <button
                   className={`nav-link ${isProjects || isRetail || isResidential ? "active" : ""}`}
                   onClick={() => go({ name: "projects" })}>
-                  {t("projects")}
+                  <span data-p58-text={"projects"}>{t("projects")}</span>
                 </button>
                 <button
                   className={`nav-link ${isContact ? "active" : ""}`}
                   onClick={() => go({ name: "contact" })}>
-                  {t("contact")}
+                  <span data-p58-text={"contact"}>{t("contact")}</span>
                 </button>
               </React.Fragment>
             )
@@ -285,18 +311,7 @@ function Nav({ route, go }) {
         </div>
 
         <div className="nav-right">
-          {/* the language toggle sits in the header itself, not behind the menu;
-              on mobile the tab bar already carries one */}
-          {!isMobile ? (
-          <button
-            className="nav-language"
-            aria-label={t("switch_language")}
-            onClick={() => setLang(lang === "en" ? "gr" : "en")}>
-            <span className={lang === "en" ? "on" : ""}>EN</span>
-            <i>/</i>
-            <span className={lang === "gr" ? "on" : ""}>GR</span>
-          </button>
-          ) : null}
+          {(!isHome || !isMobile) && languageControl}
           <button className="nav-icon" aria-label={t("search")} onClick={() => setSearchOpen(true)}>
             <SearchIcon />
           </button>
@@ -367,12 +382,12 @@ function Nav({ route, go }) {
           return (
             <div className="nav-filter-row">
               <div className="interiors-filter">
-                <button className={`filter-btn ${!activeSub ? "on" : ""}`} onClick={() => go(keepSort({ name: "interiors" }))}>{t("all")}</button>
+                <button className={`filter-btn ${!activeSub ? "on" : ""}`} onClick={() => go(keepSort({ name: "interiors" }))}><span data-p58-text={"all"}>{t("all")}</span></button>
                 {window.siteSubcategories("retail").map((sub) => (
                   <button
                     key={sub.id}
                     className={`filter-btn ${activeSub && activeSub.id === sub.id ? "on" : ""}`}
-                    onClick={() => go(keepSort({ name: "interiors", brand: sub.id }))}>{sub.label}</button>
+                    onClick={() => go(keepSort({ name: "interiors", brand: sub.id }))}><span data-p58-text={window.siteContentKey("brand",sub.id,"label")}>{pick(sub,"label")}</span></button>
                 ))}
               </div>
               <ProjectSort route={route} go={go} />
@@ -382,27 +397,11 @@ function Nav({ route, go }) {
         {isArchitecture ? (
           <div className="nav-filter-row">
             <div className="interiors-filter">
-              <button className="filter-btn on" onClick={() => go(keepSort({ name: "architecture" }))}>{t("all")}</button>
+              <button className="filter-btn on" onClick={() => go(keepSort({ name: "architecture" }))}><span data-p58-text={"all"}>{t("all")}</span></button>
             </div>
             <ProjectSort route={route} go={go} />
           </div>
         ) : null}
-        {isProjects ? (() => {
-          const allProjectsView = route.view === "all";
-          const categories = window.siteCategories ? window.siteCategories() : [];
-          const categoryView = Boolean(route.type) || allProjectsView;
-          if (categoryView) return null;
-          return (
-            <div className="nav-filter-row">
-              <div className="project-filter-groups">
-                <div className="interiors-filter">
-                  <button className="filter-btn on" onClick={() => go({ name: "projects" })}>{t("categories_view")}</button>
-                  <button className="filter-btn" onClick={() => go(keepSort({ name: "projects", view: "all" }))}>{t("all_projects_view")}</button>
-                </div>
-              </div>
-            </div>
-          );
-        })() : null}
       </nav>
 
       {/* mobile fullscreen drawer */}
@@ -444,7 +443,7 @@ function Nav({ route, go }) {
 
       {searchOpen ? <SearchOverlay go={go} onClose={() => setSearchOpen(false)} /> : null}
 
-      {showTabBar ? <MobileTabBar route={route} go={go} onMore={() => setMenuOpen(true)} introHidden={isHome && atTop} /> : null}
+      {showTabBar ? <MobileTabBar route={route} go={go} onContact={goToProjectsContact} onMore={() => setMenuOpen(true)} introHidden={isHome && atTop} /> : null}
     </React.Fragment>);
 
 }
@@ -501,7 +500,7 @@ function ProjectSort({ route, go }) {
               role="option"
               aria-selected={key === active}
               onClick={() => choose(key)}>
-              <span>{t(orders[key].label)}</span>
+              <span><span data-p58-text={orders[key].label}>{t(orders[key].label)}</span></span>
               <i aria-hidden="true">✓</i>
             </button>
           ))}
@@ -546,9 +545,9 @@ function SearchOverlay({ go, onClose }) {
   const newsResults = (window.NEWS || []).slice(0, 3).map((item) => ({
     kind: "news",
     label: pick(item, "title"),
-    sub: `${item.date} · ${item.cat}`,
-    date: item.date,
-    category: item.cat,
+    sub: `${pick(item,"date")} · ${pick(item,"cat")}`,
+    date: pick(item,"date"),
+    category: pick(item,"cat"),
     onPick: () => go({ name: "agency" }, { scrollTo: ".agency-news-head" }),
   }));
 
@@ -669,7 +668,7 @@ function SearchOverlay({ go, onClose }) {
               ) : null}
             </React.Fragment>
           ) : filtered.length === 0 ?
-          <div className="spot-empty">{t("no_results")} "<em>{q}</em>"</div> :
+          <div className="spot-empty"><span data-p58-text={"no_results"}>{t("no_results")}</span> "<em>{q}</em>"</div> :
 
           groupOrder.map((g) => groups[g] && groups[g].length ?
           <div key={g} className="spot-group">
@@ -702,9 +701,9 @@ function SearchOverlay({ go, onClose }) {
         </div>
 
         <div className="spot-foot">
-          <span><kbd>↑</kbd><kbd>↓</kbd> {t("nav")}</span>
-          <span><kbd>↵</kbd> {t("open_kbd")}</span>
-          <span><kbd>esc</kbd> {t("close_kbd")}</span>
+          <span><kbd>↑</kbd><kbd>↓</kbd> <span data-p58-text={"nav"}>{t("nav")}</span></span>
+          <span><kbd>↵</kbd> <span data-p58-text={"open_kbd"}>{t("open_kbd")}</span></span>
+          <span><kbd>esc</kbd> <span data-p58-text={"close_kbd"}>{t("close_kbd")}</span></span>
         </div>
       </div>
     </div>);
@@ -729,18 +728,19 @@ function SandwichIcon({ open }) {
     </svg>);
 
 }
+function TabContactIcon({ on }) {
+  return <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={on ? "2" : "1.7"} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <path d="m3 6 9 7 9-7" />
+  </svg>;
+}
 function TabHomeIcon({ on }) {
-  return on ? (
-    <svg width="25" height="25" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1" strokeLinejoin="round">
-      <path d="M11.2 2.3a1.2 1.2 0 0 1 1.6 0l8 7.2c.4.36.2 1-.3 1-.5 0-.5.4-.5.9V20a1 1 0 0 1-1 1h-4.5a.5.5 0 0 1-.5-.5V15a1.5 1.5 0 0 0-1.5-1.5h-1A1.5 1.5 0 0 0 10 15v5.5a.5.5 0 0 1-.5.5H5a1 1 0 0 1-1-1v-8.6c0-.5 0-.9-.5-.9-.5 0-.7-.64-.3-1z" />
-    </svg>
-  ) : (
-    <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 11.3 12 4l8 7.3" />
-      <path d="M5.5 9.8V20h13V9.8" />
-      <path d="M10 20v-5.5h4V20" />
-    </svg>
-  );
+  if (on) return <svg width="25" height="25" viewBox="0 0 24 24" fill="#000" aria-hidden="true">
+    <path d="M12 2 2 10h3v11h5v-7h4v7h5V10h3Z" />
+  </svg>;
+  return <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="m3 10 9-7 9 7M5 9v12h14V9M9 21v-7h6v7" />
+  </svg>;
 }
 function TabProjectsIcon({ on }) {
   return on ? (
@@ -783,10 +783,10 @@ function TabMoreIcon() {
   );
 }
 
-function MobileTabBar({ route, go, onMore, introHidden = false }) {
+function MobileTabBar({ route, go, onContact, onMore, introHidden = false }) {
   const t = window.useT();
-  const { lang, setLang } = window.useLang();
   const isHome = route.name === "home";
+  const isContact = route.name === "contact";
   const isProjects = route.name === "projects" || route.name === "interiors" || route.name === "architecture";
   return (
     <nav
@@ -794,34 +794,17 @@ function MobileTabBar({ route, go, onMore, introHidden = false }) {
       aria-label={t("primary_navigation")}
       aria-hidden={introHidden ? "true" : undefined}
       inert={introHidden ? true : undefined}>
-      <button
-        className={`mobile-tab ${isHome ? "on" : ""}`}
-        type="button"
-        aria-label={t("home")}
-        aria-current={isHome ? "page" : undefined}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          go({ name: "home" });
-        }}>
+      <button className={`mobile-tab ${isHome ? "on" : ""}`} type="button" aria-label={t("home")} aria-current={isHome ? "page" : undefined} onClick={() => go({ name: "home" })}>
         <TabHomeIcon on={isHome} />
         <span data-p58-text="home">{t("home")}</span>
-      </button>
-      <button
-        className="mobile-tab mobile-tab-language"
-        type="button"
-        aria-label={`${t("language")}: ${lang.toUpperCase()}. ${t("switch_language")}`}
-        onClick={() => setLang(lang === "en" ? "gr" : "en")}>
-        <span className="mobile-language-value" aria-hidden="true">
-          <b className={lang === "en" ? "on" : ""}>EN</b>
-          <i>/</i>
-          <b className={lang === "gr" ? "on" : ""}>GR</b>
-        </span>
-        <span data-p58-text="language">{t("language")}</span>
       </button>
       <button className={`mobile-tab ${isProjects ? "on" : ""}`} aria-label={t("projects")} aria-current={isProjects ? "page" : undefined} onClick={() => go({ name: "projects" })}>
         <TabProjectsIcon on={isProjects} />
         <span data-p58-text="projects">{t("projects")}</span>
+      </button>
+      <button className={`mobile-tab ${isContact ? "on" : ""}`} type="button" aria-label={t("contact")} aria-current={isContact ? "page" : undefined} onClick={onContact}>
+        <TabContactIcon on={isContact} />
+        <span data-p58-text="contact">{t("contact")}</span>
       </button>
       <button className="mobile-tab" aria-label={t("more")} aria-haspopup="dialog" onClick={onMore}>
         <TabMoreIcon />
@@ -855,23 +838,21 @@ function KindIcon({ kind }) {
 /* Read dashboard-editable site settings from the same store the dashboard writes to.
    Falls back to sensible defaults so the footer always renders. */
 function useSiteSettings() {
-  const [site, setSite] = useState(() => {
-    const raw = window.readP58Store ? window.readP58Store() : null;
-    if (raw && raw.site) return window.normaliseSiteSettings ? window.normaliseSiteSettings(raw.site) : raw.site;
-    return null;
-  });
+  const read = () => window.normaliseSiteSettings(window.readP58Store?.()?.site || {});
+  const [site, setSite] = useState(read);
   useEffect(() => {
-    const onStorage = (e) => {
-      if (e.key !== "p58_data_v1") return;
-      try {
-        const raw = JSON.parse(e.newValue || "null");
-        setSite(raw && raw.site ? (window.normaliseSiteSettings ? window.normaliseSiteSettings(raw.site) : raw.site) : null);
-      } catch (err) {}
+    let active = true;
+    const refresh = () => {if(active)setSite(read());};
+    const onStorage = event => {
+      if (event.key === 'p58_published_at') window.loadRemoteContent?.().then(refresh);
+      else if (event.key === 'p58_data_v1') refresh();
     };
-    window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    window.P58_CONTENT_READY?.then(refresh);
+    window.addEventListener('storage',onStorage);
+    window.addEventListener('p58:visual-content',refresh);
+    return () => {active=false;window.removeEventListener('storage',onStorage);window.removeEventListener('p58:visual-content',refresh);};
   }, []);
-  return window.normaliseSiteSettings ? window.normaliseSiteSettings(site || window.DEFAULT_SITE_SETTINGS || {}) : site || {};
+  return site;
 }
 
 function ContactItem({ href, children }) {
@@ -890,26 +871,26 @@ function Footer({ go }) {
   const { lang } = window.useLang();
   const site = useSiteSettings();
   const contact = site.contact || {};
-  const contactCopy = (key) => lang === "gr" ? (contact[`${key}_gr`] || contact[key] || "") : (contact[key] || "");
+  const contactCopy = (key) => lang === "gr" ? (contact[`${key}_gr`] ?? contact[key] ?? "") : (contact[key] ?? "");
   return (
     <footer className="foot">
       <div className="foot-top foot-top-2col" style={{ padding: "0px", textAlign: "left" }}>
         <div className="foot-big">
           <img src="assets/logo-black.svg" alt="Project58" className="foot-logo" style={{ height: 28, marginBottom: 24, display: "block", filter: "invert(1)" }} />
-          {t("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }} data-p58-text="foot_big_em">{t("foot_big_em")}</em>
+          <span data-p58-text={"foot_big"}>{t("foot_big")}</span> <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }} data-p58-text="foot_big_em">{t("foot_big_em")}</em>
           <div className="foot-cta foot-cta-center">
-            <button className="foot-start-btn" onClick={() => go({ name: "start" })}>{t("foot_meet")}<span className="ar">→</span></button>
+            <button className="foot-start-btn" onClick={() => go({ name: "start" })}><span data-p58-text={"foot_meet"}>{t("foot_meet")}</span><span className="ar">→</span></button>
           </div>
         </div>
         <div className="foot-col foot-col-split">
           <div>
-            <h4>{contactCopy("location_label")}</h4>
-            <p><ContactItem href={contact.address_url}>{contactCopy("address")}</ContactItem></p>
-            <p style={{ marginTop: 8 }}><ContactItem href={contact.phone_url}>{contact.phone}</ContactItem></p>
+            <h4><span data-p58-text={window.siteContentKey("contact","footer","location_label")}>{contactCopy("location_label")}</span></h4>
+            <p><ContactItem href={contact.address_url}><span data-p58-text={window.siteContentKey("contact","footer","address")}>{contactCopy("address")}</span></ContactItem></p>
+            <p style={{ marginTop: 8 }}><ContactItem href={contact.phone_url}><span data-p58-text={window.siteContentKey("contact","footer","phone")}>{contactCopy("phone")}</span></ContactItem></p>
           </div>
           <div className="foot-col-b">
-            <p><ContactItem href={contact.email_url}>{contact.email}</ContactItem></p>
-            <p style={{ marginTop: 14 }}><ContactItem href={contact.instagram_url}>{contactCopy("instagram_text")}</ContactItem></p>
+            <p><ContactItem href={contact.email_url}><span data-p58-text={window.siteContentKey("contact","footer","email")}>{contactCopy("email")}</span></ContactItem></p>
+            <p style={{ marginTop: 14 }}><ContactItem href={contact.instagram_url}><span data-p58-text={window.siteContentKey("contact","footer","instagram_text")}>{contactCopy("instagram_text")}</span></ContactItem></p>
           </div>
         </div>
       </div>
@@ -927,25 +908,25 @@ function ContactPage({ go }) {
   const { lang } = window.useLang();
   const site = useSiteSettings();
   const contact = site.contact || {};
-  const contactCopy = (key) => lang === "gr" ? (contact[`${key}_gr`] || contact[key] || "") : (contact[key] || "");
+  const contactCopy = (key) => lang === "gr" ? (contact[`${key}_gr`] ?? contact[key] ?? "") : (contact[key] ?? "");
   return (
     <div className="contact-page page-enter">
       <div className="foot-top foot-top-2col" style={{ padding: "0px", textAlign: "left" }}>
         <div className="foot-big">
-          {t("foot_big")} <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }} data-p58-text="foot_big_em">{t("foot_big_em")}</em>
+          <span data-p58-text={"foot_big"}>{t("foot_big")}</span> <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }} data-p58-text="foot_big_em">{t("foot_big_em")}</em>
           <div className="foot-cta foot-cta-center">
-            <button className="foot-start-btn" onClick={() => go({ name: "start" })}>{t("foot_meet")}<span className="ar">→</span></button>
+            <button className="foot-start-btn" onClick={() => go({ name: "start" })}><span data-p58-text={"foot_meet"}>{t("foot_meet")}</span><span className="ar">→</span></button>
           </div>
         </div>
         <div className="foot-col foot-col-split">
           <div>
-            <h4>{contactCopy("location_label")}</h4>
-            <p><ContactItem href={contact.address_url}>{contactCopy("address")}</ContactItem></p>
-            <p style={{ marginTop: 8 }}><ContactItem href={contact.phone_url}>{contact.phone}</ContactItem></p>
+            <h4><span data-p58-text={window.siteContentKey("contact","footer","location_label")}>{contactCopy("location_label")}</span></h4>
+            <p><ContactItem href={contact.address_url}><span data-p58-text={window.siteContentKey("contact","footer","address")}>{contactCopy("address")}</span></ContactItem></p>
+            <p style={{ marginTop: 8 }}><ContactItem href={contact.phone_url}><span data-p58-text={window.siteContentKey("contact","footer","phone")}>{contactCopy("phone")}</span></ContactItem></p>
           </div>
           <div className="foot-col-b">
-            <p><ContactItem href={contact.email_url}>{contact.email}</ContactItem></p>
-            <p style={{ marginTop: 14 }}><ContactItem href={contact.instagram_url}>{contactCopy("instagram_text")}</ContactItem></p>
+            <p><ContactItem href={contact.email_url}><span data-p58-text={window.siteContentKey("contact","footer","email")}>{contactCopy("email")}</span></ContactItem></p>
+            <p style={{ marginTop: 14 }}><ContactItem href={contact.instagram_url}><span data-p58-text={window.siteContentKey("contact","footer","instagram_text")}>{contactCopy("instagram_text")}</span></ContactItem></p>
           </div>
         </div>
       </div>
@@ -960,13 +941,12 @@ function ContactPage({ go }) {
 /* ===== Project inquiry form ===== */
 const INQUIRY_STORE_KEY = "p58_inquiries_v1";
 
-function saveInquiry(inquiry) {
-  try {
-    const list = JSON.parse(localStorage.getItem(INQUIRY_STORE_KEY) || "[]");
-    list.unshift(inquiry);
-    localStorage.setItem(INQUIRY_STORE_KEY, JSON.stringify(list));
-    return true;
-  } catch (e) { return false; }
+async function saveInquiry(inquiry) {
+  const response = await fetch('/api/inquiries', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(inquiry),
+  });
+  if (!response.ok) throw new Error('Could not send your inquiry. Please try again. / Η αποστολή απέτυχε. Δοκιμάστε ξανά.');
+  return response.json();
 }
 
 async function notifyInquiry(inquiry) {
@@ -1020,7 +1000,7 @@ function StartProjectPage({ go }) {
   const [f, setF] = useState(() => Object.fromEntries(questions.map((question) => [question.id, ""])));
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
   const onClose = () => go({ name: "contact" });
-  const localText = (item, field) => lang === "gr" ? (item[`${field}_gr`] || item[field] || "") : (item[field] || "");
+  const localText = (item, field) => lang === "gr" ? (item[`${field}_gr`] ?? item[field] ?? "") : (item[field] ?? "");
 
   useEffect(() => {
     setF((current) => ({ ...Object.fromEntries(questions.map((question) => [question.id, ""])), ...current }));
@@ -1048,10 +1028,13 @@ function StartProjectPage({ go }) {
       answers: Object.fromEntries(questions.map((question) => [question.id, f[question.id] || ""])),
       questionLabels: Object.fromEntries(questions.map((question) => [question.id, localText(question, "label")])),
     };
-    saveInquiry(inquiry);
-    await notifyInquiry(inquiry);
-    setSending(false);
-    setDone(true);
+    try {
+      await saveInquiry(inquiry);
+      await notifyInquiry(inquiry);
+      setDone(true);
+    } catch (error) {
+      alert(error.message);
+    } finally { setSending(false); }
   };
 
   const renderQuestion = (question) => {
@@ -1059,24 +1042,24 @@ function StartProjectPage({ go }) {
     const questionLabel = localText(question, "label");
     const questionPlaceholder = localText(question, "placeholder");
     const questionOptions = lang === "gr" ? (question.options_gr || question.options || []) : (question.options || []);
-    const label = <span className="inquiry-question-label">{questionLabel}{question.required ? <b> *</b> : null}</span>;
+    const label = <span className="inquiry-question-label"><span data-p58-text={window.siteContentKey("question",question.id,"label")}>{questionLabel}</span>{question.required ? <b> *</b> : null}</span>;
     if (question.type === "buttons") {
       return (
         <div className="inquiry-question" key={question.id}>
           {label}
           <div className="inquiry-types">
-            {questionOptions.map((option) => <button type="button" key={option} className={`inquiry-type ${value === option ? "on" : ""}`} onClick={() => set(question.id, option)}>{option}</button>)}
+            {questionOptions.map((option,optionIndex) => <button type="button" key={option} className={`inquiry-type ${value === option ? "on" : ""}`} onClick={() => set(question.id, option)}><span data-p58-text={window.siteContentKey("option",question.id,String(optionIndex))}>{option}</span></button>)}
           </div>
         </div>
       );
     }
     if (question.type === "select") {
-      return <label key={question.id}>{label}<select value={value} required={question.required} onChange={(event) => set(question.id, event.target.value)}><option value="">{lang === "gr" ? "Επιλέξτε…" : "Select…"}</option>{questionOptions.map((option) => <option key={option} value={option}>{option}</option>)}</select></label>;
+      return <label key={question.id}>{label}<select value={value} required={question.required} onChange={(event) => set(question.id, event.target.value)}><option value="" data-p58-text="inquiry_select">{t("inquiry_select")}</option>{questionOptions.map((option,index) => <option key={option} value={option} data-p58-text={window.siteContentKey("option",question.id,String(index))}>{option}</option>)}</select></label>;
     }
     if (question.type === "textarea") {
-      return <label key={question.id}>{label}<textarea rows="4" value={value} required={question.required} onChange={(event) => set(question.id, event.target.value)} placeholder={questionPlaceholder} /></label>;
+      return <label key={question.id}>{label}<textarea rows="4" value={value} required={question.required} onChange={(event) => set(question.id, event.target.value)} data-p58-placeholder={window.siteContentKey("question",question.id,"placeholder")} placeholder={questionPlaceholder} /></label>;
     }
-    return <label key={question.id}>{label}<input type={question.type === "email" ? "email" : question.type === "tel" ? "tel" : "text"} value={value} required={question.required} onChange={(event) => set(question.id, event.target.value)} placeholder={questionPlaceholder} /></label>;
+    return <label key={question.id}>{label}<input type={question.type === "email" ? "email" : question.type === "tel" ? "tel" : "text"} value={value} required={question.required} onChange={(event) => set(question.id, event.target.value)} data-p58-placeholder={window.siteContentKey("question",question.id,"placeholder")} placeholder={questionPlaceholder} /></label>;
   };
 
   const body = done ? (
@@ -1085,7 +1068,7 @@ function StartProjectPage({ go }) {
       <h2 data-p58-text="inquiry_success_title">{t("inquiry_success_title")}</h2>
       <p data-p58-text="inquiry_success_body">{t("inquiry_success_body")}</p>
       {phone ? (
-        <p className="inquiry-call">{t("inquiry_call")} <a href={phoneUrl}>{phone}</a>.</p>
+        <p className="inquiry-call"><span data-p58-text={"inquiry_call"}>{t("inquiry_call")}</span> <a href={phoneUrl}>{phone}</a>.</p>
       ) : null}
       <button className="inquiry-btn primary" onClick={onClose} data-p58-text="inquiry_close">{t("inquiry_close")}</button>
     </div>
@@ -1096,7 +1079,7 @@ function StartProjectPage({ go }) {
       <p className="inquiry-intro-body" data-p58-text="inquiry_intro_body">{t("inquiry_intro_body")}</p>
       <div className="inquiry-nav">
         <span />
-        <button className="inquiry-btn primary" onClick={() => setIntro(false)}>{t("inquiry_intro_cta")}</button>
+        <button className="inquiry-btn primary" onClick={() => setIntro(false)}><span data-p58-text={"inquiry_intro_cta"}>{t("inquiry_intro_cta")}</span></button>
       </div>
     </div>
   ) : (
@@ -1104,14 +1087,14 @@ function StartProjectPage({ go }) {
       <div className="inquiry-progress">
         {steps.map((s, i) => <span key={i} className={`inquiry-dot ${i === step ? "on" : ""} ${i < step ? "done" : ""}`} />)}
       </div>
-      <div className="inquiry-step-kind">{t("inquiry_step")} {step + 1} {t("inquiry_of")} {steps.length}</div>
-      <h2 className="inquiry-title">{activeStep ? activeStep.title : t("inquiry_title")}</h2>
+      <div className="inquiry-step-kind"><span data-p58-text={"inquiry_step"}>{t("inquiry_step")}</span> {step + 1} <span data-p58-text={"inquiry_of"}>{t("inquiry_of")}</span> {steps.length}</div>
+      <h2 className="inquiry-title" data-p58-text={activeStep ? window.siteContentKey("form-group",activeStep.id,"title") : "inquiry_title"}>{activeStep ? activeStep.title : t("inquiry_title")}</h2>
       <div className="inquiry-fields inquiry-dynamic-fields">{activeStep ? activeStep.questions.map(renderQuestion) : <p data-p58-text="inquiry_empty">{t("inquiry_empty")}</p>}</div>
 
       <div className="inquiry-nav">
-        <button className="inquiry-btn ghost" onClick={() => (step > 0 ? setStep(step - 1) : setIntro(true))}>{t("inquiry_back")}</button>
+        <button className="inquiry-btn ghost" onClick={() => (step > 0 ? setStep(step - 1) : setIntro(true))}><span data-p58-text={"inquiry_back"}>{t("inquiry_back")}</span></button>
         {step < last
-          ? <button className="inquiry-btn primary" onClick={() => canNext && setStep(step + 1)} disabled={!canNext}>{t("inquiry_continue")}</button>
+          ? <button className="inquiry-btn primary" onClick={() => canNext && setStep(step + 1)} disabled={!canNext}><span data-p58-text={"inquiry_continue"}>{t("inquiry_continue")}</span></button>
           : <button className="inquiry-btn primary" onClick={submit} disabled={!canNext || sending}>{sending ? t("inquiry_sending") : t("inquiry_send")}</button>}
       </div>
     </React.Fragment>

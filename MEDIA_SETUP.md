@@ -1,3 +1,5 @@
+> Firestore now stores content, media metadata and newly uploaded file bytes without Firebase Storage billing. See [FIREBASE_SETUP.md](FIREBASE_SETUP.md) for current setup and migration. The instructions below describe the legacy deployment.
+
 # Media library — setup
 
 The Media section of the dashboard stores images in **Vercel Blob** instead of

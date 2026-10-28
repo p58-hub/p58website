@@ -125,6 +125,12 @@ function useHorizontalRail(options) {
     ref,
     progress,
     nudge,
+    scrollTo: (left, behavior = 'smooth') => {
+      if (!ref.current) return;
+      if (animRef.current) { clearInterval(animRef.current); animRef.current = null; }
+      targetX.current = clampTarget(left);
+      ref.current.scrollTo({left:targetX.current, behavior});
+    },
     save: () => { if (ref.current) sessionStorage.setItem(storageKey, ref.current.scrollLeft); },
     scrollLeft: () => (ref.current ? ref.current.scrollLeft : 0),
   };

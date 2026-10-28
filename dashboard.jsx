@@ -1,21 +1,13 @@
 // =========================================================
 // Project58 Dashboard — content admin
 // =========================================================
-// Manages Projects / News / Team. Every change is written
-// twice: to localStorage under "p58_data_v1" straight away,
-// and then to /api/content, which is the copy the live site
-// serves to everyone else.
-//
-// The local write is what makes editing feel instant and
-// survive a closed tab; the publish is what makes the edit
-// real. Without a Blob store linked only the first happens,
-// which is the old behaviour — edits visible in this browser
-// alone. See MEDIA_SETUP.md.
-// =========================================================
+// Firebase stores shared drafts, published content, media and inquiries.
+// localStorage is a recovery cache; publishing is explicit. See FIREBASE_SETUP.md.
 
 const { useState, useEffect, useMemo, useRef, Fragment } = React;
 
 const STORE_KEY = "p58_data_v1";
+const PENDING_DRAFT_KEY = "p58_pending_draft_v1";
 const INQUIRY_STORE_KEY = "p58_inquiries_v1";
 const PROJECT_PREVIEW_PREFIX = "p58_project_preview_v1:";
 const GALLERY_VIEW_KEY = "p58_gallery_view";
@@ -49,6 +41,7 @@ const normaliseSubcategories = (subs) => (Array.isArray(subs) ? subs : [])
       // The badge this brand shows beside its projects. Empty means the
       // lettered monogram, which is also the fallback for a broken URL.
       icon: (s && s.icon) || "",
+      ...window.normaliseBrandPresentation(s),
     };
   })
   .filter((s) => s.label)
@@ -58,7 +51,7 @@ const normaliseCategories = (items) => {
   return source
     .map((c, order) => ({
       id: c.id || slugifyId(c.label) || newId("cat"),
-      label: c.label || c.id || "Category",
+      label: c.label || c.id || "Κατηγορία",
       label_gr: c.label_gr || c.label || c.id || "Κατηγορία",
       description: c.description || "",
       description_gr: c.description_gr || c.description || "",
@@ -135,49 +128,60 @@ const load = () => {
   return seed();
 };
 
-/* What the site is currently showing everyone. Resolves null when there is
-   nothing published yet, no Blob store, or no API at all. */
-const fetchPublished = () =>
-  fetch("/api/content?t=" + Date.now(), { credentials: "same-origin", cache: "no-store" })
-    .then((res) => (res.ok ? res.json() : null))
-    .then((body) => (body && body.content ? normaliseStored(body.content) : null))
-    .catch(() => null);
-
-const persist = (data) => {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); }
-  catch (e) { alert("Couldn't save — localStorage is full. Try removing some images."); }
+const fetchStoredContent = async (draft = false) => {
+  const res = await fetch('/api/content?' + (draft ? 'draft=1&' : '') + 't=' + Date.now(), { credentials: 'same-origin', cache: 'no-store' });
+  if (!res.ok) throw new Error('Δεν ήταν δυνατή η φόρτωση. Ανανέωσε πριν επεξεργαστείς το περιεχόμενο.');
+  let body;
+  try { body = await res.json(); }
+  catch { throw new Error('Το API περιεχομένου δεν είναι διαθέσιμο εδώ. Στην τοπική προεπισκόπηση χωρίς backend δεν γίνεται αποθήκευση ή δημοσίευση στο cloud.'); }
+  return body.content ? normaliseStored(body.content) : null;
 };
-
-/* Publishing is what makes an edit visible to anyone other than this browser.
-   localStorage above stays the immediate, offline-safe copy; this uploads the
-   same document to /api/content, which the live site reads.
-
-   Resolves "unconfigured" rather than throwing when no Blob store is linked —
-   that is a setup state, not an error, and the old localStorage-only
-   behaviour is still perfectly usable in it. */
-const publishContent = (data) =>
-  fetch("/api/content", {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    credentials: "same-origin",
+const fetchPublished = () => fetchStoredContent();
+const persist = (data) => {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(data)); } catch (e) { /* Firebase is the durable copy. */ }
+};
+const saveCloudContent = async (data, draft = false) => {
+  const res = await fetch('/api/content' + (draft ? '?draft=1' : ''), {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
     body: JSON.stringify({ content: data }),
-  })
-    .then((res) => {
-      if (res.ok) return "published";
-      // 503 is "no Blob store linked"; the rest are what a deployment with no
-      // /api at all answers, such as the static local preview. None of them
-      // are failures worth alarming about — the local save still stands.
-      if ([503, 404, 405, 501].includes(res.status)) return "unconfigured";
-      if (res.status === 401) throw new Error("Session expired — sign in again to publish");
-      return res.json().catch(() => null).then((body) => {
-        throw new Error((body && body.message) || "Couldn't publish (" + res.status + ")");
-      });
-    })
-    // A rejected fetch means offline or no server answering — same story.
-    .catch((err) => {
-      if (err instanceof TypeError) return "unconfigured";
-      throw err;
-    });
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    throw new Error(body?.message || 'Η αποθήκευση απέτυχε. Οι αλλαγές παραμένουν στη συσκευή σου. Δοκίμασε ξανά.');
+  }
+  return 'published';
+};
+const publishContent = (data) => saveCloudContent(data);
+// Keep recovery data until the matching cloud write succeeds, even across reloads.
+let pendingDraftContent = null;
+function rememberPendingDraft(data) {
+  pendingDraftContent = JSON.stringify(data);
+  try {
+    localStorage.setItem(STORE_KEY, pendingDraftContent);
+    localStorage.setItem(PENDING_DRAFT_KEY, '1');
+  } catch (error) { /* beforeunload still protects unsaved in-memory changes. */ }
+}
+function readPendingDraft() {
+  try {
+    return localStorage.getItem(PENDING_DRAFT_KEY)
+      ? normaliseStored(JSON.parse(localStorage.getItem(STORE_KEY) || 'null')) : null;
+  } catch (error) { return null; }
+}
+function acknowledgeDraft(data) {
+  const serialized = JSON.stringify(data);
+  if (pendingDraftContent === serialized) pendingDraftContent = null;
+  try {
+    if (localStorage.getItem(STORE_KEY) === serialized) localStorage.removeItem(PENDING_DRAFT_KEY);
+  } catch (error) {}
+}
+let draftSaveQueue = Promise.resolve();
+const saveDraft = (data) => {
+  draftSaveQueue = draftSaveQueue.catch(() => {}).then(() => saveCloudContent(data, true)).then(result => {
+    acknowledgeDraft(data);
+    return result;
+  });
+  return draftSaveQueue;
+};
 
 const newId = (prefix) => prefix + "-" + Math.random().toString(36).slice(2, 8);
 const slugify = (value) => String(value || "")
@@ -188,24 +192,46 @@ const slugify = (value) => String(value || "")
   .replace(/^-+|-+$/g, "");
 const descriptiveProjectSlug = window.projectSlugFromFields || ((project) => slugify([project.name, project.location].filter(Boolean).join(" ")));
 
-/* ---------- Icons ---------- */
-const Ic = {
-  plus:   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><line x1="7" y1="2" x2="7" y2="12"/><line x1="2" y1="7" x2="12" y2="7"/></svg>,
-  trash:  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"><path d="M3 4l.6 8.2A1 1 0 0 0 4.6 13h4.8a1 1 0 0 0 1-0.8L11 4"/><line x1="2" y1="4" x2="12" y2="4"/><path d="M5.5 4V2.5a1 1 0 0 1 1-1h1a1 1 0 0 1 1 1V4"/></svg>,
-  upload: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M7 9V2M4 5l3-3 3 3"/><path d="M2 9v2.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V9"/></svg>,
-  download: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M7 2v7M4 6l3 3 3-3"/><path d="M2 9v2.5a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V9"/></svg>,
-  external: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M5 2H2v10h10V9"/><path d="M8 2h4v4M12 2L7 7"/></svg>,
-  reset: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M2 7a5 5 0 1 0 1.5-3.5"/><path d="M2 2v3h3"/></svg>,
-  close: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><line x1="3" y1="3" x2="11" y2="11"/><line x1="11" y1="3" x2="3" y2="11"/></svg>,
-  grip: <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><circle cx="5" cy="3" r="1.15"/><circle cx="9" cy="3" r="1.15"/><circle cx="5" cy="7" r="1.15"/><circle cx="9" cy="7" r="1.15"/><circle cx="5" cy="11" r="1.15"/><circle cx="9" cy="11" r="1.15"/></svg>,
-  grid: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="1.75" y="1.75" width="4" height="4" rx="1"/><rect x="8.25" y="1.75" width="4" height="4" rx="1"/><rect x="1.75" y="8.25" width="4" height="4" rx="1"/><rect x="8.25" y="8.25" width="4" height="4" rx="1"/></svg>,
-  rows: <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"><line x1="2" y1="3.5" x2="12" y2="3.5"/><line x1="2" y1="7" x2="12" y2="7"/><line x1="2" y1="10.5" x2="12" y2="10.5"/></svg>,
-};
+/* Shared 24px SVG geometry, matching the public site's navigation. */
+function DashboardIcon({ name, size = 20, active = false }) {
+  const shapes = {
+    home: <path d="m3 10 9-7 9 7M5 9v12h14V9M9 21v-7h6v7" />,
+    projects: <><rect x="3" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.6"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.6"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.6"/></>,
+    website: <><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 8h18M8 8v13M12 12h5M12 16h5"/></>,
+    inbox: <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/></>,
+    sidebar: <><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18m7-12-3 3 3 3"/></>,
+    sidebarOpen: <><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18m4-12 3 3-3 3"/></>,
+    settings: <><path d="M4 6h6m4 0h6M4 12h2m4 0h10M4 18h10m4 0h2"/><circle cx="12" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></>,
+    plus: <path d="M12 4v16M4 12h16"/>,
+    trash: <><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"/></>,
+    upload: <><path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6"/></>,
+    download: <><path d="M12 3v13m-5-5 5 5 5-5M4 15v6h16v-6"/></>,
+    external: <><path d="M9 4H4v16h16v-5M14 4h6v6M20 4 10 14"/></>,
+    reset: <><path d="M4 10a8 8 0 1 1 1 7M4 4v6h6"/></>,
+    close: <path d="m6 6 12 12M18 6 6 18"/>,
+    grip: <>{[5,12,19].map(y => <React.Fragment key={y}><circle cx="9" cy={y} r="1"/><circle cx="15" cy={y} r="1"/></React.Fragment>)}</>,
+    grid: <><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></>,
+    rows: <path d="M4 6h16M4 12h16M4 18h16"/>,
+    arrowRight: <path d="M4 12h16m-6-6 6 6-6 6"/>,
+    arrowUp: <path d="M12 20V4m-6 6 6-6 6 6"/>,
+    arrowDown: <path d="M12 4v16m-6-6 6 6 6-6"/>,
+    check: <path d="m5 12 4 4L19 6"/>,
+    collapse: <><path d="M4 12h16m-12-8 4 4 4-4m-8 16 4-4 4 4"/></>,
+    expand: <><path d="M4 12h16m-12-5 4-4 4 4m-8 10 4 4 4-4"/></>,
+  };
+  const solidHome = active && name === 'home';
+  const solidGrid = active && name === 'projects';
+  return <svg className="dashboard-icon" width={size} height={size} viewBox="0 0 24 24" fill={solidHome || solidGrid ? 'currentColor' : 'none'} stroke={solidHome || solidGrid ? 'none' : 'currentColor'} strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+    {solidHome ? <path d="M12 2 2 10h3v11h5v-7h4v7h5V10h3Z"/> : shapes[name] || shapes.grid}
+  </svg>;
+}
+window.P58DashboardIcon = DashboardIcon;
+const Ic = Object.fromEntries(['plus','trash','upload','download','external','reset','close','grip','grid','rows','arrowRight','arrowUp','arrowDown','check'].map(name => [name, <DashboardIcon key={name} name={name} size={16}/>]));
 
 /* ============================================================
    MEDIA LIBRARY — client for /api/media
    ------------------------------------------------------------
-   Images live in Vercel Blob, not localStorage. The library keeps
+   Images and their metadata live in Firestore, not localStorage. The library keeps
    the assignment (which project an image belongs to) server-side,
    so "backlog" is just projectId === null.
    ============================================================ */
@@ -462,6 +488,27 @@ function projectMediaUrls(project) {
   return urls.filter((u) => typeof u === "string" && u && !u.startsWith("data:"));
 }
 
+function projectGalleryHasMedia(project, item) {
+  return Boolean(project && item && (project.gallery || []).some(image =>
+    image && item.url && image.src === item.url
+  ));
+}
+
+// Gallery membership is the Active state, so editing either view stays in sync.
+function setProjectMediaActive(content, item, active) {
+  if (!item?.url || !item.projectId || item.kind === "icon" || item.kind === "logo") return content;
+  let changed = false;
+  const projects = content.projects.map(project => {
+    if (project.id !== item.projectId || projectGalleryHasMedia(project, item) === active) return project;
+    changed = true;
+    const gallery = project.gallery || [];
+    return { ...project, gallery: active
+      ? [...gallery, { src: item.url, tag: item.caption || "", tag_gr: "", span: "gal-6" }]
+      : gallery.filter(image => image?.src !== item.url) };
+  });
+  return changed ? { ...content, projects } : content;
+}
+
 /* Using a file in a project takes it out of the backlog. Only unassigned
    items are claimed, so a file already filed under another project stays
    where it is rather than being pulled back and forth. */
@@ -508,23 +555,42 @@ function normaliseMediaFilename(filename) {
 /* ============================================================
    ROOT APP
    ============================================================ */
+function dashboardNavigation(can) {
+  return [
+    { id: "home", label: "Αρχική", icon: "home", sections: [{ id: "overview", label: "Αρχική" }] },
+    { id: "projects", label: "Έργα", icon: "projects", sections: [{ id: "projects", label: "Όλα τα έργα" }, { id: "categories", label: "Κατηγορίες" }, { id: "media", label: "Αρχεία" }, { id: "texts", label: "Μαζική επεξεργασία κειμένων" }] },
+    { id: "website", label: "Περιεχόμενο ιστοσελίδας", mobileLabel: "Ιστοσελίδα", icon: "website", sections: [{ id: "website-texts", label: "Κείμενα", capability: "siteSettings" }, { id: "hero", label: "Εικόνες αρχικής", capability: "heroGallery" }, { id: "v2", label: "Ενότητες αρχικής", capability: "siteSettings" }, { id: "team", label: "Ομάδα" }, { id: "news", label: "Νέα & δημοσιεύσεις" }] },
+    { id: "inbox", label: "Μηνύματα", icon: "inbox", sections: [{ id: "inquiries", label: "Μηνύματα" }] },
+    { id: "settings", label: "Ρυθμίσεις", icon: "settings", sections: [{ id: "site", label: "Γενικά", capability: "siteSettings" }, { id: "member-cards", label: "Ομάδα & κάρτες μελών" }, { id: "inquiry-form", label: "Φόρμα επικοινωνίας", capability: "siteSettings" }, { id: "maintenance", label: "Προχωρημένα", capability: "resetData" }] },
+  ].map(group => ({ ...group, sections: group.sections.filter(item => !item.capability || can(item.capability)) })).filter(group => group.sections.length);
+}
+
 function App({ session }) {
   const user = session.user;
   const can = (capability) => window.P58Auth.can(user, capability);
 
   const [data, setData] = useState(load);
-  const [section, setSection] = useState("overview");
-  const [textsProject, setTextsProject] = useState("all");
+  const [section, setSection] = useState(location.hash === "#member-cards" ? "member-cards" : "overview");
+  const [cardDirty, setCardDirty] = useState(false);
   const [editing, setEditing] = useState(null); // { kind, id|null }
   const [toast, setToast] = useState(null);
   const [dirty, setDirty] = useState(false);
-  const [inquiries, setInquiries] = useState(() => { try { return JSON.parse(localStorage.getItem(INQUIRY_STORE_KEY) || "[]"); } catch (e) { return []; } });
+  const [draftState, setDraftState] = useState("loading");
+  const [draftAttempt, setDraftAttempt] = useState(0);
+  const [inquiries, setInquiries] = useState([]);
   const [viewInquiry, setViewInquiry] = useState(null);
   const [sideOpen, setSideOpen] = useState(false);
+  const [sidebarHidden, setSidebarHidden] = useState(() => {
+    try { return localStorage.getItem("p58_dashboard_sidebar_hidden") === "true"; } catch { return false; }
+  });
+  const toggleSidebar = () => setSidebarHidden(hidden => {
+    const next = !hidden;
+    try { localStorage.setItem("p58_dashboard_sidebar_hidden", String(next)); } catch {}
+    return next;
+  });
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef(null);
-  const goSection = (s) => { setSection(s); setSideOpen(false); };
-  const goProjectTexts = (id = "all") => { setTextsProject(id); setEditing(null); goSection("texts"); };
+  const goSection = (s) => { if (s !== section && cardDirty && !window.confirm("Υπάρχουν μη αποθηκευμένες αλλαγές στην κάρτα. Να φύγω από τις κάρτες μελών;")) return; setSection(s); setSideOpen(false); };
 
   useEffect(() => {
     if (!accountOpen) return undefined;
@@ -601,11 +667,19 @@ function App({ session }) {
     publishState.status === "error";
 
   const runPublish = (payload) => {
-    setPublishState({ status: "busy", message: "Publishing…" });
+    if (publishedCheck !== 'connected') {
+      const error = new Error('Ανανέωσε τη σελίδα για να συνδεθείς πριν από τη δημοσίευση.');
+      setPublishState({ status: 'error', message: error.message });
+      return Promise.reject(error);
+    }
+    setPublishState({ status: "busy", message: "Δημοσίευση…" });
     return publishContent(payload)
       .then((result) => {
         const ok = result === "published";
-        if (ok) setPublishedSnapshot(payload);
+        if (ok) {
+          setPublishedSnapshot(payload);
+          try { localStorage.setItem('p58_published_at', String(Date.now())); } catch (error) {}
+        }
         setPublishState({
           status: ok ? "ok" : "warn",
           message: ok
@@ -642,6 +716,7 @@ function App({ session }) {
      Going through the same document update keeps the two paths identical —
      the only difference is that this one does not wait to be asked twice. */
   const onSaveAndPublishProject = (proj) => {
+    proj = { ...proj, updatedAt: Date.now() };
     onSaveProject(proj);
     const live = publishedSnapshot ? (publishedSnapshot.projects || []) : null;
     if (!live) {
@@ -657,40 +732,85 @@ function App({ session }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetchPublished().then((published) => {
+    Promise.all([fetchPublished(), fetchStoredContent(true)]).then(([published, draft]) => {
       if (cancelled) return;
-      setPublishedCheck(published ? "connected" : "unavailable");
-      if (!published) return;
-      setPublishedSnapshot(published); // safe even mid-edit: it is what the site has
-      if (dirtyRef.current) return;    // edited while in flight
-      persist(published);              // keep the local copy in step
-      setData(published);
+      setPublishedCheck('connected');
+      setDraftState('saved');
+      setPublishedSnapshot(published);
+      if (dirtyRef.current) return;
+      const recovery = readPendingDraft();
+      const stored = recovery || draft || published;
+      if (recovery) {
+        rememberPendingDraft(recovery);
+        dirtyRef.current = true;
+        setDirty(true);
+        setDraftState('saving');
+        setToast('Ανακτήθηκαν αλλαγές — γίνεται αποθήκευση.');
+      }
+      if (stored) {
+        // Preserve pre-Firebase browser edits before adopting the shared snapshot.
+        try {
+          const previous = localStorage.getItem(STORE_KEY);
+          if (previous && !localStorage.getItem('p58_before_firebase_backup')) localStorage.setItem('p58_before_firebase_backup', previous);
+        } catch (error) { /* Shared content can still load if browser storage is full. */ }
+        persist(stored); setData(stored);
+      }
+    }).catch(error => {
+      if (!cancelled) { setDraftState('error'); setPublishedCheck('unavailable'); setPublishState({ status: 'error', message: error.message }); }
     });
     return () => { cancelled = true; };
   }, []);
 
-  // keep inquiries in sync with new submissions from the live site
   useEffect(() => {
-    const refresh = () => { try { setInquiries(JSON.parse(localStorage.getItem(INQUIRY_STORE_KEY) || "[]")); } catch (e) { /* ignore */ } };
-    window.addEventListener("storage", refresh);
-    window.addEventListener("focus", refresh);
-    return () => { window.removeEventListener("storage", refresh); window.removeEventListener("focus", refresh); };
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const body = await mediaFetch('/api/inquiries');
+        if (!cancelled) setInquiries(body.items || []);
+      } catch (error) { if (!cancelled) setToast('Δεν ήταν δυνατή η φόρτωση των μηνυμάτων.'); }
+    };
+    refresh();
+    window.addEventListener('focus', refresh);
+    return () => { cancelled = true; window.removeEventListener('focus', refresh); };
   }, []);
-  const persistInquiries = (list) => { setInquiries(list); try { localStorage.setItem(INQUIRY_STORE_KEY, JSON.stringify(list)); } catch (e) { /* ignore */ } };
-  const deleteInquiry = (id) => { if (!confirm("Delete this inquiry? This cannot be undone.")) return; persistInquiries(inquiries.filter((x) => x.id !== id)); setViewInquiry(null); };
-  const setInquiryStatus = (id, status) => persistInquiries(inquiries.map((x) => x.id === id ? { ...x, status } : x));
+  const deleteInquiry = async (id) => {
+    if (!confirm('Delete this inquiry? This cannot be undone.')) return;
+    try {
+      await mediaFetch('/api/inquiries?id=' + encodeURIComponent(id), { method: 'DELETE' });
+      setInquiries(list => list.filter(x => x.id !== id)); setViewInquiry(null);
+    } catch (error) { setToast(error.message); }
+  };
+  const setInquiryStatus = async (id, status) => {
+    try {
+      await mediaFetch('/api/inquiries', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, status }) });
+      setInquiries(list => list.map(x => x.id === id ? { ...x, status } : x));
+    } catch (error) { setToast(error.message); }
+  };
 
-  /* Saving and publishing are deliberately two steps. Every change is
-     written to localStorage at once, so nothing is ever lost — but it only
-     reaches the live site when Publish is pressed. That keeps half-finished
-     edits off the site, and makes going live something you decide rather
-     than something that happens 1.2 seconds after you stop typing. */
   useEffect(() => {
     if (!dirty) return;
     persist(data);
-    setToast("Saved — ready to publish");
-    setPublishState({ status: "pending", message: "Ready to publish" });
-  }, [data, dirty]);
+    if (publishedCheck !== 'connected') { setDraftState('error'); return; }
+    let cancelled = false;
+    setDraftState('saving');
+    const timer = setTimeout(() => {
+      saveDraft(data).then(() => {
+        if (!cancelled && pendingDraftContent === null) { setDraftState('saved'); setDirty(false); }
+      }).catch(error => {
+        if (!cancelled) { setDraftState('error'); setToast(error.message); }
+      });
+    }, 500);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [data, dirty, publishedCheck, draftAttempt]);
+
+  useEffect(() => {
+    const warn = event => {
+      if (!pendingDraftContent) return;
+      event.preventDefault(); event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, []);
 
   useEffect(() => {
     if (!toast) return undefined;
@@ -698,17 +818,26 @@ function App({ session }) {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const update = (next) => { setData(next); setDirty(true); };
+  const update = (next) => {
+    if (publishedCheck !== 'connected') {
+      setToast('Περίμενε να φορτωθούν τα δεδομένα. Αν υπάρχει σφάλμα, ανανέωσε τη σελίδα.');
+      return;
+    }
+    rememberPendingDraft(next);
+    setDraftState("saving");
+    dirtyRef.current = true; setData(next); setDirty(true);
+  };
 
   /* ----- handlers ----- */
-  const onSaveProject = (proj) => {
+  const onSaveProject = (proj, close = true) => {
     const exists = data.projects.findIndex((p) => p.id === proj.id);
     const projects = exists >= 0
       ? data.projects.map((p, i) => i === exists ? proj : p)
       : [proj, ...data.projects];
     update({ ...data, projects: projects.map((p, order) => ({ ...p, order })) });
-    setEditing(null);
-    claimBacklogForProject(proj).then((n) => {
+    if (close) setEditing(null);
+    else if (!editing?.id) setEditing({ kind: "project", id: proj.id });
+    if (close) claimBacklogForProject(proj).then((n) => {
       if (n) setToast(n === 1 ? "1 file filed under this project" : n + " files filed under this project");
     });
   };
@@ -745,35 +874,8 @@ function App({ session }) {
     update({ ...data, projects: projects.map((p, order) => ({ ...p, order })) });
   };
   const onToggleProjectVisibility = (id, visible) => {
-    const project = data.projects.find((p) => p.id === id);
-    if (!project) return;
-    const nextProject = { ...project, visible };
-    const nextData = {
-      ...data,
-      projects: data.projects.map((p) => (p.id === id ? nextProject : p)),
-    };
-    update(nextData);
-    setToast(visible ? "Publishing project visibility…" : "Hiding project from the live site…");
-
-    // Publish only this project's visibility. Other local project edits stay
-    // pending instead of being pushed live as a side effect of this switch.
-    const live = publishedSnapshot && (publishedSnapshot.projects || []);
-    const payload = live
-      ? {
-          ...publishedSnapshot,
-          projects: live.some((p) => p.id === id)
-            ? live.map((p) => (p.id === id ? { ...p, visible } : p))
-            : [...live, nextProject],
-        }
-      : nextData;
-
-    runPublish(payload)
-      .then((result) => {
-        if (result === "published") {
-          setToast(visible ? "Project is visible on the live site" : "Project hidden from the live site");
-        }
-      })
-      .catch(() => { /* the persistent publish status shows the failure */ });
+    update({ ...data, projects: data.projects.map(project => project.id === id ? { ...project, visible, updatedAt: Date.now() } : project) });
+    setToast("Η ορατότητα θα αλλάξει στην ιστοσελίδα μετά τη δημοσίευση.");
   };
   const onMoveTeam = (id, dir) => {
     const idx = data.team.findIndex((t) => t._id === id);
@@ -825,64 +927,63 @@ function App({ session }) {
   };
   const onReset = () => {
     if (!can("resetData")) return;
-    if (!confirm("Reset all content to the bundled defaults? Your edits will be lost.")) return;
+    if (pendingDraftContent || uploads.active) {
+      setToast("Περίμενε να ολοκληρωθεί η αποθήκευση και το ανέβασμα αρχείων.");
+      return;
+    }
+    if (!confirm("Να καθαριστεί το τοπικό αντίγραφο και να φορτωθούν ξανά τα αποθηκευμένα δεδομένα; Το περιεχόμενο της ιστοσελίδας δεν διαγράφεται.")) return;
     localStorage.removeItem(STORE_KEY);
     location.reload();
   };
 
-  const counts = {
-    projects: data.projects.length,
-    categories: data.categories.length,
-    news: data.news.length,
-    team: data.team.length,
-    inquiries: inquiries.length,
-  };
   const unreadInquiries = inquiries.filter((x) => (x.status || "new") === "new").length;
 
   const onSaveSite = (site) => {
     const nextSite = normaliseSite(site);
     update({ ...data, site: nextSite });
     if (window.applySiteFavicon) window.applySiteFavicon(nextSite);
-    setToast("Settings saved");
+    setToast("Οι ρυθμίσεις προστέθηκαν στο πρόχειρο.");
   };
 
   const onSaveHeroGallery = (heroGallery) => {
     const site = normaliseSite({ ...(data.site || DEFAULT_SITE), heroGallery });
     update({ ...data, site });
-    setToast("Hero gallery saved");
+    setToast("Οι εικόνες αρχικής προστέθηκαν στο πρόχειρο.");
   };
 
   const onSaveHomeV2 = (homeV2) => {
     const site = normaliseSite({ ...(data.site || DEFAULT_SITE), homeV2 });
     update({ ...data, site });
-    setToast("V2 section saved — ready to publish");
+    setToast("Οι ενότητες αρχικής προστέθηκαν στο πρόχειρο.");
   };
 
   const onSaveInquiryForm = (inquiryForm) => {
     const site = normaliseSite({ ...(data.site || DEFAULT_SITE), inquiryForm });
     update({ ...data, site });
-    setToast("Inquiry questions saved — ready to publish");
+    setToast("Οι ερωτήσεις προστέθηκαν στο πρόχειρο.");
   };
 
   const onSaveWebsiteTexts = (websiteTexts) => {
     const site = normaliseSite({ ...(data.site || DEFAULT_SITE), websiteTexts });
     update({ ...data, site });
-    setToast("Website texts saved — ready to publish");
+    setToast("Τα κείμενα προστέθηκαν στο πρόχειρο.");
   };
 
   const saveVisualTexts = (patch) => {
-    update({ ...data, site: normaliseSite({ ...data.site, ...patch }) });
+    const {contentBase,contentEdits,...sitePatch}=patch;
+    update(window.applyVisualContentEdits({ ...data, site: normaliseSite({ ...data.site, ...sitePatch }) },contentEdits));
   };
   const publishVisualTexts = async (patch) => {
     const live = await fetchPublished();
     if (!live) throw new Error("Publishing needs the live content API and an existing published site. Your draft is saved locally.");
-    const payload = { ...live, site: { ...live.site, ...patch } };
+    const {contentBase,contentEdits,...sitePatch}=patch;
+    const payload = window.applyVisualContentEdits({ ...live, site: { ...live.site, ...sitePatch } },contentEdits);
     const result = await runPublish(payload);
     if (result !== "published") throw new Error("Not published: content API unavailable. Your draft is saved locally.");
   };
 
   /* The gallery is driven by each project's `featured` flag, so this is the
-     same switch as "Show on home rail" in the project editor — just reachable
+     same switch as "Εμφάνιση στην αρχική σελίδα" in the project editor — just reachable
      from the one screen that shows the whole selection at once. */
   const onToggleFeatured = (id, on) => {
     const current = normaliseSite(data.site || DEFAULT_SITE);
@@ -896,7 +997,7 @@ function App({ session }) {
       projects: data.projects.map((p) => (p.id === id ? { ...p, featured: on } : p)),
       site: normaliseSite({ ...current, heroGallery: { ...current.heroGallery, order } }),
     });
-    setToast(on ? "Added to the gallery" : "Removed from the gallery");
+    setToast(on ? "Προστέθηκε στις εικόνες αρχικής." : "Αφαιρέθηκε από τις εικόνες αρχικής.");
   };
 
   const onReorderHeroGallery = (order) => {
@@ -909,97 +1010,57 @@ function App({ session }) {
 
   // If a section is off-limits for this role, fall back to Projects
   // rather than rendering an empty panel.
-  const SECTION_CAPABILITY = { site: "siteSettings", "website-texts": "siteSettings", v2: "siteSettings", hero: "heroGallery", "inquiry-form": "siteSettings" };
+  const SECTION_CAPABILITY = { site: "siteSettings", "website-texts": "siteSettings", v2: "siteSettings", hero: "heroGallery", "inquiry-form": "siteSettings", maintenance: "resetData" };
   useEffect(() => {
     const needed = SECTION_CAPABILITY[section];
     if (needed && !can(needed)) setSection("projects");
   }, [section, user.role]);
 
+  const navigation = dashboardNavigation(can);
+  const currentGroup = navigation.find(group => group.sections.some(item => item.id === section)) || navigation[0];
+  const createKind = { projects: "project", categories: "category", news: "news", team: "team" }[section];
+  const createLabel = { projects: "Νέο έργο", categories: "Νέα κατηγορία", news: "Νέο άρθρο", team: "Νέο μέλος" }[section];
+
   return (
-    <div className="app">
+    <div className={`app${sidebarHidden ? " sidebar-hidden" : ""}`}>
       {session.state === "dev" && (
         <div className="dev-banner">
           Local preview — no backend here, so sign-in is bypassed. On Vercel the dashboard requires a login.
         </div>
       )}
       {sideOpen && <div className="side-backdrop" onClick={() => setSideOpen(false)} />}
-      <aside className={`side ${sideOpen ? "open" : ""}`}>
+      <aside id="dashboard-sidebar" className={`side ${sideOpen ? "open" : ""}`}>
         <div className="side-brand">
           <img src="assets/logo-black.svg" alt="Project58" />
           <span className="tag">CMS</span>
-          <button className="side-close" aria-label="Close menu" onClick={() => setSideOpen(false)}>{Ic.close}</button>
+          <button className="side-close" aria-label="Κλείσιμο μενού" onClick={() => setSideOpen(false)}>{Ic.close}</button>
         </div>
 
-        <div className="side-section-title">Workspace</div>
-        <button className={`side-btn ${section === "overview" ? "on" : ""}`} onClick={() => goSection("overview")}>
-          <span>Overview</span><span className="count">⌂</span>
-        </button>
-
-        <div className="side-section-title">Content</div>
-        <button className={`side-btn ${section === "projects" ? "on" : ""}`} onClick={() => goSection("projects")}>
-          <span>Projects</span><span className="count">{counts.projects}</span>
-        </button>
-        <button className={`side-btn side-sub-btn ${section === "texts" ? "on" : ""}`} onClick={() => goSection("texts")}>
-          <span>Project texts</span><span className="count">{counts.projects}</span>
-        </button>
-        <button className={`side-btn ${section === "categories" ? "on" : ""}`} onClick={() => goSection("categories")}>
-          <span>Categories</span><span className="count">{counts.categories}</span>
-        </button>
-        <button className={`side-btn ${section === "news" ? "on" : ""}`} onClick={() => goSection("news")}>
-          <span>News &amp; press</span><span className="count">{counts.news}</span>
-        </button>
-        <button className={`side-btn ${section === "team" ? "on" : ""}`} onClick={() => goSection("team")}>
-          <span>Team</span><span className="count">{counts.team}</span>
-        </button>
-        <button className={`side-btn ${section === "media" ? "on" : ""}`} onClick={() => goSection("media")}>
-          <span>Media</span><span className="count">▦</span>
-        </button>
-        <button className={`side-btn ${section === "inquiries" ? "on" : ""}`} onClick={() => goSection("inquiries")}>
-          <span>Inquiries</span><span className={`count ${unreadInquiries ? "count-alert" : ""}`}>{unreadInquiries ? unreadInquiries : counts.inquiries}</span>
-        </button>
-        {can("siteSettings") && (
-          <button className={`side-btn side-sub-btn ${section === "inquiry-form" ? "on" : ""}`} onClick={() => goSection("inquiry-form")}>
-            <span>Form questions</span><span className="count">?</span>
-          </button>
-        )}
-        {can("siteSettings") && (
-          <button className={`side-btn ${section === "site" ? "on" : ""}`} onClick={() => goSection("site")}>
-            <span>Site settings</span><span className="count">⚙</span>
-          </button>
-        )}
-        {can("siteSettings") && (
-          <button className={`side-btn side-sub-btn ${section === "website-texts" ? "on" : ""}`} onClick={() => goSection("website-texts")}>
-            <span>Website texts</span><span className="count">Aa</span>
-          </button>
-        )}
-        {can("heroGallery") && (
-          <button className={`side-btn ${section === "hero" ? "on" : ""}`} onClick={() => goSection("hero")}>
-            <span>Hero gallery</span><span className="count">▶</span>
-          </button>
-        )}
-        {can("siteSettings") && (
-          <button className={`side-btn ${section === "v2" ? "on" : ""}`} onClick={() => goSection("v2")}>
-            <span>V2 banners</span><span className="count">{normaliseSite(data.site || DEFAULT_SITE).homeV2.banners.length}</span>
-          </button>
-        )}
+        <div className="side-section-title">Διαχείριση</div>
+        <nav aria-label="Κύρια πλοήγηση">
+          {navigation.map(group => (
+            <button key={group.id} className={`side-btn ${currentGroup.id === group.id ? "on" : ""}`} aria-current={currentGroup.id === group.id ? "page" : undefined} onClick={() => goSection(group.sections[0].id)}>
+              <span className="side-nav-label"><DashboardIcon name={group.icon} active={currentGroup.id === group.id}/><span>{group.label}</span></span>{group.id === "inbox" && unreadInquiries > 0 && <span className="count count-alert">{unreadInquiries}</span>}
+            </button>
+          ))}
+        </nav>
 
         <div className="side-footer">
           <a className="side-link" href="index.html" target="_blank" rel="noopener">
-            <span>Live site</span><span>↗</span>
+            <span>Προβολή ιστοσελίδας</span>{Ic.external}
           </a>
           <a className="side-link" href="mobile.html" target="_blank" rel="noopener">
-            <span>Mobile preview</span><span>↗</span>
+            <span>Προβολή σε κινητό</span>{Ic.external}
           </a>
 
-          <div className="side-meta">localStorage · v1</div>
           <div className="side-user">
             <div className="side-user-id">
               <span className="side-user-avatar" aria-hidden="true">{initials(user.name)}</span>
               <span className="side-user-text"><b title={user.name}>{user.name}</b><span className={`side-user-role role-${user.role}`}>{window.P58Auth.ROLE_LABELS[user.role] || user.role}</span></span>
             </div>
-            <button className="side-signout" type="button" onClick={() => window.P58Auth.logout()}>Sign out</button>
+            <button className="side-signout" type="button" onClick={() => window.P58Auth.logout()}>Αποσύνδεση</button>
           </div>
-          <a className="side-footer-logo" href="index.html" target="_blank" rel="noopener" aria-label="Open Project58 website">
+          <a className="side-footer-logo" href="index.html" target="_blank" rel="noopener" aria-label="Προβολή ιστοσελίδας Project58">
             <img src="assets/logo-black.svg" alt="Project58" />
           </a>
         </div>
@@ -1007,51 +1068,30 @@ function App({ session }) {
 
       <main className="main">
         <div className="topbar">
+          <button className="sidebar-toggle" type="button" onClick={toggleSidebar} aria-controls="dashboard-sidebar" aria-expanded={!sidebarHidden} aria-label={sidebarHidden ? "Εμφάνιση πλαϊνού μενού" : "Απόκρυψη πλαϊνού μενού"} title={sidebarHidden ? "Εμφάνιση πλαϊνού μενού" : "Απόκρυψη πλαϊνού μενού"}><DashboardIcon name={sidebarHidden ? "sidebarOpen" : "sidebar"} /></button>
           <div className="actions">
-            {showPublish && (
-            <button
-              className={
-                "btn publish-btn "
-                + (pendingIds.length || publishState.status === "pending" ? "primary" : "ghost")
-                + (uploads.active ? " publish-btn--uploading" : "")
-              }
-              style={uploads.active ? { "--upload-pct": Math.round((uploads.done / uploads.total) * 100) + "%" } : null}
-              onClick={() => runPublish(data).catch(() => { /* shown beside the button */ })}
-              disabled={publishState.status === "busy" || uploads.active}
-              title={uploads.active
-                ? "Waiting for images to finish uploading"
-                : "Publish every project with unpublished changes"}>
-              <span className="ic">{Ic.external}</span>
-              <span>
-                {uploads.active
-                  ? "Uploading " + uploads.done + "/" + uploads.total
-                  : publishState.status === "busy"
-                    ? "Publishing…"
-                    : pendingIds.length
-                      ? "Publish (" + pendingIds.length + ")"
-                      : "Publish"}
-              </span>
-            </button>
-            )}
-            {publishState.message ? (
-              <span className={"publish-state publish-state--" + publishState.status} title={publishState.message}>
-                {publishState.message}
-              </span>
-            ) : null}
-            {can("resetData") && (
-              <button className="btn ghost" onClick={onReset} title="Reset to defaults">
-                <span className="ic">{Ic.reset}</span><span>Reset</span>
+            <div className="save-indicator" role="status" aria-live="polite">
+              <span className={`save-dot ${draftState}`} aria-hidden="true"></span>
+              <span>{draftState === "loading" ? "Φόρτωση…" : draftState === "saving" ? "Αποθήκευση…" : draftState === "error" ? "Δεν αποθηκεύτηκε στο cloud" : "Αποθηκεύτηκε"}</span>
+              {draftState === "saved" && <small>{hasUnpublishedChanges ? "Υπάρχουν αδημοσίευτες αλλαγές" : "Όλες οι αλλαγές δημοσιεύτηκαν"}</small>}
+              {draftState === "error" && <button type="button" onClick={() => publishedCheck === "connected" ? setDraftAttempt(n => n + 1) : location.reload()}>Δοκιμή ξανά</button>}
+            </div>
+
+            {publishState.status === "error" && <span className="publish-state publish-state--error" role="alert">{publishState.message}</span>}
+            {createKind && <button className="btn ghost new-content-btn" onClick={() => setEditing({ kind: createKind, id: null })}>{Ic.plus}<span>{createLabel}</span></button>}
+            {can("siteSettings") && <div className="topbar-editor"><window.VisualTextEditor content={data} disabled={publishedCheck !== "connected"} draftState={draftState} site={normaliseSite(data.site || DEFAULT_SITE)} onSave={saveVisualTexts} onPublish={publishVisualTexts} /></div>}
+            {showPublish && publishedCheck !== "loading" && (
+              <button className="btn primary publish-btn" onClick={() => runPublish(data).catch(() => {})} disabled={publishState.status === "busy" || uploads.active || draftState !== "saved" || publishedCheck !== "connected"}>
+                <span>{uploads.active ? `Ανέβασμα ${uploads.done}/${uploads.total}` : publishState.status === "busy" ? "Δημοσίευση…" : "Δημοσίευση αλλαγών"}</span>
               </button>
             )}
-            <button className="btn primary new-content-btn" style={(section === "overview" || section === "texts" || section === "site" || section === "website-texts" || section === "v2" || section === "hero" || section === "inquiries" || section === "inquiry-form" || section === "media") ? { display: "none" } : null} onClick={() => setEditing({ kind: section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news" : "team", id: null })}>
-              <span className="ic">{Ic.plus}</span><span>New {section === "projects" ? "project" : section === "categories" ? "category" : section === "news" ? "news item" : section === "site" ? "—" : "person"}</span>
-            </button>
+
           </div>
           <div className={"topbar-user" + (accountOpen ? " open" : "")} ref={accountRef}>
             <button
               className="topbar-user-trigger"
               type="button"
-              aria-label="Open account menu"
+              aria-label="Μενού λογαριασμού"
               aria-haspopup="menu"
               aria-expanded={accountOpen}
               onClick={() => setAccountOpen((open) => !open)}
@@ -1059,7 +1099,7 @@ function App({ session }) {
               <span className="topbar-user-avatar" aria-hidden="true">{initials(user.name)}</span>
             </button>
             {accountOpen && (
-              <div className="topbar-account-popover" role="menu" aria-label="Account menu">
+              <div className="topbar-account-popover" role="menu" aria-label="Λογαριασμός">
                 <div className="topbar-account-head">
                   <span className="topbar-account-avatar" aria-hidden="true">{initials(user.name)}</span>
                   <span>
@@ -1068,14 +1108,17 @@ function App({ session }) {
                   </span>
                 </div>
                 <button className="topbar-account-signout" type="button" role="menuitem" onClick={() => window.P58Auth.logout()}>
-                  Sign out
+                  Αποσύνδεση
                 </button>
               </div>
             )}
           </div>
         </div>
 
-        <div className="content">
+        <fieldset className="content" disabled={publishedCheck !== "connected"}>
+          {currentGroup.sections.length > 1 && <nav className="section-tabs" aria-label={`Ενότητες: ${currentGroup.label}`}>
+            {currentGroup.sections.map(item => <button key={item.id} type="button" className={section === item.id ? "on" : ""} aria-current={section === item.id ? "page" : undefined} onClick={() => goSection(item.id)}>{item.label}</button>)}
+          </nav>}
           {section === "overview" && (
             <Overview
               data={data}
@@ -1087,20 +1130,22 @@ function App({ session }) {
               publishedCheck={publishedCheck}
               uploads={uploads}
               onGo={goSection}
+              onEditProject={id => setEditing({ kind: "project", id })}
+              visualEditor={can("siteSettings") ? <window.VisualTextEditor content={data} draftState={draftState} site={normaliseSite(data.site || DEFAULT_SITE)} onSave={saveVisualTexts} onPublish={publishVisualTexts} /> : null}
               onNewProject={() => { goSection("projects"); setEditing({ kind: "project", id: null }); }}
             />
           )}
           {section === "projects" && (
-            <ProjectsList data={data.projects} categories={data.categories} onEdit={(id) => setEditing({ kind: "project", id })} onDelete={(id) => onDelete("project", id)} onMove={onMoveProject} onToggleVisibility={onToggleProjectVisibility} onNew={() => setEditing({ kind: "project", id: null })} pendingIds={pendingIds} uploads={uploads} onPublishOne={(id) => publishOneProject(id).catch(() => { /* shown in the header */ })} publishBusy={publishState.status === "busy"} />
+            <ProjectsList data={data.projects} categories={data.categories} onEdit={(id) => setEditing({ kind: "project", id })} onDelete={(id) => onDelete("project", id)} onMove={onMoveProject} onToggleVisibility={onToggleProjectVisibility} onNew={() => setEditing({ kind: "project", id: null })} pendingIds={pendingIds} uploads={uploads} onPublishOne={(id) => publishOneProject(id).catch(() => { /* shown in the header */ })} publishBusy={publishState.status === "busy" || draftState !== "saved"} />
           )}
           {section === "texts" && (
             <ProjectTextsSheet
               projects={data.projects}
               categories={data.categories}
-              initialProject={textsProject}
+              initialProject="all"
               onSave={(projects) => {
                 update({ ...data, projects });
-                setToast("Project texts saved — ready to publish");
+                setToast("Τα κείμενα έργων προστέθηκαν στο πρόχειρο.");
               }}
               onOpenProject={(id) => setEditing({ kind: "project", id })}
               onToast={setToast}
@@ -1127,14 +1172,25 @@ function App({ session }) {
           {section === "inquiries" && (
             <InquiriesList data={inquiries} onView={(id) => { setViewInquiry(id); setInquiryStatus(id, "read"); }} onDelete={deleteInquiry} />
           )}
+          {section === "member-cards" && <window.BusinessCardSettings team={data.team} ImageField={ImageInput} onDirty={setCardDirty} onEditMember={id => setEditing({ kind: "team", id })} onManageTeam={() => goSection("team")} />}
           {section === "inquiry-form" && can("siteSettings") && (
             <InquiryFormSettings inquiryForm={normaliseSite(data.site || DEFAULT_SITE).inquiryForm} onSave={onSaveInquiryForm} />
+          )}
+          {section === "maintenance" && can("resetData") && (
+            <><SectionHead title="Προχωρημένες ρυθμίσεις" />
+              <div className="settings-card maintenance-card">
+                <h3>Αντίγραφο περιεχομένου</h3><p>Κατέβασε τα αποθηκευμένα δεδομένα του dashboard σε αρχείο.</p>
+                <button className="btn ghost" onClick={onExport}>Λήψη αντιγράφου</button>
+                <hr /><h3>Επαναφόρτωση δεδομένων</h3><p>Καθαρίζει το τοπικό αντίγραφο και φορτώνει ξανά τα δεδομένα από το cloud. Δεν διαγράφει το περιεχόμενο της ιστοσελίδας.</p>
+                <button className="btn ghost" onClick={onReset} disabled={draftState !== "saved" || uploads.active}>Επαναφόρτωση δεδομένων</button>
+              </div>
+            </>
           )}
           {section === "site" && can("siteSettings") && (
             <SiteSettings site={normaliseSite(data.site || DEFAULT_SITE)} onSave={onSaveSite} onGoSection={goSection} />
           )}
           {section === "website-texts" && can("siteSettings") && (
-            <WebsiteTextsSettings onSaveVisual={saveVisualTexts} onPublishVisual={publishVisualTexts} site={normaliseSite(data.site || DEFAULT_SITE)} onSave={onSaveWebsiteTexts} onGoSection={goSection} />
+            <WebsiteTextsSettings site={normaliseSite(data.site || DEFAULT_SITE)} onSave={onSaveWebsiteTexts} onGoSection={goSection} />
           )}
           {section === "hero" && can("heroGallery") && (
             <HeroGallerySettings
@@ -1148,15 +1204,11 @@ function App({ session }) {
           {section === "v2" && can("siteSettings") && (
             <HomeV2Settings homeV2={normaliseSite(data.site || DEFAULT_SITE).homeV2} onSave={onSaveHomeV2} />
           )}
-        </div>
+        </fieldset>
       </main>
 
-      <nav className="mobile-bottom-nav" aria-label="Primary dashboard navigation">
-        <button className={section === "overview" ? "on" : ""} type="button" onClick={() => goSection("overview")}><span className="mobile-nav-icon" aria-hidden="true">⌂</span><span>Overview</span></button>
-        <button className={section === "media" ? "on" : ""} type="button" onClick={() => goSection("media")}><span className="mobile-nav-icon" aria-hidden="true">▦</span><span>Media</span></button>
-        <button className="mobile-create-project" type="button" aria-label="Create new project" onClick={() => { goSection("projects"); setEditing({ kind: "project", id: null }); }}><span aria-hidden="true">+</span></button>
-        <button className={(section === "site" || section === "website-texts" || section === "v2" || section === "hero") ? "on" : ""} type="button" disabled={!can("siteSettings")} onClick={() => can("siteSettings") && goSection("site")}><span className="mobile-nav-icon" aria-hidden="true">⚙</span><span>Settings</span></button>
-        <button className={(sideOpen || !["overview", "media", "site", "website-texts", "v2", "hero"].includes(section)) ? "on" : ""} type="button" onClick={() => setSideOpen(true)}><span className="mobile-nav-icon mobile-nav-more" aria-hidden="true">•••</span><span>More{unreadInquiries ? ` · ${unreadInquiries}` : ""}</span></button>
+      <nav className="mobile-bottom-nav" aria-label="Πλοήγηση κινητού">
+        {navigation.map(group => <button key={group.id} className={currentGroup.id === group.id ? "on" : ""} type="button" onClick={() => goSection(group.sections[0].id)}><span className="mobile-nav-icon" aria-hidden="true"><DashboardIcon name={group.icon} size={23} active={currentGroup.id === group.id}/></span><span>{group.mobileLabel || group.label}{group.id === "inbox" && unreadInquiries ? ` · ${unreadInquiries}` : ""}</span></button>)}
       </nav>
 
       {editing && editing.kind === "project" && (
@@ -1166,7 +1218,9 @@ function App({ session }) {
           defaultProjectBadge={normaliseSite(data.site || DEFAULT_SITE).defaultProjectBadge}
           onSave={onSaveProject}
           onPublish={onSaveAndPublishProject}
-          onTexts={editing.id ? () => goProjectTexts(editing.id) : null}
+          onDraft={proj => onSaveProject(proj, false)}
+          draftState={draftState}
+          pending={editing.id ? pendingIds.includes(editing.id) : false}
           onClose={() => setEditing(null)}
           uploadsActive={uploads.active}
           publishBusy={publishState.status === "busy"}
@@ -1175,6 +1229,7 @@ function App({ session }) {
       {editing && editing.kind === "category" && (
         <CategorySheet
           category={editing.id ? data.categories.find((c) => c.id === editing.id) : null}
+          projects={data.projects}
           onSave={onSaveCategory}
           onClose={() => setEditing(null)}
         />
@@ -1211,154 +1266,47 @@ function App({ session }) {
 /* ============================================================
    LISTS
    ============================================================ */
-function Overview({ data, inquiries, unreadInquiries, pendingIds, hasUnpublishedChanges, publishState, publishedCheck, uploads, onGo, onNewProject }) {
+function Overview({ data, inquiries, unreadInquiries, onGo, onNewProject, onEditProject, visualEditor }) {
   const projects = data.projects || [];
-  const categories = data.categories || [];
-  const visibleProjects = projects.filter((project) => project.visible !== false);
-  const hiddenProjects = projects.filter((project) => project.visible === false);
-  const featuredProjects = projects.filter((project) => project.featured);
-  const missingImages = projects.filter((project) => !project.hero || !(project.gallery || []).length);
-  const missingTranslations = projects.filter((project) => !String(project.name_gr || "").trim() || !String(project.summary_gr || "").trim());
-  const uncategorised = projects.filter((project) => !categories.some((category) => category.id === (project.category || project.typology || "retail")));
-  const emptyCategories = categories.filter((category) => !projects.some((project) => (project.category || project.typology || "retail") === category.id));
-
-  const attention = [
-    hasUnpublishedChanges && {
-      level: "warning",
-      title: `${pendingIds.length || "Some"} unpublished ${pendingIds.length === 1 ? "project" : "changes"}`,
-      text: "Saved locally, but not yet visible on the live website.",
-      action: "Review projects",
-      section: "projects",
-    },
-    uploads.active && {
-      level: "warning",
-      title: `${uploads.total - uploads.done} media ${uploads.total - uploads.done === 1 ? "file" : "files"} still uploading`,
-      text: "Publishing is paused until every upload has finished.",
-      action: "Open media",
-      section: "media",
-    },
-    unreadInquiries > 0 && {
-      level: "info",
-      title: `${unreadInquiries} unread ${unreadInquiries === 1 ? "inquiry" : "inquiries"}`,
-      text: "New requests are waiting for review.",
-      action: "View inbox",
-      section: "inquiries",
-    },
-    missingImages.length > 0 && {
-      level: "danger",
-      title: `${missingImages.length} ${missingImages.length === 1 ? "project needs" : "projects need"} imagery`,
-      text: "A hero image or gallery is missing, so the project page is incomplete.",
-      action: "Fix projects",
-      section: "projects",
-    },
-    missingTranslations.length > 0 && {
-      level: "warning",
-      title: `${missingTranslations.length} incomplete Greek ${missingTranslations.length === 1 ? "translation" : "translations"}`,
-      text: "Project name or short description is missing in Greek.",
-      action: "Open texts",
-      section: "texts",
-    },
-    uncategorised.length > 0 && {
-      level: "danger",
-      title: `${uncategorised.length} uncategorised ${uncategorised.length === 1 ? "project" : "projects"}`,
-      text: "The assigned category does not exist in the category list.",
-      action: "Review projects",
-      section: "projects",
-    },
-    emptyCategories.length > 0 && {
-      level: "info",
-      title: `${emptyCategories.length} empty ${emptyCategories.length === 1 ? "category" : "categories"}`,
-      text: "These categories currently have no projects assigned to them.",
-      action: "View categories",
-      section: "categories",
-    },
-  ].filter(Boolean);
-
-  const syncLabel = publishedCheck === "loading"
-    ? "Checking live website…"
-    : publishedCheck === "unavailable"
-      ? "Live publishing unavailable"
-      : publishState.status === "busy"
-        ? "Publishing changes…"
-        : hasUnpublishedChanges
-          ? "Local changes waiting to publish"
-          : "Website and dashboard are in sync";
-  const syncTone = publishedCheck === "unavailable" ? "danger" : hasUnpublishedChanges ? "warning" : publishedCheck === "connected" ? "ok" : "neutral";
-  const recentProjects = projects.slice().sort((a, b) => Number(a.order || 0) - Number(b.order || 0)).slice(0, 5);
-
-  return (
-    <div className="overview">
-      <SectionHead eyebrow="/ Admin command centre" title="Overview">
-        <div className="overview-head-actions">
-          <a className="btn ghost" href="index.html" target="_blank" rel="noopener">View live site ↗</a>
-          <button className="btn primary" type="button" onClick={onNewProject}>{Ic.plus}<span>New project</span></button>
-        </div>
-      </SectionHead>
-
-      <div className={`overview-sync overview-sync--${syncTone}`}>
-        <span className="overview-sync-dot" aria-hidden="true"></span>
-        <div><b>{syncLabel}</b><span>{publishedCheck === "unavailable" ? "The content API or Blob store did not answer. Changes remain on this device." : publishState.message || "Content API connected and ready."}</span></div>
-        {publishedCheck === "connected" && <span className="overview-sync-meta">Live connection</span>}
-      </div>
-
-      <div className="overview-metrics">
-        <button type="button" onClick={() => onGo("projects")}><span>Live projects</span><strong>{visibleProjects.length}</strong><small>{hiddenProjects.length} hidden</small></button>
-        <button type="button" onClick={() => onGo("hero")}><span>Featured</span><strong>{featuredProjects.length}</strong><small>on home gallery</small></button>
-        <button type="button" onClick={() => onGo("categories")}><span>Categories</span><strong>{categories.length}</strong><small>{emptyCategories.length} without projects</small></button>
-        <button type="button" onClick={() => onGo("inquiries")}><span>Inquiries</span><strong>{inquiries.length}</strong><small>{unreadInquiries} unread</small></button>
-      </div>
-
-      <div className="overview-grid">
-        <section className="overview-panel">
-          <div className="overview-panel-head"><div><span>Content health</span><h2>Needs attention</h2></div><b className={attention.length ? "has-issues" : "is-clear"}>{attention.length}</b></div>
-          <div className="overview-issues">
-            {attention.length ? attention.map((item, index) => (
-              <div className="overview-issue" key={`${item.title}-${index}`}>
-                <span className={`overview-issue-mark ${item.level}`} aria-hidden="true"></span>
-                <div><b>{item.title}</b><p>{item.text}</p></div>
-                <button type="button" onClick={() => onGo(item.section)}>{item.action} →</button>
-              </div>
-            )) : (
-              <div className="overview-empty"><span>✓</span><div><b>Everything looks healthy</b><p>No content issues need attention right now.</p></div></div>
-            )}
-          </div>
-        </section>
-
-        <section className="overview-panel">
-          <div className="overview-panel-head"><div><span>Roadmap</span><h2>Open work</h2></div><b className="has-issues">2</b></div>
-          <div className="overview-roadmap">
-            <div><span className="roadmap-priority">Next</span><b>Category-only projects view</b><p>Add a switch that collapses project rows and displays only categories.</p></div>
-            <div><span className="roadmap-priority">Planned</span><b>External collaborators</b><p>Add a dedicated group to People and explain collaborators in the page copy.</p></div>
-          </div>
-        </section>
-      </div>
-
+  const recentProjects = projects.slice().sort((a, b) => Number(b.updatedAt || 0) - Number(a.updatedAt || 0) || Number(a.order || 0) - Number(b.order || 0)).slice(0, 5);
+  return <div className="overview">
+    <SectionHead eyebrow="/ Project58" title="Αρχική">
+      <a className="btn ghost" href="index.html" target="_blank" rel="noopener">Προβολή ιστοσελίδας {Ic.external}</a>
+    </SectionHead>
+    <section className="overview-welcome">
+      <div><h2>Τι θέλεις να ενημερώσεις;</h2><p>Οι αλλαγές αποθηκεύονται ως πρόχειρο. Εμφανίζονται στην ιστοσελίδα όταν πατήσεις δημοσίευση.</p></div>
+      <div className="overview-head-actions">{visualEditor}<button className="btn ghost" onClick={onNewProject}>{Ic.plus}<span>Νέο έργο</span></button></div>
+    </section>
+    <div className="overview-simple-grid">
       <section className="overview-panel overview-recent">
-        <div className="overview-panel-head"><div><span>Content</span><h2>Projects at a glance</h2></div><button type="button" onClick={() => onGo("projects")}>View all {projects.length} →</button></div>
+        <div className="overview-panel-head"><h2>Πρόσφατα έργα</h2><button onClick={() => onGo("projects")}>Όλα τα έργα ({projects.length}) {Ic.arrowRight}</button></div>
         <div className="overview-projects">
-          {recentProjects.map((project) => (
-            <button type="button" key={project.id} onClick={() => onGo("projects")}>
-              <span className="overview-project-thumb">{project.hero ? <img src={project.hero} alt="" /> : <span>{(project.name || "P").slice(0, 1)}</span>}</span>
-              <span className="overview-project-name"><b>{project.name || "Untitled project"}</b><small>{project.location || project.code || "No location"}</small></span>
-              <span className={`overview-project-state ${project.visible === false ? "hidden" : "live"}`}>{project.visible === false ? "Hidden" : "Live"}</span>
-              <span className="overview-project-arrow">→</span>
-            </button>
-          ))}
+          {recentProjects.map(project => <button key={project.id} onClick={() => onEditProject(project.id)}>
+            <span className="overview-project-thumb">{project.hero ? <img src={project.hero} alt="" /> : <span>Έργο</span>}</span>
+            <span className="overview-project-name"><b>{project.name || "Χωρίς τίτλο"}</b><small>{project.location || project.code}</small></span>
+            <span className={`overview-project-state ${project.visible === false ? "hidden" : "live"}`}>{project.visible === false ? "Κρυφό" : "Ορατό"}</span><span className="overview-project-arrow">{Ic.arrowRight}</span>
+          </button>)}
+          {!projects.length && <p className="overview-placeholder">Πρόσθεσε το πρώτο σου έργο για να ξεκινήσεις.</p>}
         </div>
       </section>
+      <section className="overview-panel overview-inbox">
+        <div className="overview-panel-head"><h2>Μηνύματα</h2><span className="inbox-count">{unreadInquiries}</span></div>
+        <p>{unreadInquiries ? `Έχεις ${unreadInquiries} νέα μηνύματα από την ιστοσελίδα.` : "Δεν υπάρχουν νέα μηνύματα."}</p>
+        <button className="btn ghost" onClick={() => onGo("inquiries")}>Άνοιγμα μηνυμάτων{inquiries.length ? ` (${inquiries.length})` : ""} {Ic.arrowRight}</button>
+      </section>
     </div>
-  );
+  </div>;
 }
 
 const PROJECT_TEXT_FIELDS = [
   { key: "name", label: "Project name", greek: "name_gr", compact: true },
-  { key: "location", label: "Location", greek: "location_gr", compact: true },
+  { key: "location", label: "Τοποθεσία", greek: "location_gr", compact: true },
   { key: "type", label: "Type", greek: "type_gr", compact: true },
   { key: "contractor", label: "Contractor", greek: "contractor_gr", compact: true },
-  { key: "engineer", label: "Engineer", greek: "engineer_gr", compact: true },
+  { key: "engineer", label: "Mechanical Engineer", greek: "engineer_gr", compact: true },
   { key: "lead_architect", label: "Lead architect", greek: "lead_architect_gr", compact: true },
   { key: "design_team", label: "Design team", greek: "design_team_gr", compact: true },
-  { key: "summary", label: "Short description", greek: "summary_gr" },
+  { key: "summary", label: "Σύντομη περιγραφή", greek: "summary_gr" },
 ];
 
 function projectTextRows(project) {
@@ -1379,7 +1327,50 @@ function projectTextRows(project) {
   return rows;
 }
 
+function CopyProjectTextsDialog({ projectCount, fieldCount, onCopy, onClose }) {
+  const dialogRef = useRef(null);
+  const [copying, setCopying] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    const previousFocus = document.activeElement;
+    const dialog = dialogRef.current;
+    const overflow = document.body.style.overflow;
+    dialog.showModal();
+    document.body.style.overflow = 'hidden';
+    return () => {
+      dialog.close();
+      document.body.style.overflow = overflow;
+      if (previousFocus?.isConnected) previousFocus.focus({preventScroll:true});
+    };
+  }, []);
+  const copy = async () => {
+    setCopying(true);
+    setError('');
+    try {
+      if (await onCopy()) onClose();
+      else setError('Δεν έγινε η αντιγραφή. Έλεγξε την άδεια πρόσβασης στο πρόχειρο και δοκίμασε ξανά.');
+    } catch {
+      setError('Δεν έγινε η αντιγραφή. Δοκίμασε ξανά.');
+    } finally { setCopying(false); }
+  };
+  return ReactDOM.createPortal(<dialog ref={dialogRef} className="copy-texts-dialog" aria-labelledby="copy-texts-title" aria-describedby="copy-texts-description" onCancel={event => {event.preventDefault(); onClose();}} onClick={event => {if (event.target === event.currentTarget) onClose();}}>
+    <div className="copy-texts-card">
+      <header><h2 id="copy-texts-title">Αντιγραφή εμφανιζόμενων</h2><button className="btn ghost" type="button" aria-label="Κλείσιμο" onClick={onClose}>{Ic.close}</button></header>
+      <div id="copy-texts-description">
+        <p>Αντιγράφει στο πρόχειρο τα κείμενα που αντιστοιχούν στο επιλεγμένο έργο, την αναζήτηση και τα φίλτρα σου.</p>
+        <p>Μπορείς μετά να τα επικολλήσεις σε <strong>Excel ή Google Sheets</strong>, σε στήλες: έργο, κωδικός, πεδίο, αγγλικά και ελληνικά.</p>
+        <p>Περιλαμβάνει και τις δύο γλώσσες, ακόμη κι αν προβάλλεις μόνο τη μία, καθώς και τις αλλαγές που έχεις γράψει πριν τις αποθηκεύσεις. Δεν αποθηκεύει ούτε δημοσιεύει αλλαγές στην ιστοσελίδα.</p>
+      </div>
+      <div className="copy-texts-count">{projectCount} έργα · {fieldCount} πεδία προς αντιγραφή</div>
+      {!fieldCount && <p>Δεν υπάρχουν κείμενα με τα τρέχοντα φίλτρα.</p>}
+      {error && <p className="copy-texts-error" role="alert">{error}</p>}
+      <footer><button className="btn ghost" type="button" onClick={onClose}>Ακύρωση</button><button className="btn primary" type="button" disabled={copying || !fieldCount} onClick={copy}>{copying ? 'Αντιγραφή…' : 'Αντιγραφή'}</button></footer>
+    </div>
+  </dialog>, document.body);
+}
+
 function ProjectTextsSheet({ projects, categories = [], initialProject = "all", onSave, onOpenProject, onToast }) {
+  const [copyInfoOpen, setCopyInfoOpen] = useState(false);
   const [draft, setDraft] = useState(() => projects.map((project) => ({ ...project })));
   const [query, setQuery] = useState("");
   const [selectedProject, setSelectedProject] = useState(initialProject);
@@ -1449,18 +1440,17 @@ function ProjectTextsSheet({ projects, categories = [], initialProject = "all", 
 
   const copyVisible = () => {
     const clean = (value) => String(value || "").replace(/\t/g, " ").replace(/\r?\n/g, " ");
-    const lines = [["Project", "Code", "Field", "English", "Greek"]];
+    const lines = [["Project", "Κωδικός", "Πεδίο", "Αγγλικά", "Ελληνικά"]];
     groups.forEach(({ project, rows }) => rows.forEach((row) => {
       lines.push([project.name, project.code, row.label, row.en, row.gr].map(clean));
     }));
     const text = lines.map((line) => line.join("\t")).join("\n");
     if (!navigator.clipboard) {
-      onToast("Clipboard access is not available in this browser");
-      return;
+      return Promise.resolve(false);
     }
-    navigator.clipboard.writeText(text)
-      .then(() => onToast("Visible project texts copied"))
-      .catch(() => onToast("Couldn’t copy the project texts"));
+    return navigator.clipboard.writeText(text)
+      .then(() => { onToast("Τα κείμενα αντιγράφηκαν"); return true; })
+      .catch(() => false);
   };
 
   const chooseProject = (id) => {
@@ -1480,7 +1470,7 @@ function ProjectTextsSheet({ projects, categories = [], initialProject = "all", 
   const renderTextTable = (project, rows) => (
     <div className="texts-table-wrap">
       <table className="texts-table">
-        <thead><tr><th>Field</th><th className="text-col-en">English</th><th className="text-col-gr">Greek</th></tr></thead>
+        <thead><tr><th>Πεδίο</th><th className="text-col-en">Αγγλικά</th><th className="text-col-gr">Ελληνικά</th></tr></thead>
         <tbody>
           {rows.map((row) => (
             <tr key={row.id}>
@@ -1492,8 +1482,8 @@ function ProjectTextsSheet({ projects, categories = [], initialProject = "all", 
               </td>
               <td className="text-col-gr">
                 {row.compact
-                  ? <input type="text" value={row.gr} aria-label={`${project.name} · ${row.label} · Greek`} onChange={(event) => setCell(project.id, row, "gr", event.target.value)} placeholder="Greek translation" />
-                  : <textarea value={row.gr} aria-label={`${project.name} · ${row.label} · Greek`} onChange={(event) => setCell(project.id, row, "gr", event.target.value)} placeholder="Greek translation" />}
+                  ? <input type="text" value={row.gr} aria-label={`${project.name} · ${row.label} · Greek`} onChange={(event) => setCell(project.id, row, "gr", event.target.value)} placeholder="Ελληνική μετάφραση" />
+                  : <textarea value={row.gr} aria-label={`${project.name} · ${row.label} · Greek`} onChange={(event) => setCell(project.id, row, "gr", event.target.value)} placeholder="Ελληνική μετάφραση" />}
               </td>
             </tr>
           ))}
@@ -1504,47 +1494,48 @@ function ProjectTextsSheet({ projects, categories = [], initialProject = "all", 
 
   return (
     <div className={`texts-sheet language-${language}`}>
-      <SectionHead eyebrow="/ All project copy · English + Greek" title="Project texts" />
+      {copyInfoOpen && <CopyProjectTextsDialog projectCount={groups.length} fieldCount={groups.reduce((count,group) => count + group.rows.length,0)} onCopy={copyVisible} onClose={() => setCopyInfoOpen(false)} />}
+      <SectionHead eyebrow="/ Όλα τα κείμενα έργων" title="Μαζική επεξεργασία κειμένων" />
       <div className="texts-toolbar">
         <label className="texts-search">
-          <span>Search</span>
-          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Project, field or text…" />
+          <span>Αναζήτηση</span>
+          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Έργο, πεδίο ή κείμενο…" />
         </label>
         <label>
-          <span>Language</span>
+          <span>Γλώσσα</span>
           <select value={language} onChange={(event) => setLanguage(event.target.value)}>
-            <option value="all">English + Greek</option>
-            <option value="en">English</option>
-            <option value="gr">Greek</option>
+            <option value="all">Αγγλικά + Ελληνικά</option>
+            <option value="en">Αγγλικά</option>
+            <option value="gr">Ελληνικά</option>
           </select>
         </label>
         <div className="texts-toolbar-actions">
-          <button className="btn ghost" type="button" onClick={copyVisible}>Copy visible</button>
-          <button className="btn primary" type="button" disabled={!changed} onClick={() => onSave(draft)}>Save changes</button>
+          <button className="btn ghost" type="button" onClick={() => setCopyInfoOpen(true)}>Αντιγραφή εμφανιζόμενων</button>
+          <button className="btn primary" type="button" disabled={!changed} onClick={() => onSave(draft)}>Αποθήκευση αλλαγών</button>
         </div>
       </div>
 
       <div className="texts-filters" aria-label="Project filters">
-        <label><span>Category</span><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="all">All categories</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}{draft.some((project) => !categories.some((category) => category.id === (project.category || project.typology || "retail"))) && <option value="uncategorised">Uncategorised</option>}</select></label>
-        <label><span>Sub-category / brand</span><select value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)}><option value="all">All brands</option>{brandOptions.map((brand) => <option key={brand} value={brand}>{brand}</option>)}</select></label>
-        <label><span>Visibility</span><select value={visibilityFilter} onChange={(event) => setVisibilityFilter(event.target.value)}><option value="all">Live + hidden</option><option value="live">Live</option><option value="hidden">Hidden</option></select></label>
-        <button className="btn ghost" type="button" disabled={!filtersActive} onClick={() => { setCategoryFilter("all"); setBrandFilter("all"); setVisibilityFilter("all"); }}>Clear filters</button>
+        <label><span>Κατηγορία</span><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="all">Όλες οι κατηγορίες</option>{categories.map((category) => <option key={category.id} value={category.id}>{category.label}</option>)}{draft.some((project) => !categories.some((category) => category.id === (project.category || project.typology || "retail"))) && <option value="uncategorised">Χωρίς κατηγορία</option>}</select></label>
+        <label><span>Υποκατηγορία / εταιρεία</span><select value={brandFilter} onChange={(event) => setBrandFilter(event.target.value)}><option value="all">Όλες οι εταιρείες</option>{brandOptions.map((brand) => <option key={brand} value={brand}>{brand}</option>)}</select></label>
+        <label><span>Ορατότητα</span><select value={visibilityFilter} onChange={(event) => setVisibilityFilter(event.target.value)}><option value="all">Ορατά και κρυφά</option><option value="live">Ορατό</option><option value="hidden">Κρυφό</option></select></label>
+        <button className="btn ghost" type="button" disabled={!filtersActive} onClick={() => { setCategoryFilter("all"); setBrandFilter("all"); setVisibilityFilter("all"); }}>Καθαρισμός φίλτρων</button>
       </div>
 
       <div className="texts-workspace">
-        <nav className="texts-project-menu" aria-label="Projects">
+        <nav className="texts-project-menu" aria-label="Έργα">
           <button type="button" className={selectedProject === "all" ? "on" : ""} onClick={() => chooseProject("all")}>
-            <span><strong>All projects</strong><small>{filtersActive ? "Filtered overview" : "Collapsed overview"}</small></span>
+            <span><strong>Όλα τα έργα</strong><small>{filtersActive ? "Filtered overview" : "Collapsed overview"}</small></span>
             <b>{filteredProjects.length}</b>
           </button>
           <div className="texts-project-menu-list">
             {filteredProjects.map((project) => (
               <button key={project.id} type="button" className={selectedProject === project.id ? "on" : ""} onClick={() => chooseProject(project.id)}>
-                <span><strong>{project.name || "Untitled"}</strong><small>{project.code} · {project.brand || "No brand"}</small></span>
-                {dirtyProjectIds.has(project.id) && <i title="Unsaved changes" aria-label="Unsaved changes"></i>}
+                <span><strong>{project.name || "Χωρίς τίτλο"}</strong><small>{project.code} · {project.brand || "Χωρίς εταιρεία"}</small></span>
+                {dirtyProjectIds.has(project.id) && <i title="Μη αποθηκευμένες αλλαγές" aria-label="Μη αποθηκευμένες αλλαγές"></i>}
               </button>
             ))}
-            {!filteredProjects.length && <div className="texts-project-menu-empty">No projects match these filters.</div>}
+            {!filteredProjects.length && <div className="texts-project-menu-empty">Δεν βρέθηκαν έργα με αυτά τα φίλτρα.</div>}
           </div>
         </nav>
 
@@ -1557,17 +1548,17 @@ function ProjectTextsSheet({ projects, categories = [], initialProject = "all", 
                   <section className={`texts-project-panel ${expanded ? "is-open" : ""}`} key={project.id}>
                     <button className="texts-project-line" type="button" onClick={() => toggleExpanded(project.id)} aria-expanded={expanded}>
                       <span className="texts-project-chevron" aria-hidden="true">›</span>
-                      <strong>{project.name || "Untitled"}</strong>
+                      <strong>{project.name || "Χωρίς τίτλο"}</strong>
                       <span>{project.code}</span>
-                      <span>{project.brand || "No brand"}</span>
+                      <span>{project.brand || "Χωρίς εταιρεία"}</span>
                       <span>{rows.length} fields</span>
-                      {dirtyProjectIds.has(project.id) && <i>Edited</i>}
+                      {dirtyProjectIds.has(project.id) && <i>Τροποποιήθηκε</i>}
                     </button>
                     {expanded && (
                       <div className="texts-project-panel-body">
                         <div className="texts-project-panel-head">
-                          <span>{project.visible === false ? "Hidden from site" : "Visible on site"}</span>
-                          <button type="button" onClick={() => onOpenProject(project.id)}>Open full project ↗</button>
+                          <span>{project.visible === false ? "Hidden from site" : "Ορατό στην ιστοσελίδα"}</span>
+                          <button type="button" onClick={() => onOpenProject(project.id)}>Άνοιγμα έργου {Ic.external}</button>
                         </div>
                         {renderTextTable(project, rows)}
                       </div>
@@ -1580,19 +1571,19 @@ function ProjectTextsSheet({ projects, categories = [], initialProject = "all", 
             groups.map(({ project, rows }) => (
               <section className="texts-selected-project" key={project.id}>
                 <div className="texts-selected-head">
-                  <div><span>{project.code} · {project.brand || "No brand"}</span><h2>{project.name || "Untitled"}</h2></div>
-                  <button className="btn ghost" type="button" onClick={() => onOpenProject(project.id)}>Open full project ↗</button>
+                  <div><span>{project.code} · {project.brand || "Χωρίς εταιρεία"}</span><h2>{project.name || "Χωρίς τίτλο"}</h2></div>
+                  <button className="btn ghost" type="button" onClick={() => onOpenProject(project.id)}>Άνοιγμα έργου {Ic.external}</button>
                 </div>
                 {renderTextTable(project, rows)}
               </section>
             ))
-          ) : <div className="texts-empty">No project text matches this search.</div>}
-          {selectedProject === "all" && !groups.length && <div className="texts-empty">No project text matches this search.</div>}
+          ) : <div className="texts-empty">Δεν βρέθηκαν κείμενα.</div>}
+          {selectedProject === "all" && !groups.length && <div className="texts-empty">Δεν βρέθηκαν κείμενα.</div>}
         </div>
       </div>
       <div className="texts-foot">
         <span>{groups.reduce((total, group) => total + group.rows.length, 0)} text fields shown</span>
-        <span>Save here, then use Publish to update the live site.</span>
+        <span>Αποθήκευσε εδώ και μετά πάτησε Δημοσίευση αλλαγών.</span>
       </div>
     </div>
   );
@@ -1600,17 +1591,52 @@ function ProjectTextsSheet({ projects, categories = [], initialProject = "all", 
 
 function categoryLabel(categories, id) {
   const cat = categories.find((c) => c.id === id);
-  return cat ? cat.label : id || "Uncategorised";
+  return cat ? cat.label : id || "Χωρίς κατηγορία";
+}
+
+function projectSearchText(value) {
+  return String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("el").replace(/ς/g, "σ");
+}
+function filterDashboardProjects(projects, filters, categories) {
+  const terms = projectSearchText(filters.query).split(/\s+/).filter(Boolean);
+  return projects.filter(project => {
+    const category = categories.find(cat => cat.id === (project.category || project.typology || "retail"));
+    if (filters.category && (category?.id || "__uncategorised__") !== filters.category) return false;
+    if (filters.brand && ((project.brand || "").trim() || "__none__") !== filters.brand) return false;
+    if (filters.year && String(project.year ?? "") !== filters.year) return false;
+    if (filters.status && project.status !== filters.status) return false;
+    if (filters.visibility === "visible" && project.visible === false) return false;
+    if (filters.visibility === "hidden" && project.visible !== false) return false;
+    const text = projectSearchText([project.name, project.name_gr, project.location, project.location_gr, project.code, project.slug, project.id, project.brand, project.year, project.status, category?.label, category?.label_gr].filter(Boolean).join(" "));
+    return terms.every(term => text.includes(term));
+  });
 }
 
 function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisibility, onNew, pendingIds, uploads, onPublishOne, publishBusy }) {
+  const emptyFilters = { query: "", category: "", brand: "", year: "", status: "", visibility: "" };
+  const [filters, setFilters] = useState(emptyFilters);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeFilterCount = Object.entries(filters).filter(([key, value]) => key !== "query" && value).length;
+  const updateFilter = (key, value) => setFilters(previous => ({ ...previous, [key]: value }));
+  const filtered = filterDashboardProjects(data, filters, categories);
+  const activeFilters = Object.values(filters).some(Boolean);
+  const brands = [...new Set(data.map(project => (project.brand || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "el"));
+  const years = [...new Set(data.map(project => String(project.year ?? "")).filter(Boolean))].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+  const statuses = [...new Set(data.map(project => project.status).filter(Boolean))].sort();
+  const groupId = (category, brand) => `project-index-${encodeURIComponent(JSON.stringify([category, brand ?? null]))}`;
+  const jumpTo = id => {
+    const target = document.getElementById(id);
+    if (!target) return;
+    target.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+    target.focus({ preventScroll: true });
+  };
   if (!data.length) return <Empty kind="projects" onNew={onNew} />;
   const groups = categories.map((cat) => ({
     category: cat,
-    projects: data.filter((p) => (p.category || p.typology || "retail") === cat.id),
-  }));
-  const uncategorised = data.filter((p) => !categories.find((c) => c.id === (p.category || p.typology || "retail")));
-  if (uncategorised.length) groups.push({ category: { id: "uncategorised", label: "Uncategorised", description: "Projects without a matching category" }, projects: uncategorised });
+    projects: filtered.filter((p) => (p.category || p.typology || "retail") === cat.id),
+  })).filter(group => group.projects.length);
+  const uncategorised = filtered.filter((p) => !categories.find((c) => c.id === (p.category || p.typology || "retail")));
+  if (uncategorised.length) groups.push({ category: { id: "uncategorised", label: "Χωρίς κατηγορία", description: "Projects without a matching category" }, projects: uncategorised });
 
   const pending = new Set(pendingIds || []);
   const byKey = (uploads && uploads.byKey) || {};
@@ -1635,10 +1661,10 @@ function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisi
         <div className="thumb">
           {p.hero ? <img src={p.hero} alt="" /> : <div className="placeholder">no img</div>}
         </div>
-        <div className="name">
+        <button className="name project-name-button" type="button" onClick={e => { e.stopPropagation(); onEdit(p.id); }}>
           {p.name}
-          <span className="sub">{p.brand} · {p.visible === false ? "Hidden" : "Visible on site"}</span>
-        </div>
+          <span className="sub">{p.brand} · {p.visible === false ? "Κρυφό" : "Ορατό στην ιστοσελίδα"}</span>
+        </button>
         <div className="meta">{p.location}</div>
         <div className="meta">{p.year} · {p.status}</div>
         <div className="meta">{p.code}{p.featured ? " · Featured" : ""}<span className="sub">{categoryLabel(categories, p.category || p.typology || "retail")} · /projects/{p.slug || p.id}</span></div>
@@ -1649,13 +1675,13 @@ function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisi
             role="switch"
             aria-checked={p.visible !== false}
             onClick={(e) => { e.stopPropagation(); onToggleVisibility(p.id, p.visible === false); }}
-            title={p.visible === false ? "Show this project on the live site" : "Hide this project from the live site"}>
+            title={p.visible === false ? "Εμφάνιση μετά τη δημοσίευση" : "Απόκρυψη μετά τη δημοσίευση"}>
             <span aria-hidden="true"></span>
-            {p.visible === false ? "Hidden" : "Visible"}
+            {p.visible === false ? "Κρυφό" : "Ορατό"}
           </button>
-          <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(p.id, -1); }} title="Move up" disabled={globalIndex === 0}>↑</button>
-          <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(p.id, 1); }} title="Move down" disabled={globalIndex === data.length - 1}>↓</button>
-          <button className="delete" onClick={(e) => { e.stopPropagation(); onDelete(p.id); }} title="Delete">{Ic.trash}</button>
+          <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(p.id, -1); }} title="Μετακίνηση πάνω" disabled={globalIndex === 0}>{Ic.arrowUp}</button>
+          <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(p.id, 1); }} title="Μετακίνηση κάτω" disabled={globalIndex === data.length - 1}>{Ic.arrowDown}</button>
+          <button className="delete" onClick={(e) => { e.stopPropagation(); onDelete(p.id); }} title="Διαγραφή">{Ic.trash}</button>
           {job ? (
             <span className="row-upload" title={"Uploading " + job.done + " of " + job.total}>{pct}%</span>
           ) : canPublish ? (
@@ -1663,7 +1689,7 @@ function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisi
               className="row-publish"
               onClick={(e) => { e.stopPropagation(); onPublishOne(p.id); }}
               title="Publish only this project to the live site">
-              Publish
+              Δημοσίευση
             </button>
           ) : null}
         </div>
@@ -1672,13 +1698,13 @@ function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisi
   };
   const listHead = (
     <div className="list-head head-projects">
-      <span></span><span>Name</span><span>Location</span><span>Year · status</span><span>Code · flags</span><span></span>
+      <span></span><span>Όνομα</span><span>Τοποθεσία</span><span>Έτος · κατάσταση</span><span>Κωδικός · στοιχεία</span><span></span>
     </div>
   );
   const renderVisibilityGroups = (projects, keyPrefix) => [
-    { key: "live", label: "Live", projects: projects.filter((project) => project.visible !== false) },
-    { key: "hidden", label: "Hidden", projects: projects.filter((project) => project.visible === false) },
-  ].map((visibility) => (
+    { key: "live", label: "Ορατό", projects: projects.filter((project) => project.visible !== false) },
+    { key: "hidden", label: "Κρυφό", projects: projects.filter((project) => project.visible === false) },
+  ].filter(visibility => visibility.projects.length).map((visibility) => (
     <div className={`project-visibility-group is-${visibility.key}`} key={`${keyPrefix}-${visibility.key}`}>
       <div className="project-visibility-head">
         <span className="project-visibility-dot" aria-hidden="true"></span>
@@ -1696,7 +1722,24 @@ function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisi
 
   return (
     <>
-      <SectionHead title="Projects" />
+      <SectionHead title="Έργα">
+        <div className="project-search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>
+          <input type="search" aria-label="Αναζήτηση έργων" placeholder="Όνομα, τοποθεσία ή κωδικός…" value={filters.query} onChange={event => updateFilter("query", event.target.value)} />
+        </div>
+      </SectionHead>
+      <nav className="project-index" aria-label="Ευρετήριο έργων"><strong>Ευρετήριο</strong>{groups.map(group => <div className="project-index-group" key={group.category.id}><button type="button" onClick={() => jumpTo(groupId(group.category.id))}>{group.category.label_gr || group.category.label}<span>{group.projects.length}</span></button>{[...new Set(group.projects.map(project => (project.brand || "").trim()).filter(Boolean))].map(brand => <button className="project-index-brand" type="button" key={brand} onClick={() => jumpTo(groupId(group.category.id, brand))}>{brand}<span>{group.projects.filter(project => (project.brand || "").trim() === brand).length}</span></button>)}</div>)}<button className="project-filter-toggle" type="button" aria-expanded={filtersOpen} aria-controls="project-filter-settings" onClick={() => setFiltersOpen(open => !open)}><DashboardIcon name="settings" size={18} />Ρυθμίσεις{activeFilterCount > 0 && <span>{activeFilterCount}</span>}</button></nav>
+      <section className="project-filters" id="project-filter-settings" aria-label="Φίλτρα έργων" hidden={!filtersOpen}>
+        <div className="project-filter-fields">
+          <label>Κατηγορία<select value={filters.category} onChange={event => updateFilter("category", event.target.value)}><option value="">Όλες οι κατηγορίες</option>{categories.map(cat => <option key={cat.id} value={cat.id}>{cat.label_gr || cat.label}</option>)}{data.some(project => !categories.some(cat => cat.id === (project.category || project.typology || "retail"))) && <option value="__uncategorised__">Χωρίς κατηγορία</option>}</select></label>
+          <label>Brand<select value={filters.brand} onChange={event => updateFilter("brand", event.target.value)}><option value="">Όλα τα brands</option>{brands.map(brand => <option key={brand} value={brand}>{brand}</option>)}{data.some(project => !(project.brand || "").trim()) && <option value="__none__">Χωρίς brand</option>}</select></label>
+          <label>Έτος<select value={filters.year} onChange={event => updateFilter("year", event.target.value)}><option value="">Όλα τα έτη</option>{years.map(year => <option key={year} value={year}>{year}</option>)}</select></label>
+          <label>Κατάσταση<select value={filters.status} onChange={event => updateFilter("status", event.target.value)}><option value="">Όλες οι καταστάσεις</option>{statuses.map(status => <option key={status} value={status}>{status}</option>)}</select></label>
+          <label>Ορατότητα<select value={filters.visibility} onChange={event => updateFilter("visibility", event.target.value)}><option value="">Όλα τα έργα</option><option value="visible">Ορατά</option><option value="hidden">Κρυφά</option></select></label>
+        </div>
+        <div className="project-filter-summary"><span role="status" aria-live="polite">{filtered.length} από {data.length} έργα</span>{activeFilters && <button className="btn ghost" type="button" onClick={() => setFilters(emptyFilters)}>Καθαρισμός φίλτρων</button>}</div>
+      </section>
+      {!filtered.length && <div className="project-filter-empty"><h2>Δεν βρέθηκαν έργα</h2><p>Δοκίμασε άλλη αναζήτηση ή αφαίρεσε κάποια φίλτρα.</p><button className="btn" type="button" onClick={() => setFilters(emptyFilters)}>Εμφάνιση όλων των έργων</button></div>}
       {groups.map((group) => {
         // Build the ordered list of sub-category buckets (brands).
         const defined = (group.category.subcategories || []).map((s) => s.label);
@@ -1711,7 +1754,7 @@ function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisi
             ].filter((b) => b.projects.length)
           : null;
         return (
-          <div className="category-group" key={group.category.id}>
+          <div className="category-group project-index-target" id={groupId(group.category.id)} tabIndex={-1} key={group.category.id}>
             <div className="category-group-head">
               <div>
                 <h2>{group.category.label}</h2>
@@ -1723,7 +1766,7 @@ function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisi
               <div className="list"><div className="empty-row">No projects in {group.category.label}.</div></div>
             ) : buckets ? (
               buckets.map((bucket) => (
-                <div className="subgroup" key={bucket.key}>
+                <div className="subgroup project-index-target" id={groupId(group.category.id, bucket.key)} tabIndex={-1} key={bucket.key}>
                   <div className="subgroup-head"><span className="subgroup-kind">{subLabel}</span><h3>{bucket.label}</h3><span className="subgroup-count">{bucket.projects.length}</span></div>
                   {renderVisibilityGroups(bucket.projects, `${group.category.id}-${bucket.key}`)}
                 </div>
@@ -1744,12 +1787,12 @@ function CategoriesList({ data, projects, onEdit, onDelete, onMove, onNew }) {
   if (!data.length) return <Empty kind="categories" onNew={onNew} />;
   return (
     <>
-      <SectionHead eyebrow="/ Categories · project grouping" title="Categories" />
+      <SectionHead eyebrow="/ Οργάνωση έργων" title="Κατηγορίες" />
       <div className="list">
         <div className="list-head head-categories">
-          <span>Category</span>
-          <span>Description</span>
-          <span>Projects</span>
+          <span>Κατηγορία</span>
+          <span>Περιγραφή</span>
+          <span>Έργα</span>
           <span></span>
         </div>
         {data.map((c, i) => (
@@ -1758,9 +1801,9 @@ function CategoriesList({ data, projects, onEdit, onDelete, onMove, onNew }) {
             <div className="meta">{c.description || "No description"}</div>
             <div className="meta">{projects.filter((p) => (p.category || p.typology || "retail") === c.id).length}</div>
             <div className="row-actions">
-              <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(c.id, -1); }} title="Move up" disabled={i === 0}>↑</button>
-              <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(c.id, 1); }} title="Move down" disabled={i === data.length - 1}>↓</button>
-              <button className="delete" onClick={(e) => { e.stopPropagation(); onDelete(c.id); }} title="Delete">{Ic.trash}</button>
+              <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(c.id, -1); }} title="Μετακίνηση πάνω" disabled={i === 0}>{Ic.arrowUp}</button>
+              <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(c.id, 1); }} title="Μετακίνηση κάτω" disabled={i === data.length - 1}>{Ic.arrowDown}</button>
+              <button className="delete" onClick={(e) => { e.stopPropagation(); onDelete(c.id); }} title="Διαγραφή">{Ic.trash}</button>
             </div>
           </div>
         ))}
@@ -1775,12 +1818,12 @@ function NewsList({ data, onEdit, onDelete, onNew }) {
   if (!data.length) return <Empty kind="news items" onNew={onNew} />;
   return (
     <>
-      <SectionHead eyebrow="/ Recent press · talks · launches" title="News &amp; press" />
+      <SectionHead eyebrow="/ Ενημερώσεις" title="Νέα & δημοσιεύσεις" />
       <div className="list">
         <div className="list-head head-news">
-          <span>Date</span>
-          <span>Title</span>
-          <span>Category</span>
+          <span>Ημερομηνία</span>
+          <span>Τίτλος</span>
+          <span>Κατηγορία</span>
           <span></span>
         </div>
         {data.map((n) => (
@@ -1788,7 +1831,7 @@ function NewsList({ data, onEdit, onDelete, onNew }) {
             <div className="meta">{n.date}</div>
             <div className="name">{n.title}<span className="sub">{(n.deck || "").slice(0, 80)}{(n.deck || "").length > 80 ? "…" : ""}</span></div>
             <div className="meta">{n.cat}</div>
-            <button className="delete" onClick={(e) => { e.stopPropagation(); onDelete(n._id); }} title="Delete">{Ic.trash}</button>
+            <button className="delete" onClick={(e) => { e.stopPropagation(); onDelete(n._id); }} title="Διαγραφή">{Ic.trash}</button>
           </div>
         ))}
       </div>
@@ -1801,11 +1844,11 @@ function TeamList({ data, onEdit, onDelete, onMove, onNew }) {
   if (!data.length) return <Empty kind="team members" onNew={onNew} />;
   return (
     <>
-      <SectionHead eyebrow="/ Eight people · two cities" title="Team" />
+      <SectionHead eyebrow="/ Άνθρωποι" title="Ομάδα" />
       <div className="list">
         <div className="list-head head-team">
           <span></span>
-          <span>Name</span>
+          <span>Όνομα</span>
           <span>Role</span>
           <span></span>
         </div>
@@ -1817,9 +1860,9 @@ function TeamList({ data, onEdit, onDelete, onMove, onNew }) {
             <div className="name">{t.name}<span className="sub">{t.note}</span></div>
             <div className="meta">{t.role}</div>
             <div className="row-actions">
-              <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(t._id, -1); }} title="Move up" disabled={i === 0}>↑</button>
-              <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(t._id, 1); }} title="Move down" disabled={i === data.length - 1}>↓</button>
-              <button className="delete" onClick={(e) => { e.stopPropagation(); onDelete(t._id); }} title="Delete">{Ic.trash}</button>
+              <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(t._id, -1); }} title="Μετακίνηση πάνω" disabled={i === 0}>{Ic.arrowUp}</button>
+              <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(t._id, 1); }} title="Μετακίνηση κάτω" disabled={i === data.length - 1}>{Ic.arrowDown}</button>
+              <button className="delete" onClick={(e) => { e.stopPropagation(); onDelete(t._id); }} title="Διαγραφή">{Ic.trash}</button>
             </div>
           </div>
         ))}
@@ -1956,16 +1999,16 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
 
   return (
     <>
-      <SectionHead eyebrow="/ English · Greek · answers · required fields" title="Form questions" />
+      <SectionHead eyebrow="/ Ερωτήσεις, απαντήσεις και υποχρεωτικά πεδία" title="Φόρμα επικοινωνίας" />
       <div className="settings-card inquiry-form-settings">
         <div className="inquiry-builder-intro">
           <div><h2>Project inquiry form</h2><p>Select a step, then organise the sub-sections shown inside it.</p></div>
-          <div className="inquiry-builder-buttons"><button className="btn ghost" type="button" onClick={() => setPreview(true)}>Preview</button><button className="btn ghost" type="button" onClick={openAddStep}><span className="ic">{Ic.plus}</span>Add step</button><button className="btn primary" type="button" onClick={openAddQuestion}><span className="ic">{Ic.plus}</span>Add sub-section</button></div>
+          <div className="inquiry-builder-buttons"><button className="btn ghost" type="button" onClick={() => setPreview(true)}>Προεπισκόπηση</button><button className="btn ghost" type="button" onClick={openAddStep}><span className="ic">{Ic.plus}</span>Add step</button><button className="btn primary" type="button" onClick={openAddQuestion}><span className="ic">{Ic.plus}</span>Add sub-section</button></div>
         </div>
 
         <div className="inquiry-editor-toolbar">
           <div><strong>Content language</strong><span>Edit one language at a time for a clearer, wider workspace.</span></div>
-          <div className="inquiry-editor-language" role="group" aria-label="Content editing language"><button className={editorLang === "en" ? "on" : ""} type="button" aria-pressed={editorLang === "en"} onClick={() => setEditorLang("en")}>EN</button><button className={editorLang === "gr" ? "on" : ""} type="button" aria-pressed={editorLang === "gr"} onClick={() => setEditorLang("gr")}>GR</button></div>
+          <div className="inquiry-editor-language" role="group" aria-label="Γλώσσα επεξεργασίας"><button className={editorLang === "en" ? "on" : ""} type="button" aria-pressed={editorLang === "en"} onClick={() => setEditorLang("en")}>EN</button><button className={editorLang === "gr" ? "on" : ""} type="button" aria-pressed={editorLang === "gr"} onClick={() => setEditorLang("gr")}>GR</button></div>
         </div>
 
         <div className="inquiry-builder-workspace">
@@ -1975,15 +2018,15 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
               {groups.map((group, index) => <option value={group.id} key={group.id}>Step {String(index + 1).padStart(2, "0")} · {editorText(group, "title")}</option>)}
             </select>
           </label>
-          <nav className="inquiry-question-menu inquiry-step-menu" aria-label="Form steps">
+          <nav className="inquiry-question-menu inquiry-step-menu" aria-label="Βήματα φόρμας">
             {groups.map((group, index) => {
               const count = questions.filter((question) => question.group === group.id).length;
-              return <div className={`inquiry-step-menu-item ${group.id === selectedGroup ? "on" : ""}`} key={group.id}><button className={`inquiry-step-select ${group.id === selectedGroup ? "on" : ""}`} type="button" onClick={() => setSelectedGroup(group.id)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{editorText(group, "title")}</strong><small>{editorLang === "gr" ? "Ελληνικά" : "English"}</small><i>{count} fields</i></button><div className="inquiry-step-reorder" aria-label={`Reorder ${editorText(group, "title")}`}><button type="button" disabled={index === 0} aria-label={`Move ${editorText(group, "title")} up`} title="Move step up" onClick={() => moveStep(group.id, -1)}>↑</button><button type="button" disabled={index === groups.length - 1} aria-label={`Move ${editorText(group, "title")} down`} title="Move step down" onClick={() => moveStep(group.id, 1)}>↓</button></div></div>;
+              return <div className={`inquiry-step-menu-item ${group.id === selectedGroup ? "on" : ""}`} key={group.id}><button className={`inquiry-step-select ${group.id === selectedGroup ? "on" : ""}`} type="button" onClick={() => setSelectedGroup(group.id)}><span>{String(index + 1).padStart(2, "0")}</span><strong>{editorText(group, "title")}</strong><small>{editorLang === "gr" ? "Ελληνικά" : "Αγγλικά"}</small><i>{count} fields</i></button><div className="inquiry-step-reorder" aria-label={`Reorder ${editorText(group, "title")}`}><button type="button" disabled={index === 0} aria-label={`Move ${editorText(group, "title")} up`} title="Move step up" onClick={() => moveStep(group.id, -1)}>{Ic.arrowUp}</button><button type="button" disabled={index === groups.length - 1} aria-label={`Move ${editorText(group, "title")} down`} title="Move step down" onClick={() => moveStep(group.id, 1)}>{Ic.arrowDown}</button></div></div>;
             })}
           </nav>
           <div className="inquiry-builder-list">
           <div className="inquiry-step-heading">
-            <div className="inquiry-step-title-editor"><span>Step {String(groups.findIndex((group) => group.id === selectedGroup) + 1).padStart(2, "0")} · {editorLang === "gr" ? "Ελληνικά" : "English"}</span><label><small>{editorLang.toUpperCase()}</small><input aria-label={`${editorLang === "gr" ? "Greek" : "English"} step question`} value={editorText(activeStep || {}, "title")} onChange={(event) => updateStep(selectedGroup, { [editorLang === "gr" ? "title_gr" : "title"]: event.target.value })} /></label></div>
+            <div className="inquiry-step-title-editor"><span>Step {String(groups.findIndex((group) => group.id === selectedGroup) + 1).padStart(2, "0")} · {editorLang === "gr" ? "Ελληνικά" : "Αγγλικά"}</span><label><small>{editorLang.toUpperCase()}</small><input aria-label={`${editorLang === "gr" ? "Ελληνικά" : "Αγγλικά"} step question`} value={editorText(activeStep || {}, "title")} onChange={(event) => updateStep(selectedGroup, { [editorLang === "gr" ? "title_gr" : "title"]: event.target.value })} /></label></div>
             <div className="inquiry-step-heading-actions"><button className="btn ghost" type="button" onClick={openAddQuestion}><span className="ic">{Ic.plus}</span>Add sub-section</button><button className="btn danger" type="button" disabled={groups.length <= 1} onClick={() => removeStep(selectedGroup)}>{Ic.trash} Remove step</button></div>
           </div>
           {questions.map((question, index) => ({ question, index })).filter((item) => item.question.group === selectedGroup).map(({ question, index }, stepIndex) => {
@@ -1995,26 +2038,26 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
                   <strong>{editorText(question, "label") || "Untitled question"}</strong>
                   {question.required && <span className="inquiry-required-badge">Required</span>}
                   <div className="inquiry-question-actions">
-                    <button type="button" onClick={() => moveQuestion(index, -1)} disabled={stepIndex === 0} title="Move up">↑</button>
-                    <button type="button" onClick={() => moveQuestion(index, 1)} disabled={stepIndex === stepQuestions.length - 1} title="Move down">↓</button>
+                    <button type="button" onClick={() => moveQuestion(index, -1)} disabled={stepIndex === 0} title="Μετακίνηση πάνω">{Ic.arrowUp}</button>
+                    <button type="button" onClick={() => moveQuestion(index, 1)} disabled={stepIndex === stepQuestions.length - 1} title="Μετακίνηση κάτω">{Ic.arrowDown}</button>
                     <button type="button" className="danger" onClick={() => removeQuestion(index)} title="Remove question">{Ic.trash}</button>
                   </div>
                 </div>
                 <div className="inquiry-language-grid inquiry-language-grid-single">
-                  {editorLang === "en" ? <div className="inquiry-language-panel"><div className="inquiry-language-title"><b>EN</b><span>English</span></div><Field label="Question"><input type="text" value={question.label} onChange={(event) => updateQuestion(index, { label: event.target.value })} /></Field><Field label="Placeholder"><input type="text" value={question.placeholder || ""} onChange={(event) => updateQuestion(index, { placeholder: event.target.value })} placeholder="Optional hint" /></Field></div> : <div className="inquiry-language-panel"><div className="inquiry-language-title"><b>GR</b><span>Ελληνικά</span></div><Field label="Ερώτηση"><input type="text" value={question.label_gr || ""} onChange={(event) => updateQuestion(index, { label_gr: event.target.value })} /></Field><Field label="Placeholder"><input type="text" value={question.placeholder_gr || ""} onChange={(event) => updateQuestion(index, { placeholder_gr: event.target.value })} placeholder="Προαιρετική υπόδειξη" /></Field></div>}
+                  {editorLang === "en" ? <div className="inquiry-language-panel"><div className="inquiry-language-title"><b>EN</b><span>Αγγλικά</span></div><Field label="Ερώτηση"><input type="text" value={question.label} onChange={(event) => updateQuestion(index, { label: event.target.value })} /></Field><Field label="Placeholder"><input type="text" value={question.placeholder || ""} onChange={(event) => updateQuestion(index, { placeholder: event.target.value })} placeholder="Optional hint" /></Field></div> : <div className="inquiry-language-panel"><div className="inquiry-language-title"><b>GR</b><span>Ελληνικά</span></div><Field label="Ερώτηση"><input type="text" value={question.label_gr || ""} onChange={(event) => updateQuestion(index, { label_gr: event.target.value })} /></Field><Field label="Placeholder"><input type="text" value={question.placeholder_gr || ""} onChange={(event) => updateQuestion(index, { placeholder_gr: event.target.value })} placeholder="Προαιρετική υπόδειξη" /></Field></div>}
                 </div>
                 <div className="inquiry-question-grid inquiry-question-settings-grid">
-                  <Field label="Answer type">
+                  <Field label="Τύπος απάντησης">
                     <select value={question.type} onChange={(event) => { const choice = ["buttons", "select"].includes(event.target.value); updateQuestion(index, { type: event.target.value, options: choice ? (question.options.length ? question.options : ["Answer 1"]) : [], options_gr: choice ? (question.options_gr.length ? question.options_gr : ["Απάντηση 1"]) : [] }); }}>
                       <option value="text">Short text</option>
                       <option value="textarea">Long text</option>
                       <option value="email">Email</option>
-                      <option value="tel">Phone</option>
+                      <option value="tel">Τηλέφωνο</option>
                       <option value="buttons">Choice buttons</option>
                       <option value="select">Dropdown</option>
                     </select>
                   </Field>
-                  <Field label="Form step">
+                  <Field label="Βήμα φόρμας">
                     <select value={question.group} onChange={(event) => updateQuestion(index, { group: event.target.value })}>
                       {groups.map((group) => <option key={group.id} value={group.id}>{editorText(group, "title")}</option>)}
                     </select>
@@ -2027,11 +2070,11 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
 
                 {hasOptions && (
                   <div className="inquiry-options-editor">
-                    <div className="inquiry-options-title"><span>Answers · {editorLang === "gr" ? "Greek" : "English"}</span><button type="button" onClick={() => addOption(index)}>{Ic.plus} Add answer</button></div>
+                    <div className="inquiry-options-title"><span>Answers · {editorLang === "gr" ? "Ελληνικά" : "Αγγλικά"}</span><button type="button" onClick={() => addOption(index)}>{Ic.plus} Add answer</button></div>
                     {(editorLang === "gr" ? (question.options_gr || []) : (question.options || [])).map((option, optionIndex) => (
                       <div className="inquiry-option-row" key={optionIndex}>
                         <span>{optionIndex + 1}</span>
-                        <input aria-label={`${editorLang === "gr" ? "Greek" : "English"} answer ${optionIndex + 1}`} type="text" value={option} onChange={(event) => updateOption(index, optionIndex, event.target.value, editorLang)} />
+                        <input aria-label={`${editorLang === "gr" ? "Ελληνικά" : "Αγγλικά"} answer ${optionIndex + 1}`} type="text" value={option} onChange={(event) => updateOption(index, optionIndex, event.target.value, editorLang)} />
                         <button type="button" onClick={() => removeOption(index, optionIndex)} title="Remove answer">{Ic.trash}</button>
                       </div>
                     ))}
@@ -2046,41 +2089,41 @@ function InquiryFormSettings({ inquiryForm, onSave }) {
 
         <div className="settings-foot">
           <span className="muted">{groups.length} steps · {questions.length} sub-sections · {questions.filter((question) => question.required).length} mandatory</span>
-          <button className="btn primary" type="button" disabled={!changed || !valid} onClick={() => onSave(normalise(form))}>Save form</button>
+          <button className="btn primary" type="button" disabled={!changed || !valid} onClick={() => onSave(normalise(form))}>Αποθήκευση φόρμας</button>
         </div>
       </div>
       {addingStep && (
         <div className="sheet-wrap inquiry-builder-modal" onMouseDown={(event) => event.target === event.currentTarget && setAddingStep(false)}>
           <div className="sheet inquiry-builder-dialog" role="dialog" aria-modal="true" aria-labelledby="add-step-title">
-            <div className="sheet-head"><div><div className="eyebrow">/ New form step</div><h2 id="add-step-title">Add step</h2></div><button className="icon-btn" type="button" aria-label="Close" onClick={() => setAddingStep(false)}>{Ic.close}</button></div>
-            <div className="sheet-body"><div className="inquiry-language-grid"><div className="inquiry-language-panel"><div className="inquiry-language-title"><b>EN</b><span>English</span></div><Field label="Step question" required><input autoFocus value={stepDraft.title} onChange={(event) => setStepDraft({ ...stepDraft, title: event.target.value })} placeholder="e.g. What are you planning?" /></Field></div><div className="inquiry-language-panel"><div className="inquiry-language-title"><b>GR</b><span>Ελληνικά</span></div><Field label="Ερώτηση βήματος" required><input value={stepDraft.title_gr} onChange={(event) => setStepDraft({ ...stepDraft, title_gr: event.target.value })} placeholder="π.χ. Τι σχεδιάζετε;" /></Field></div></div></div>
-            <div className="sheet-foot"><span className="muted">You can add sub-sections after creating the step</span><div className="right"><button className="btn ghost" type="button" onClick={() => setAddingStep(false)}>Cancel</button><button className="btn primary" type="button" disabled={!stepDraft.title.trim() || !stepDraft.title_gr.trim()} onClick={addStep}>Add step</button></div></div>
+            <div className="sheet-head"><div><div className="eyebrow">/ New form step</div><h2 id="add-step-title">Add step</h2></div><button className="icon-btn" type="button" aria-label="Κλείσιμο" onClick={() => setAddingStep(false)}>{Ic.close}</button></div>
+            <div className="sheet-body"><div className="inquiry-language-grid"><div className="inquiry-language-panel"><div className="inquiry-language-title"><b>EN</b><span>Αγγλικά</span></div><Field label="Step question" required><input autoFocus value={stepDraft.title} onChange={(event) => setStepDraft({ ...stepDraft, title: event.target.value })} placeholder="e.g. What are you planning?" /></Field></div><div className="inquiry-language-panel"><div className="inquiry-language-title"><b>GR</b><span>Ελληνικά</span></div><Field label="Ερώτηση βήματος" required><input value={stepDraft.title_gr} onChange={(event) => setStepDraft({ ...stepDraft, title_gr: event.target.value })} placeholder="π.χ. Τι σχεδιάζετε;" /></Field></div></div></div>
+            <div className="sheet-foot"><span className="muted">You can add sub-sections after creating the step</span><div className="right"><button className="btn ghost" type="button" onClick={() => setAddingStep(false)}>Ακύρωση</button><button className="btn primary" type="button" disabled={!stepDraft.title.trim() || !stepDraft.title_gr.trim()} onClick={addStep}>Add step</button></div></div>
           </div>
         </div>
       )}
       {adding && (
         <div className="sheet-wrap inquiry-builder-modal" onMouseDown={(event) => event.target === event.currentTarget && setAdding(false)}>
           <div className="sheet inquiry-builder-dialog" role="dialog" aria-modal="true" aria-labelledby="add-question-title">
-            <div className="sheet-head"><div><div className="eyebrow">/ Step sub-section</div><h2 id="add-question-title">Add sub-section</h2></div><button className="icon-btn" type="button" aria-label="Close" onClick={() => setAdding(false)}>{Ic.close}</button></div>
+            <div className="sheet-head"><div><div className="eyebrow">/ Step sub-section</div><h2 id="add-question-title">Add sub-section</h2></div><button className="icon-btn" type="button" aria-label="Κλείσιμο" onClick={() => setAdding(false)}>{Ic.close}</button></div>
             <div className="sheet-body">
               <div className="inquiry-language-grid">
-                <div className="inquiry-language-panel"><div className="inquiry-language-title"><b>EN</b><span>English</span></div><Field label="Question" required><input autoFocus type="text" value={draft.label} onChange={(event) => setDraft({ ...draft, label: event.target.value })} /></Field></div>
+                <div className="inquiry-language-panel"><div className="inquiry-language-title"><b>EN</b><span>Αγγλικά</span></div><Field label="Ερώτηση" required><input autoFocus type="text" value={draft.label} onChange={(event) => setDraft({ ...draft, label: event.target.value })} /></Field></div>
                 <div className="inquiry-language-panel"><div className="inquiry-language-title"><b>GR</b><span>Ελληνικά</span></div><Field label="Ερώτηση" required><input type="text" value={draft.label_gr} onChange={(event) => setDraft({ ...draft, label_gr: event.target.value })} /></Field></div>
               </div>
               <div className="inquiry-question-grid inquiry-question-settings-grid">
-                <Field label="Answer type"><select value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value })}><option value="text">Short text</option><option value="textarea">Long text</option><option value="email">Email</option><option value="tel">Phone</option><option value="buttons">Choice buttons</option><option value="select">Dropdown</option></select></Field>
-                <Field label="Form step"><select value={draft.group} onChange={(event) => setDraft({ ...draft, group: event.target.value })}>{groups.map((group) => <option key={group.id} value={group.id}>{editorText(group, "title")}</option>)}</select></Field>
+                <Field label="Τύπος απάντησης"><select value={draft.type} onChange={(event) => setDraft({ ...draft, type: event.target.value })}><option value="text">Short text</option><option value="textarea">Long text</option><option value="email">Email</option><option value="tel">Τηλέφωνο</option><option value="buttons">Choice buttons</option><option value="select">Dropdown</option></select></Field>
+                <Field label="Βήμα φόρμας"><select value={draft.group} onChange={(event) => setDraft({ ...draft, group: event.target.value })}>{groups.map((group) => <option key={group.id} value={group.id}>{editorText(group, "title")}</option>)}</select></Field>
               </div>
               <label className="inquiry-required-toggle"><input type="checkbox" checked={draft.required} onChange={(event) => setDraft({ ...draft, required: event.target.checked })} /><span>Mandatory question</span></label>
             </div>
-            <div className="sheet-foot"><span className="muted">Added to {editorText(groups.find((group) => group.id === draft.group) || {}, "title")}</span><div className="right"><button className="btn ghost" type="button" onClick={() => setAdding(false)}>Cancel</button><button className="btn primary" type="button" disabled={!draft.label.trim() || !draft.label_gr.trim()} onClick={addQuestion}>Add sub-section</button></div></div>
+            <div className="sheet-foot"><span className="muted">Added to {editorText(groups.find((group) => group.id === draft.group) || {}, "title")}</span><div className="right"><button className="btn ghost" type="button" onClick={() => setAdding(false)}>Ακύρωση</button><button className="btn primary" type="button" disabled={!draft.label.trim() || !draft.label_gr.trim()} onClick={addQuestion}>Add sub-section</button></div></div>
           </div>
         </div>
       )}
       {preview && (
         <div className="sheet-wrap inquiry-builder-modal" onMouseDown={(event) => event.target === event.currentTarget && setPreview(false)}>
           <div className="sheet inquiry-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="form-preview-title">
-            <div className="sheet-head"><div><div className="eyebrow">/ Visitor view</div><h2 id="form-preview-title">Form preview</h2></div><div className="controls"><div className="inquiry-preview-language"><button className={previewLang === "en" ? "on" : ""} type="button" onClick={() => setPreviewLang("en")}>EN</button><button className={previewLang === "gr" ? "on" : ""} type="button" onClick={() => setPreviewLang("gr")}>GR</button></div><button className="icon-btn" type="button" aria-label="Close" onClick={() => setPreview(false)}>{Ic.close}</button></div></div>
+            <div className="sheet-head"><div><div className="eyebrow">/ Visitor view</div><h2 id="form-preview-title">Form preview</h2></div><div className="controls"><div className="inquiry-preview-language"><button className={previewLang === "en" ? "on" : ""} type="button" onClick={() => setPreviewLang("en")}>EN</button><button className={previewLang === "gr" ? "on" : ""} type="button" onClick={() => setPreviewLang("gr")}>GR</button></div><button className="icon-btn" type="button" aria-label="Κλείσιμο" onClick={() => setPreview(false)}>{Ic.close}</button></div></div>
             <div className="sheet-body inquiry-form-preview">
               {groups.map((group) => {
                 const inGroup = questions.filter((question) => question.group === group.id);
@@ -2100,31 +2143,31 @@ function InquiriesList({ data, onView, onDelete }) {
   if (!data.length) {
     return (
       <>
-        <SectionHead eyebrow="/ Project inquiries from the website" title="Inquiries" />
-        <div className="list"><div className="empty-row">No inquiries yet. Submissions from the “Start a project” form on the live site appear here.</div></div>
+        <SectionHead eyebrow="/ Επικοινωνία" title="Μηνύματα" />
+        <div className="list"><div className="empty-row">Δεν υπάρχουν ακόμη μηνύματα. Εδώ εμφανίζονται όσα στέλνονται από τη φόρμα επικοινωνίας της ιστοσελίδας.</div></div>
       </>
     );
   }
   return (
     <>
-      <SectionHead eyebrow="/ Project inquiries from the website" title="Inquiries" />
+      <SectionHead eyebrow="/ Επικοινωνία" title="Μηνύματα" />
       <div className="list">
         <div className="list-head head-inquiries">
           <span></span>
-          <span>Name · contact</span>
-          <span>Type</span>
-          <span>Received</span>
+          <span>Όνομα · επικοινωνία</span>
+          <span>Τύπος</span>
+          <span>Παραλήφθηκε</span>
           <span></span>
         </div>
         {data.map((q) => {
           const isNew = (q.status || "new") === "new";
           return (
             <div className={`row row-inquiries ${isNew ? "is-new" : ""}`} key={q.id} onClick={() => onView(q.id)}>
-              <div className="inq-status"><span className={`inq-dot ${isNew ? "on" : ""}`} title={isNew ? "New" : "Read"}></span></div>
+              <div className="inq-status"><span className={`inq-dot ${isNew ? "on" : ""}`} title={isNew ? "Νέο" : "Διαβασμένο"}></span></div>
               <div className="name">{q.name || "—"}<span className="sub">{q.email}{q.phone ? ` · ${q.phone}` : ""}</span></div>
               <div className="meta">{q.type || "—"}{q.location ? <span className="sub">{q.location}</span> : null}</div>
               <div className="meta">{formatInquiryDate(q.createdAt)}</div>
-              <button className="delete" onClick={(e) => { e.stopPropagation(); onDelete(q.id); }} title="Delete">{Ic.trash}</button>
+              <button className="delete" onClick={(e) => { e.stopPropagation(); onDelete(q.id); }} title="Διαγραφή">{Ic.trash}</button>
             </div>
           );
         })}
@@ -2143,7 +2186,7 @@ function InquirySheet({ inquiry, onDelete, onClose }) {
   const q = inquiry;
   const legacyRows = [
     ["Project type", q.type],
-    ["Location", q.location],
+    ["Τοποθεσία", q.location],
     ["Approx. size", q.size],
     ["Timeline", q.timeline],
     ["Budget", q.budget],
@@ -2174,7 +2217,7 @@ function InquirySheet({ inquiry, onDelete, onClose }) {
           </div>
           <div className="inq-detail-grid">
             <div className="inq-detail"><span>Email</span><b>{q.email || "—"}</b></div>
-            <div className="inq-detail"><span>Phone</span><b>{q.phone || "—"}</b></div>
+            <div className="inq-detail"><span>Τηλέφωνο</span><b>{q.phone || "—"}</b></div>
             {rows.map(([k, v]) => <div className="inq-detail" key={k}><span>{k}</span><b>{v}</b></div>)}
           </div>
           {q.message ? (
@@ -2185,10 +2228,10 @@ function InquirySheet({ inquiry, onDelete, onClose }) {
           ) : null}
         </div>
         <div className="sheet-foot">
-          <div className="left"><span>Stored in this browser · localStorage</span></div>
+          <div className="left"><span>Τα μηνύματα είναι ιδιωτικά.</span></div>
           <div className="right">
-            <button className="btn ghost danger" onClick={() => onDelete(q.id)}>Delete</button>
-            <button className="btn primary" onClick={onClose}>Close</button>
+            <button className="btn ghost danger" onClick={() => onDelete(q.id)}>Διαγραφή</button>
+            <button className="btn primary" onClick={onClose}>Κλείσιμο</button>
           </div>
         </div>
       </div>
@@ -2272,13 +2315,14 @@ function websiteTextGroup(key) {
   if (key.startsWith("home_") || ["see_all_projects", "location", "size", "status"].includes(key)) return "home";
   if (key.startsWith("interiors_") || ["proj_word", "arch_meta_b", "residential_coming_soon", "no_projects_category", "recent_projects"].includes(key)) return "projects";
   if (key.startsWith("agency_") || ["team_eyebrow", "team_h", "headcount", "headcount_unit", "studios", "updated_label", "practice_eyebrow", "short_history", "news_eyebrow", "recently", "work_with_us", "cta_2026"].includes(key)) return "studio";
+  if (key.startsWith("brand_")) return "projects";
   if (key.startsWith("pd_") || key === "view") return "project-ui";
   if (key.startsWith("foot_")) return "footer";
   if (key.startsWith("inquiry_")) return "inquiry";
   return "general";
 }
 
-function WebsiteTextsSettings({ site, onSave, onGoSection, onSaveVisual, onPublishVisual }) {
+function WebsiteTextsSettings({ site, onSave, onGoSection }) {
   const dictionaries = window.DICT_I18N || { en: {}, gr: {} };
   const makeDraft = (settings) => ({
     en: Object.fromEntries(Object.keys(dictionaries.en || {}).map((key) => [key, Array.isArray((settings.websiteTexts?.en || {})[key] ?? dictionaries.en[key]) ? ((settings.websiteTexts?.en || {})[key] ?? dictionaries.en[key]).join("\n") : String((settings.websiteTexts?.en || {})[key] ?? dictionaries.en[key] ?? "")])),
@@ -2325,18 +2369,17 @@ function WebsiteTextsSettings({ site, onSave, onGoSection, onSaveVisual, onPubli
 
   return (
     <>
-      <SectionHead eyebrow="/ All website copy · English + Greek" title="Website texts">
-        <div className="website-text-preview-lang" aria-label="Preview language"><button className={previewLang === "en" ? "on" : ""} onClick={() => setPreviewLang("en")}>EN</button><button className={previewLang === "gr" ? "on" : ""} onClick={() => setPreviewLang("gr")}>GR</button></div>
+      <SectionHead eyebrow="/ Ελληνικά και αγγλικά" title="Κείμενα ιστοσελίδας">
+        <div className="website-text-preview-lang" aria-label="Γλώσσα προεπισκόπησης"><button className={previewLang === "en" ? "on" : ""} onClick={() => setPreviewLang("en")}>EN</button><button className={previewLang === "gr" ? "on" : ""} onClick={() => setPreviewLang("gr")}>GR</button></div>
       </SectionHead>
-      <window.VisualTextEditor site={site} onSave={onSaveVisual} onPublish={onPublishVisual} />
       <div className="website-texts-toolbar">
-        <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search every website text — English or Greek…" />
+        <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Αναζήτηση σε όλα τα κείμενα, ελληνικά ή αγγλικά…" />
         {needle
-          ? <><span>{keys.length} of {Object.keys(dictionaries.en || {}).length} · all sections</span><button className="btn ghost" type="button" onClick={() => setQuery("")}>Clear</button></>
+          ? <><span>{keys.length} of {Object.keys(dictionaries.en || {}).length} · all sections</span><button className="btn ghost" type="button" onClick={() => setQuery("")}>Καθαρισμός</button></>
           : <span>{Object.keys(dictionaries.en || {}).length} texts · projects excluded</span>}
       </div>
       <div className="website-texts-workspace">
-        <nav className="website-texts-menu" aria-label="Website text sections">
+        <nav className="website-texts-menu" aria-label="Ενότητες κειμένων">
           {WEBSITE_TEXT_GROUPS.map((item) => {
             const count = Object.keys(dictionaries.en || {}).filter((key) => websiteTextGroup(key) === item.id).length;
             const hits = needle ? keys.filter((key) => websiteTextGroup(key) === item.id).length : count;
@@ -2352,19 +2395,19 @@ function WebsiteTextsSettings({ site, onSave, onGoSection, onSaveVisual, onPubli
                     <b>{item.title}</b>
                     <p>{item.note}</p>
                   </div>
-                  <button className="btn ghost" type="button" onClick={() => onGoSection && onGoSection(item.section)}>{item.cta} →</button>
+                  <button className="btn ghost" type="button" onClick={() => onGoSection && onGoSection(item.section)}>{item.cta} {Ic.arrowRight}</button>
                 </div>
               ))}
             </div>
           ) : null}
           <div className="website-texts-table-scroll" tabIndex="0" aria-label="Scrollable website texts table">
             <div className="website-texts-table">
-              <div className="website-texts-head"><span>Text key</span><span>English</span><span>Ελληνικά</span><span>Location</span></div>
+              <div className="website-texts-head"><span>Πεδίο κειμένου</span><span>Αγγλικά</span><span>Ελληνικά</span><span>Τοποθεσία</span></div>
               {keys.map((key) => <div className="website-text-row" key={key}><code>{key.replaceAll("_", " ")}{needle ? <em>{(WEBSITE_TEXT_GROUPS.find((item) => item.id === websiteTextGroup(key)) || {}).label}</em> : null}</code><textarea rows={Array.isArray(dictionaries.en[key]) ? 4 : 2} value={draft.en[key] || ""} onChange={(event) => updateText("en", key, event.target.value)} /><textarea rows={Array.isArray(dictionaries.gr?.[key] || dictionaries.en[key]) ? 4 : 2} value={draft.gr[key] || ""} onChange={(event) => updateText("gr", key, event.target.value)} /><button className="btn ghost" type="button" onClick={() => previewText(key)}>Preview {previewLang.toUpperCase()}</button></div>)}
               {!keys.length && <div className="empty-row">No website texts match this search.</div>}
             </div>
           </div>
-          <div className="settings-foot"><span className="muted">Changes appear after Save and Publish</span><button className="btn primary" type="button" disabled={!changed} onClick={() => onSave(serialise())}>Save website texts</button></div>
+          <div className="settings-foot"><span className="muted">Αποθήκευσε εδώ και μετά δημοσίευσε από την πάνω μπάρα.</span><button className="btn primary" type="button" disabled={!changed} onClick={() => onSave(serialise())}>Αποθήκευση κειμένων</button></div>
         </div>
       </div>
       {pagePreview && (
@@ -2372,7 +2415,7 @@ function WebsiteTextsSettings({ site, onSave, onGoSection, onSaveVisual, onPubli
           <div className="sheet website-text-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="website-preview-title">
             <div className="sheet-head"><div><div className="eyebrow">/ Page snapshot · {pagePreview.lang.toUpperCase()}</div><h2 id="website-preview-title">{pagePreview.section}</h2></div><button className="icon-btn" type="button" aria-label="Close page preview" onClick={() => setPagePreview(null)}>{Ic.close}</button></div>
             <div className="sheet-body website-text-preview-body"><div className="website-text-preview-browser"><div className="website-text-preview-browser-bar"><span></span><span></span><span></span><code>{pagePreview.key.replaceAll("_", " ")}</code></div><iframe key={pagePreview.href} src={pagePreview.href} title={`${pagePreview.section} page snapshot`} tabIndex="-1" /></div></div>
-            <div className="sheet-foot"><span className="muted">Snapshot of where this text appears</span><div className="right"><a className="btn ghost" href={pagePreview.href} target="_blank" rel="noopener">Open full page ↗</a><button className="btn primary" type="button" onClick={() => setPagePreview(null)}>Close</button></div></div>
+            <div className="sheet-foot"><span className="muted">Snapshot of where this text appears</span><div className="right"><a className="btn ghost" href={pagePreview.href} target="_blank" rel="noopener">Open full page {Ic.external}</a><button className="btn primary" type="button" onClick={() => setPagePreview(null)}>Κλείσιμο</button></div></div>
           </div>
         </div>
       )}
@@ -2388,7 +2431,10 @@ const HOME_GALLERY_MAX = 6;
 
 function HeroGallerySettings({ heroGallery, projects, onSave, onToggleFeatured, onReorder }) {
   const [interval, setInterval_] = useState(heroGallery.interval || 5200);
-  const dirty = interval !== heroGallery.interval;
+  const [idleHintEnabled, setIdleHintEnabled] = useState(heroGallery.idleHintEnabled !== false);
+  const [idleHintDelay, setIdleHintDelay] = useState(heroGallery.idleHintDelay || 15000);
+  const [idleHintDuration, setIdleHintDuration] = useState(heroGallery.idleHintDuration || 2400);
+  const dirty = interval !== heroGallery.interval || idleHintEnabled !== (heroGallery.idleHintEnabled !== false) || idleHintDelay !== (heroGallery.idleHintDelay || 15000) || idleHintDuration !== (heroGallery.idleHintDuration || 2400);
   const seconds = Math.round(interval / 100) / 10;
 
   const order = heroGallery.order || [];
@@ -2412,7 +2458,7 @@ function HeroGallerySettings({ heroGallery, projects, onSave, onToggleFeatured, 
 
   return (
     <>
-      <SectionHead eyebrow="/ Home page hero" title="Hero gallery" />
+      <SectionHead eyebrow="/ Αρχική σελίδα" title="Εικόνες αρχικής" />
       <div className="settings-card">
         <div className="form-section">
           <div className="form-section-title">Projects in the gallery</div>
@@ -2438,8 +2484,8 @@ function HeroGallerySettings({ heroGallery, projects, onSave, onToggleFeatured, 
                     <span>{p.brand || ""}</span>
                   </div>
                   <div className="hero-pick-actions">
-                    <button className="delete" title="Move up" disabled={i === 0} onClick={() => move(i, -1)}>↑</button>
-                    <button className="delete" title="Move down" disabled={i === chosen.length - 1} onClick={() => move(i, 1)}>↓</button>
+                    <button className="delete" title="Μετακίνηση πάνω" disabled={i === 0} onClick={() => move(i, -1)}>{Ic.arrowUp}</button>
+                    <button className="delete" title="Μετακίνηση κάτω" disabled={i === chosen.length - 1} onClick={() => move(i, 1)}>{Ic.arrowDown}</button>
                     <button className="delete" title="Remove from the gallery" onClick={() => onToggleFeatured(p.id, false)}>{Ic.trash}</button>
                   </div>
                 </div>
@@ -2484,9 +2530,18 @@ function HeroGallerySettings({ heroGallery, projects, onSave, onToggleFeatured, 
             </Field>
           </div>
         </div>
+        <div className="form-section">
+          <div className="form-section-title">Υπενθύμιση κύλισης στην αρχική</div>
+          <p className="hero-hint">Μια απαλή κίνηση κάτω–πάνω δείχνει ότι υπάρχει περιεχόμενο παρακάτω και επιστρέφει στην αρχική θέση. Παίζει μία φορά μετά από αδράνεια και σταματά μόλις αλληλεπιδράσεις.</p>
+          <label className="hero-idle-toggle"><input type="checkbox" checked={idleHintEnabled} onChange={event => setIdleHintEnabled(event.target.checked)} /> Ενεργή υπενθύμιση κύλισης</label>
+          <div className="field-group">
+            <Field label={`Χρόνος αναμονής: ${idleHintDelay / 1000} δευτ.`} hint="Μετρά από την τελευταία κίνηση του χρήστη. Από 2 έως 120 δευτερόλεπτα."><input type="range" aria-label="Χρόνος αναμονής υπενθύμισης" min="2000" max="120000" step="1000" value={idleHintDelay} disabled={!idleHintEnabled} onChange={event => setIdleHintDelay(Number(event.target.value))} /></Field>
+            <Field label={`Διάρκεια κίνησης: ${idleHintDuration / 1000} δευτ.`} hint="Συνολικός χρόνος για την κίνηση κάτω και την επιστροφή. Μεγαλύτερη διάρκεια σημαίνει πιο αργή κίνηση."><input type="range" aria-label="Διάρκεια υπενθύμισης" min="1000" max="6000" step="100" value={idleHintDuration} disabled={!idleHintEnabled} onChange={event => setIdleHintDuration(Number(event.target.value))} /></Field>
+          </div>
+        </div>
         <div className="settings-foot">
-          <span className="muted">Changes take effect on the next page load.</span>
-          <button className="btn primary" disabled={!dirty} onClick={() => onSave({ ...heroGallery, interval })}>Save</button>
+          <span className="muted">Οι ρυθμίσεις εφαρμόζονται στην επόμενη φόρτωση της αρχικής.</span>
+          <button className="btn primary" disabled={!dirty} onClick={() => onSave({ ...heroGallery, interval, idleHintEnabled, idleHintDelay, idleHintDuration })}>Αποθήκευση</button>
         </div>
       </div>
     </>
@@ -2534,7 +2589,7 @@ function HomeV2Settings({ homeV2, onSave }) {
 
   return (
     <>
-      <SectionHead eyebrow="/ Home page · Selected fields" title="V2 banners">
+      <SectionHead eyebrow="/ Αρχική σελίδα" title="Ενότητες αρχικής">
         <button className="btn primary" type="button" onClick={addBanner}><span className="ic">{Ic.plus}</span>Add banner</button>
       </SectionHead>
       <div className="settings-card v2-settings">
@@ -2549,14 +2604,14 @@ function HomeV2Settings({ homeV2, onSave }) {
             role="switch"
             aria-checked={draft.enabled}
             onClick={() => setDraft((current) => ({ ...current, enabled: !current.enabled }))}>
-            <span aria-hidden="true"></span>{draft.enabled ? "Visible" : "Hidden"}
+            <span aria-hidden="true"></span>{draft.enabled ? "Ορατό" : "Κρυφό"}
           </button>
         </div>
 
         <div className="form-section">
           <div className="form-section-title">Section heading</div>
           <div className="field-group">
-            <Field label="Section label"><input type="text" value={draft.kicker || ""} onChange={(event) => setDraft((current) => ({ ...current, kicker: event.target.value }))} /></Field>
+            <Field label="Τίτλος ενότητας"><input type="text" value={draft.kicker || ""} onChange={(event) => setDraft((current) => ({ ...current, kicker: event.target.value }))} /></Field>
             <Field label="Heading"><input type="text" value={draft.title || ""} onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))} /></Field>
           </div>
         </div>
@@ -2571,18 +2626,18 @@ function HomeV2Settings({ homeV2, onSave }) {
                   <span className="v2-banner-index">{String(index + 1).padStart(2, "0")}</span>
                   <strong>{banner.title || "Untitled banner"}</strong>
                   <div className="v2-banner-actions">
-                    <button className={`visibility-toggle ${banner.visible === false ? "is-hidden" : "is-visible"}`} type="button" role="switch" aria-checked={banner.visible !== false} onClick={() => updateBanner(banner.id, { visible: banner.visible === false })}><span aria-hidden="true"></span>{banner.visible === false ? "Hidden" : "Visible"}</button>
-                    <button className="delete" type="button" title="Move up" disabled={index === 0} onClick={() => moveBanner(index, -1)}>↑</button>
-                    <button className="delete" type="button" title="Move down" disabled={index === banners.length - 1} onClick={() => moveBanner(index, 1)}>↓</button>
+                    <button className={`visibility-toggle ${banner.visible === false ? "is-hidden" : "is-visible"}`} type="button" role="switch" aria-checked={banner.visible !== false} onClick={() => updateBanner(banner.id, { visible: banner.visible === false })}><span aria-hidden="true"></span>{banner.visible === false ? "Κρυφό" : "Ορατό"}</button>
+                    <button className="delete" type="button" title="Μετακίνηση πάνω" disabled={index === 0} onClick={() => moveBanner(index, -1)}>{Ic.arrowUp}</button>
+                    <button className="delete" type="button" title="Μετακίνηση κάτω" disabled={index === banners.length - 1} onClick={() => moveBanner(index, 1)}>{Ic.arrowDown}</button>
                     <button className="delete" type="button" title="Delete banner" onClick={() => removeBanner(banner.id)}>{Ic.trash}</button>
                   </div>
                 </div>
                 <div className="field-group">
-                  <Field label="Small heading"><input type="text" value={banner.eyebrow || ""} onChange={(event) => updateBanner(banner.id, { eyebrow: event.target.value })} /></Field>
-                  <Field label="Title"><input type="text" value={banner.title || ""} onChange={(event) => updateBanner(banner.id, { title: event.target.value })} /></Field>
+                  <Field label="Μικρός τίτλος"><input type="text" value={banner.eyebrow || ""} onChange={(event) => updateBanner(banner.id, { eyebrow: event.target.value })} /></Field>
+                  <Field label="Τίτλος"><input type="text" value={banner.title || ""} onChange={(event) => updateBanner(banner.id, { title: event.target.value })} /></Field>
                 </div>
                 <div className="field-group cols-1">
-                  <Field label="Description"><textarea rows="2" value={banner.note || ""} onChange={(event) => updateBanner(banner.id, { note: event.target.value })} /></Field>
+                  <Field label="Περιγραφή"><textarea rows="2" value={banner.note || ""} onChange={(event) => updateBanner(banner.id, { note: event.target.value })} /></Field>
                 </div>
                 <div className="field-group">
                   <Field label="Style">
@@ -2592,12 +2647,12 @@ function HomeV2Settings({ homeV2, onSave }) {
                   </Field>
                   <Field label="Opens">
                     <select value={banner.destination || "projects"} onChange={(event) => updateBanner(banner.id, { destination: event.target.value })}>
-                      <option value="projects">All projects</option><option value="retail">Retail</option><option value="hospitality">Hospitality</option><option value="residential">Residential</option><option value="workplace">Workplace</option><option value="protein-garden">Protein Garden</option><option value="dinas">DINAS</option><option value="contact">Contact / inquiry</option>
+                      <option value="projects">Όλα τα έργα</option><option value="retail">Retail</option><option value="hospitality">Hospitality</option><option value="residential">Residential</option><option value="workplace">Workplace</option><option value="protein-garden">Protein Garden</option><option value="dinas">DINAS</option><option value="contact">Contact / inquiry</option>
                     </select>
                   </Field>
                 </div>
                 <div className="field-group cols-1">
-                  <Field label="Background image" hint="Optional. Existing Protein Garden and DINAS cards fall back to their current project hero."><ImageInput value={banner.image || ""} onChange={(value) => updateBanner(banner.id, { image: value })} placeholder="Banner background image" /></Field>
+                  <Field label="Εικόνα φόντου" hint="Optional. Existing Protein Garden and DINAS cards fall back to their current project hero."><ImageInput value={banner.image || ""} onChange={(value) => updateBanner(banner.id, { image: value })} placeholder="Banner background image" /></Field>
                 </div>
               </article>
             ))}
@@ -2606,7 +2661,7 @@ function HomeV2Settings({ homeV2, onSave }) {
         </div>
         <div className="settings-foot">
           <span className="muted">Save, then Publish to make these changes public.</span>
-          <button className="btn primary" type="button" disabled={!changed} onClick={() => onSave(normalise(draft))}>Save V2</button>
+          <button className="btn primary" type="button" disabled={!changed} onClick={() => onSave(normalise(draft))}>Αποθήκευση ενοτήτων</button>
         </div>
       </div>
     </>
@@ -2616,149 +2671,91 @@ function HomeV2Settings({ homeV2, onSave }) {
 function SiteSettings({ site, onSave, onGoSection }) {
   const [s, setS] = useState(site);
   const contact = s.contact || DEFAULT_SITE.contact;
-  const projectsPage = s.projectsPage || DEFAULT_SITE.projectsPage;
   const setContact = (k, v) => setS((x) => ({ ...x, contact: { ...(x.contact || DEFAULT_SITE.contact), [k]: v } }));
-  const setProjectsPage = (k, v) => setS((x) => ({ ...x, projectsPage: { ...(x.projectsPage || DEFAULT_SITE.projectsPage), [k]: v } }));
   const setMenuImage = (k, v) => setS((x) => ({ ...x, menuImages: { ...(x.menuImages || DEFAULT_SITE.menuImages), [k]: v } }));
   const setPeopleField = (k, v) => setS((x) => ({ ...x, people: { ...(x.people || DEFAULT_SITE.people), [k]: v } }));
   const setDefaultProjectBadge = (v) => setS((x) => ({ ...x, defaultProjectBadge: v }));
   const setField = (k, v) => setS((x) => ({ ...x, [k]: v }));
-  const dirty = JSON.stringify(s) !== JSON.stringify(site);
+  // The live editor owns projectsPage; saving this form must preserve its latest draft.
+  const settingsDraft = { ...s, projectsPage: site.projectsPage };
+  const dirty = JSON.stringify(settingsDraft) !== JSON.stringify(site);
   return (
     <>
-      <SectionHead eyebrow="/ Footer addresses · contact details" title="Site settings" />
+      <SectionHead eyebrow="/ Στοιχεία ιστοσελίδας" title="Γενικές ρυθμίσεις" />
       <div className="settings-card">
         <div className="form-section">
-          <div className="form-section-title">Projects page</div>
-          <div className="field-group">
-            <Field label="Hero title (EN)">
-              <input type="text" value={projectsPage.heroTitle || ""} onChange={(e) => setProjectsPage("heroTitle", e.target.value)} placeholder="Projects" />
-            </Field>
-            <Field label="Hero title (GR)">
-              <input type="text" value={projectsPage.heroTitle_gr || ""} onChange={(e) => setProjectsPage("heroTitle_gr", e.target.value)} placeholder="Έργα" />
-            </Field>
-          </div>
+          <div className="form-section-title">Εικονίδιο ιστοσελίδας</div>
           <div className="field-group cols-1">
-            <Field label={`Hero title size — ${projectsPage.heroTitleScale || 150}%`} hint="100% is the original size. Current design uses 150%. Range: 50–250%.">
-              <input type="range" min="50" max="250" step="5" value={projectsPage.heroTitleScale || 150} onChange={(e) => setProjectsPage("heroTitleScale", Number(e.target.value))} style={{ width: "100%" }} />
-            </Field>
-          </div>
-          <div className="field-group">
-            <Field label="Centre text (EN)" hint="Leave empty to hide it.">
-              <input type="text" value={projectsPage.centerText || ""} onChange={(e) => setProjectsPage("centerText", e.target.value)} placeholder="we design what you want" />
-            </Field>
-            <Field label="Centre text (GR)" hint="Leave empty to hide it in Greek.">
-              <input type="text" value={projectsPage.centerText_gr || ""} onChange={(e) => setProjectsPage("centerText_gr", e.target.value)} placeholder="we design what you want" />
-            </Field>
-          </div>
-          <div className="form-section v2-section-switch">
-            <div>
-              <div className="form-section-title">Intro panel</div>
-              <p className="hero-hint">Show or hide the title-and-description panel before the category cards.</p>
-            </div>
-            <button className={`visibility-toggle ${projectsPage.showIntro ? "is-visible" : "is-hidden"}`} type="button" role="switch" aria-checked={Boolean(projectsPage.showIntro)} onClick={() => setProjectsPage("showIntro", !projectsPage.showIntro)}>
-              <span aria-hidden="true"></span>{projectsPage.showIntro ? "Visible" : "Hidden"}
-            </button>
-          </div>
-          <div className="field-group">
-            <Field label="Intro title (EN)">
-              <input type="text" value={projectsPage.introTitle || ""} onChange={(e) => setProjectsPage("introTitle", e.target.value)} placeholder="Projects" />
-            </Field>
-            <Field label="Intro title (GR)">
-              <input type="text" value={projectsPage.introTitle_gr || ""} onChange={(e) => setProjectsPage("introTitle_gr", e.target.value)} placeholder="Έργα" />
-            </Field>
-          </div>
-          <div className="field-group">
-            <Field label="Intro description (EN)">
-              <textarea rows="3" value={projectsPage.introNote || ""} onChange={(e) => setProjectsPage("introNote", e.target.value)} />
-            </Field>
-            <Field label="Intro description (GR)">
-              <textarea rows="3" value={projectsPage.introNote_gr || ""} onChange={(e) => setProjectsPage("introNote_gr", e.target.value)} />
-            </Field>
-          </div>
-          <div className="form-section v2-section-switch">
-            <div>
-              <div className="form-section-title">Category title casing</div>
-              <p className="hero-hint">Choose normal names such as “Retail” or force every category name to uppercase.</p>
-            </div>
-            <button className={`visibility-toggle ${projectsPage.categoryTitlesUppercase ? "is-visible" : "is-hidden"}`} type="button" role="switch" aria-checked={Boolean(projectsPage.categoryTitlesUppercase)} onClick={() => setProjectsPage("categoryTitlesUppercase", !projectsPage.categoryTitlesUppercase)}>
-              <span aria-hidden="true"></span>{projectsPage.categoryTitlesUppercase ? "UPPERCASE" : "Normal case"}
-            </button>
-          </div>
-        </div>
-        <div className="form-section">
-          <div className="form-section-title">Browser favicon</div>
-          <div className="field-group cols-1">
-            <Field label="Favicon" hint="Shown in browser tabs and bookmarks. Use a square SVG or PNG for the sharpest result.">
+            <Field label="Εικονίδιο καρτέλας" hint="Εμφανίζεται στις καρτέλες του browser. Χρησιμοποίησε τετράγωνο SVG ή PNG.">
               <ImageInput value={s.favicon || ""} onChange={(value) => setField("favicon", value)} placeholder="Favicon · square SVG or PNG" />
             </Field>
           </div>
         </div>
         <div className="form-section">
-          <div className="form-section-title">People mosaic</div>
+          <div className="form-section-title">Εικόνες ομάδας</div>
           <div className="field-group cols-1">
-            <Field label="Fallback group image" hint="Used for team cards that do not have their own portrait yet.">
+            <Field label="Γενική εικόνα ομάδας" hint="Εμφανίζεται όταν δεν έχει προστεθεί φωτογραφία μέλους.">
               <ImageInput value={(s.people || DEFAULT_SITE.people).hero || ""} onChange={(v) => setPeopleField("hero", v)} placeholder="People mosaic fallback image" />
             </Field>
           </div>
         </div>
         <div className="form-section">
-          <div className="form-section-title">Default project badge</div>
+          <div className="form-section-title">Γενικό λογότυπο έργων</div>
           <div className="field-group cols-1">
-            <Field label="Default badge" hint="Used for every project that does not have its own badge or a sub-category badge.">
+            <Field label="Γενικό λογότυπο" hint="Χρησιμοποιείται στα έργα που δεν έχουν δικό τους λογότυπο.">
               <ImageInput value={s.defaultProjectBadge || ""} onChange={setDefaultProjectBadge} placeholder="Default project badge · square" />
             </Field>
           </div>
         </div>
         <div className="form-section">
-          <div className="form-section-title">Desktop menu hover images</div>
+          <div className="form-section-title">Εικόνες μενού υπολογιστή</div>
           <div className="field-group">
-            <Field label="Home image">
+            <Field label="Εικόνα αρχικής">
               <ImageInput value={(s.menuImages || DEFAULT_SITE.menuImages).home || ""} onChange={(v) => setMenuImage("home", v)} placeholder="Home menu image" />
             </Field>
-            <Field label="Projects image">
+            <Field label="Εικόνα έργων">
               <ImageInput value={(s.menuImages || DEFAULT_SITE.menuImages).projects || ""} onChange={(v) => setMenuImage("projects", v)} placeholder="Projects menu image" />
             </Field>
           </div>
           <div className="field-group">
-            <Field label="People image">
+            <Field label="Εικόνα ομάδας">
               <ImageInput value={(s.menuImages || DEFAULT_SITE.menuImages).agency || ""} onChange={(v) => setMenuImage("agency", v)} placeholder="People menu image" />
             </Field>
-            <Field label="Contact image">
+            <Field label="Εικόνα επικοινωνίας">
               <ImageInput value={(s.menuImages || DEFAULT_SITE.menuImages).contact || ""} onChange={(v) => setMenuImage("contact", v)} placeholder="Contact menu image" />
             </Field>
           </div>
         </div>
         <div className="form-section">
-          <div className="form-section-title">Footer CTA & copyright</div>
+          <div className="form-section-title">Κείμενα υποσέλιδου</div>
           <div className="text-owner-note">
             <div>
-              <b>Edited in Website texts</b>
-              <p>The footer headline and the copyright bar are website copy, so they live in Website texts with the rest of it — English and Greek side by side. This section keeps the contact details below them.</p>
+              <b>Επεξεργασία στα κείμενα ιστοσελίδας</b>
+              <p>Ο τίτλος του υποσέλιδου και τα πνευματικά δικαιώματα αλλάζουν στα Κείμενα ιστοσελίδας. Εδώ επεξεργάζεσαι τα στοιχεία επικοινωνίας.</p>
             </div>
-            <button className="btn ghost" type="button" onClick={() => onGoSection && onGoSection("website-texts")}>Open Website texts →</button>
+            <button className="btn ghost" type="button" onClick={() => onGoSection && onGoSection("website-texts")}>Άνοιγμα κειμένων ιστοσελίδας {Ic.arrowRight}</button>
           </div>
         </div>
         <div className="form-section">
-          <div className="form-section-title">Final contact / CTA</div>
+          <div className="form-section-title">Στοιχεία επικοινωνίας</div>
           <div className="field-group">
-            <Field label="Location label">
+            <Field label="Όνομα τοποθεσίας">
               <input type="text" value={contact.location_label || ""} onChange={(e) => setContact("location_label", e.target.value)} placeholder="ATHENS" />
             </Field>
-            <Field label="Address">
+            <Field label="Διεύθυνση">
               <input type="text" value={contact.address || ""} onChange={(e) => setContact("address", e.target.value)} placeholder="Akademias 76 · 106 76" />
             </Field>
           </div>
           <div className="field-group">
-            <Field label="Google Maps URL" hint="Optional. Leave empty to render address as plain text.">
+            <Field label="Σύνδεσμος Google Maps" hint="Προαιρετικό. Χωρίς σύνδεσμο η διεύθυνση εμφανίζεται ως απλό κείμενο.">
               <input type="text" value={contact.address_url || ""} onChange={(e) => setContact("address_url", e.target.value)} placeholder="https://maps.google.com/..." />
             </Field>
-            <Field label="Phone">
+            <Field label="Τηλέφωνο">
               <input type="text" value={contact.phone || ""} onChange={(e) => setContact("phone", e.target.value)} />
             </Field>
           </div>
           <div className="field-group">
-            <Field label="Phone link" hint="Use tel:+302100005800 or leave empty for plain text.">
+            <Field label="Σύνδεσμος τηλεφώνου" hint="Μορφή tel:+302100005800. Άφησέ το κενό για απλό κείμενο.">
               <input type="text" value={contact.phone_url || ""} onChange={(e) => setContact("phone_url", e.target.value)} />
             </Field>
             <Field label="Email">
@@ -2766,22 +2763,22 @@ function SiteSettings({ site, onSave, onGoSection }) {
             </Field>
           </div>
           <div className="field-group">
-            <Field label="Email link" hint="Use mailto:name@example.com or leave empty for plain text.">
+            <Field label="Σύνδεσμος email" hint="Μορφή mailto:name@example.com. Άφησέ το κενό για απλό κείμενο.">
               <input type="text" value={contact.email_url || ""} onChange={(e) => setContact("email_url", e.target.value)} />
             </Field>
-            <Field label="Instagram text">
+            <Field label="Κείμενο Instagram">
               <input type="text" value={contact.instagram_text || ""} onChange={(e) => setContact("instagram_text", e.target.value)} placeholder="Instagram → @project.58" />
             </Field>
           </div>
           <div className="field-group cols-1">
-            <Field label="Instagram URL" hint="Optional external URL. Opens in a new tab.">
+            <Field label="Σύνδεσμος Instagram" hint="Προαιρετικός σύνδεσμος. Ανοίγει σε νέα καρτέλα.">
               <input type="text" value={contact.instagram_url || ""} onChange={(e) => setContact("instagram_url", e.target.value)} placeholder="https://instagram.com/project.58" />
             </Field>
           </div>
         </div>
         <div className="settings-foot">
-          <span className="muted">Changes appear immediately on the live site (same browser).</span>
-          <button className="btn primary" disabled={!dirty} onClick={() => onSave(s)}>Save settings</button>
+          <span className="muted">Οι αλλαγές εμφανίζονται στην ιστοσελίδα μετά τη δημοσίευση.</span>
+          <button className="btn primary" disabled={!dirty} onClick={() => onSave(settingsDraft)}>Αποθήκευση ρυθμίσεων</button>
         </div>
       </div>
     </>
@@ -2792,7 +2789,7 @@ function Empty({ kind, onNew }) {
   return (
     <div className="empty">
       <h3>No {kind} yet</h3>
-      <p>Add your first one to populate the site. Edits save instantly to your browser.</p>
+      <p>Πρόσθεσε περιεχόμενο, αποθήκευσε το πρόχειρο και μετά δημοσίευσε.</p>
       <button className="btn primary" onClick={onNew}><span className="ic">{Ic.plus}</span><span>Add {kind.replace(/s$/, "")}</span></button>
     </div>
   );
@@ -2826,7 +2823,45 @@ const SPAN_OPTIONS = [
   { v: "gal-6",  l: "6 / 12" },
 ];
 
-function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPublish, onTexts, onClose, uploadsActive, publishBusy }) {
+function ProjectAddressField({ project, onChange }) {
+  const [results, setResults] = useState([]);
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+  const request = useRef(0);
+  useEffect(() => () => { request.current += 1; }, []);
+  const address = project.address || "";
+  const point = project.coordinates;
+  const located = point && point.address === address.trim() && Number.isFinite(point.lat) && Number.isFinite(point.lng);
+  const search = async () => {
+    const id = ++request.current;
+    setBusy(true); setResults([]); setStatus("");
+    try {
+      const response = await fetch('/api/geocode',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({address})});
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.message || 'Η αναζήτηση απέτυχε.');
+      if (id !== request.current) return;
+      setResults(body.results);
+      setStatus(body.results.length ? 'Επίλεξε το σωστό σημείο για το έργο.' : 'Δεν βρέθηκε διεύθυνση. Πρόσθεσε πόλη, ταχυδρομικό κώδικα ή χώρα και δοκίμασε ξανά.');
+    } catch (error) {
+      if (id === request.current) setStatus(error.message || 'Η αναζήτηση απέτυχε.');
+    } finally { if (id === request.current) setBusy(false); }
+  };
+  return <div className="project-address-field">
+    <Field label="Διεύθυνση έργου" hint="Οδός, αριθμός, πόλη, Τ.Κ. και χώρα. Βρες και επίλεξε το σημείο μία φορά· όλοι οι χάρτες θα το χρησιμοποιούν μετά τη δημοσίευση.">
+      <input type="text" maxLength="400" value={address} placeholder="π.χ. Ακαδημίας 76, Αθήνα 106 76, Ελλάδα"
+        onChange={event => { request.current += 1; setBusy(false); setResults([]); setStatus(""); onChange({address:event.target.value,coordinates:null}); }} />
+    </Field>
+    <button className="btn ghost" type="button" disabled={busy || address.trim().length < 5} onClick={search}>{busy ? 'Αναζήτηση…' : 'Εντοπισμός στον χάρτη'}</button>
+    <p role="status" aria-live="polite">{status}</p>
+    {results.length > 0 && <div className="project-address-results">{results.map((result,index) => <button className="btn ghost" type="button" key={index} onClick={() => {
+      onChange({coordinates:{...result,address:address.trim()}}); setResults([]); setStatus('Το σημείο συνδέθηκε με τη διεύθυνση.');
+    }}><span>{result.label}{result.approximate ? ' · Κατά προσέγγιση' : ''}</span></button>)}</div>}
+    {located && <p>Σημείο: {point.label || address}{point.approximate ? ' (κατά προσέγγιση)' : ''} · <a href={`https://www.openstreetmap.org/?mlat=${point.lat}&mlon=${point.lng}#map=18/${point.lat}/${point.lng}`} target="_blank" rel="noopener noreferrer">Έλεγχος στον χάρτη</a></p>}
+    <small>Αναζήτηση μέσω <a href="https://photon.komoot.io/" target="_blank" rel="noopener noreferrer">Photon</a> · © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap contributors</a></small>
+  </div>;
+}
+
+function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPublish, onDraft, draftState, pending, onClose, uploadsActive, publishBusy }) {
   const [p, setP] = useState(() => project ? JSON.parse(JSON.stringify(project)) : ({
     id: newId("pj"),
     slug: "",
@@ -2858,11 +2893,14 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
     icon: "",
     gallery: [],
   }));
+  const [tab, setTab] = useState("details");
+  const lastDraft = useRef(JSON.stringify(p));
+  const draftCallback = useRef(onDraft);
+  draftCallback.current = onDraft;
   const set = (k, v) => setP((x) => ({ ...x, [k]: v }));
   const sizeValue = String(p.size || "").replace(/\s*m(?:²|2)\s*$/i, "");
 
-  // Every project shares one site-wide fallback unless it has an override.
-  const fallbackBadge = defaultProjectBadge || "";
+  const projectBadge = window.projectIconFor(p, { defaultProjectBadge }, categories);
   const setGallery = (i, key, v) => setP((x) => ({ ...x, gallery: x.gallery.map((g, gi) => gi === i ? { ...g, [key]: v } : g) }));
   const addGallery = () => setP((x) => ({ ...x, gallery: [...x.gallery, { src: "", tag: "", span: "gal-6" }] }));
   const removeGallery = (i) => setP((x) => ({ ...x, gallery: x.gallery.filter((_, gi) => gi !== i) }));
@@ -2942,9 +2980,8 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
   const activeCat = (categories && categories.length ? categories : DEFAULT_CATEGORIES).find((cc) => cc.id === (p.category || p.typology || "retail"));
   const subOptions = (activeCat && activeCat.subcategories) || [];
   const subLabel = (activeCat && activeCat.subLabel && activeCat.subLabel !== "Sub-category") ? activeCat.subLabel : "Brand";
-  const valid = p.name && p.code;
+  const valid = Boolean(String(p.name || "").trim() && String(p.code || "").trim());
   const finished = () => ({ ...p, slug: p.slug || suggestedSlug || p.id, typology: p.category || p.typology || "retail" });
-  const save = () => valid && onSave(finished());
   const previewHref = valid
     ? `/index.html?preview=${encodeURIComponent(p.id)}#project/${encodeURIComponent(p.slug || suggestedSlug || p.id)}`
     : "";
@@ -2962,60 +2999,75 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
     }
   };
 
-  /* Publish sits beside Save and only turns up once this sheet holds something
-     the site does not have yet. It stays on screen while images are still
-     uploading — dimmed and unclickable — because publishing mid-upload would
-     put a project live pointing at pictures that are not there. */
-  const changed = !project || JSON.stringify(p) !== JSON.stringify(project);
-  const showPublish = valid && changed;
-  const publishReady = showPublish && !uploadsActive && !publishBusy;
+  // Keep local edits across editor tabs; only publish after uploads and draft saves finish.
+  const changed = JSON.stringify(p) !== lastDraft.current;
+  useEffect(() => {
+    if (!valid || uploadsActive || JSON.stringify(p) === lastDraft.current) return;
+    lastDraft.current = JSON.stringify(p);
+    draftCallback.current({ ...finished(), updatedAt: Date.now() });
+  }, [p, valid, uploadsActive]);
+  const close = () => {
+    if (uploadsActive) { alert("Περίμενε να ολοκληρωθεί το ανέβασμα αρχείων."); return; }
+    if (changed && !valid && !confirm("Λείπει το όνομα ή ο κωδικός. Να κλείσει το έργο χωρίς να αποθηκευτούν οι τελευταίες αλλαγές;")) return;
+    if (changed && valid) onSave({ ...finished(), updatedAt: Date.now() });
+    else onClose();
+  };
+  useEffect(() => {
+    const warn = event => { if (changed) { event.preventDefault(); event.returnValue = ''; } };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [changed]);
+  const showPublish = valid && (changed || pending);
+  const publishReady = showPublish && !uploadsActive && !publishBusy && draftState === "saved";
   const publish = () => publishReady && onPublish(finished());
 
   useEffect(() => {
-    const k = (e) => { if (e.key === "Escape") onClose(); };
+    const k = (e) => { if (e.key === "Escape") close(); };
     document.addEventListener("keydown", k);
     return () => document.removeEventListener("keydown", k);
-  }, []);
+  }, [p, uploadsActive, changed]);
 
   return (
     <div className="sheet-wrap">
-      <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="Επεξεργασία έργου" onMouseDown={(e) => e.stopPropagation()}>
         <div className="sheet-head">
           <div>
-            <div className="eyebrow">/ {project ? "Editing" : "New"} project</div>
-            <h2>{p.name || "Untitled project"}</h2>
+            <div className="eyebrow">/ {project ? "Επεξεργασία έργου" : "Νέο έργο"}</div>
+            <h2>{p.name || "Έργο χωρίς τίτλο"}</h2>
           </div>
           <div className="controls">
-            <span className={`status-pill ${project ? "saved" : "draft"}`}>{project ? "Saved" : "Draft"}</span>
-            {onTexts && <button className="btn ghost" type="button" onClick={onTexts}>Project texts →</button>}
-            <button className="btn ghost" onClick={onClose}>{Ic.close}</button>
+            <span className="status-pill" role="status">{!valid ? "Συμπλήρωσε όνομα και κωδικό" : changed || draftState === "saving" ? "Αποθήκευση…" : draftState === "error" ? "Σφάλμα αποθήκευσης" : "Αποθηκεύτηκε"}</span>
+            <button className="btn ghost" aria-label="Κλείσιμο έργου" onClick={close}>{Ic.close}</button>
           </div>
         </div>
 
+        <nav className="section-tabs project-editor-tabs" aria-label="Επεξεργασία έργου">
+          {[['details', 'Στοιχεία'], ['texts', 'Κείμενα & μεταφράσεις'], ['media', 'Φωτογραφίες']].map(([id, label]) => <button type="button" key={id} className={tab === id ? 'on' : ''} aria-pressed={tab === id} onClick={() => setTab(id)}>{label}</button>)}
+        </nav>
         <div className="sheet-body">
-          <div className="form-section">
-            <div className="form-section-title">Identity</div>
+          <div className="form-section" hidden={tab !== "details"}>
+            <div className="form-section-title">Στοιχεία έργου</div>
             <div className="field-group">
-              <Field label="Name (EN)" required>
+              <Field label="Όνομα (Αγγλικά)" required>
                 <input type="text" value={p.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Panormou" />
               </Field>
-              <Field label="Name (GR)" hint="Greek translation — falls back to EN">
+              <Field label="Όνομα (Ελληνικά)" hint="Αν μείνει κενό, εμφανίζεται το αγγλικό κείμενο.">
                 <input type="text" value={p.name_gr || ""} onChange={(e) => set("name_gr", e.target.value)} placeholder="π.χ. Πανόρμου" />
               </Field>
             </div>
             <div className="field-group">
-              <Field label="Code" required hint="Internal reference">
+              <Field label="Κωδικός" required hint="Εσωτερικός κωδικός">
                 <input type="text" value={p.code} onChange={(e) => set("code", e.target.value)} />
               </Field>
-              <Field label="Descriptive URL slug" hint={`Public URL: /projects/${p.slug || suggestedSlug || "project-name-location"}`}>
+              <Field label="Διεύθυνση έργου (URL)" hint={`Διεύθυνση: /projects/${p.slug || suggestedSlug || "project-name-location"}`}>
                 <input type="text" value={p.slug || ""} onChange={(e) => set("slug", slugify(e.target.value))} placeholder={suggestedSlug || "luxury-villa-mykonos"} />
               </Field>
             </div>
             <div className="field-group">
-              <Field label={`${subLabel} (EN)`} hint={subOptions.length ? `Sub-category of ${activeCat.label} — manage the list in Categories` : "Shown over the project hero"}>
+              <Field label={`${subLabel} (EN)`} hint={subOptions.length ? `Υποκατηγορία της κατηγορίας ${activeCat.label}. Διαχείριση στις Κατηγορίες.` : "Εμφανίζεται πάνω από την κεντρική εικόνα του έργου"}>
                 {subOptions.length ? (
                   <select value={p.brand || ""} onChange={(e) => set("brand", e.target.value)}>
-                    <option value="">— none —</option>
+                    <option value="">— καμία —</option>
                     {subOptions.map((s) => (
                       <option key={s.id} value={s.label}>{s.label}</option>
                     ))}
@@ -3028,52 +3080,57 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
 
             </div>
             <div className="field-group cols-3">
-              <Field label="Category">
+              <Field label="Κατηγορία">
                 <select value={p.category || p.typology || "retail"} onChange={(e) => set("category", e.target.value)}>
                   {(categories && categories.length ? categories : DEFAULT_CATEGORIES).map((c) => (
                     <option key={c.id} value={c.id}>{c.label}</option>
                   ))}
                 </select>
               </Field>
-              <Field label="Year">
+              <Field label="Έτος">
                 <input type="text" value={p.year} onChange={(e) => set("year", e.target.value)} />
               </Field>
-              <Field label="Featured">
+              <Field label="Στην αρχική">
                 <label className="checkline">
                   <input type="checkbox" checked={Boolean(p.featured)} onChange={(e) => set("featured", e.target.checked)} />
-                  <span>Show on home rail</span>
+                  <span>Εμφάνιση στην αρχική σελίδα</span>
                 </label>
               </Field>
             </div>
             <div className="field-group cols-1">
-              <Field label="Visible on site" hint="Turn this off to keep the project in the dashboard while removing it from the public site.">
+              <Field label="Ορατό στην ιστοσελίδα" hint="Η αλλαγή ορατότητας εφαρμόζεται όταν δημοσιεύσεις. Το έργο παραμένει στο dashboard.">
                 <label className="checkline">
                   <input type="checkbox" checked={p.visible !== false} onChange={(e) => set("visible", e.target.checked)} />
-                  <span>{p.visible === false ? "Hidden from the live site" : "Shown on the live site"}</span>
+                  <span>{p.visible === false ? "Κρυφό από την ιστοσελίδα" : "Ορατό στην ιστοσελίδα"}</span>
                 </label>
               </Field>
             </div>
           </div>
 
-          <div className="form-section">
-            <div className="form-section-title">Project page details</div>
+          <div className="form-section" hidden={tab !== "details"}>
+            <div className="form-section-title">Διεύθυνση & χάρτης</div>
+            <ProjectAddressField project={p} onChange={changes => setP(current => ({...current,...changes}))} />
+          </div>
+
+          <div className="form-section" hidden={tab !== "texts"}>
+            <div className="form-section-title">Λεπτομέρειες έργου</div>
             <div className="field-group">
-              <Field label="Location (EN)">
+              <Field label="Τοποθεσία (Αγγλικά)">
                 <input type="text" value={p.location} onChange={(e) => set("location", e.target.value)} />
               </Field>
-              <Field label="Location (GR)">
+              <Field label="Τοποθεσία (Ελληνικά)">
                 <input type="text" value={p.location_gr || ""} onChange={(e) => set("location_gr", e.target.value)} placeholder="π.χ. Αθήνα · Πανόρμου" />
               </Field>
             </div>
             <div className="field-group">
-              <Field label="Status" hint="Translated on the site, label and value">
+              <Field label="Κατάσταση" hint="Η κατάσταση μεταφράζεται στην ιστοσελίδα.">
                 <select value={normaliseStatus(p.status)} onChange={(e) => set("status", e.target.value)}>
-                  {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                  {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{{"Design Phase":"Σχεδιασμός","In Construction":"Υπό κατασκευή","Built":"Ολοκληρωμένο"}[s] || s}</option>)}
                 </select>
               </Field>
             </div>
             <div className="field-group">
-              <Field label="Size (EN)">
+              <Field label="Εμβαδόν">
                 <div className="size-input">
                   <input
                     type="text"
@@ -3090,122 +3147,124 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
 
             </div>
             <div className="field-group">
-              <Field label="Type (EN)">
+              <Field label="Τύπος (Αγγλικά)">
                 <input type="text" value={p.type} onChange={(e) => set("type", e.target.value)} />
               </Field>
-              <Field label="Type (GR)" hint="Greek translation — falls back to EN">
+              <Field label="Τύπος (Ελληνικά)" hint="Αν μείνει κενό, εμφανίζεται το αγγλικό κείμενο.">
                 <input type="text" value={p.type_gr || ""} onChange={(e) => set("type_gr", e.target.value)} />
               </Field>
             </div>
             <div className="field-group">
-              <Field label="Contractor (EN)">
+              <Field label="Κατασκευαστής (Αγγλικά)">
                 <input type="text" value={p.contractor || ""} onChange={(e) => set("contractor", e.target.value)} />
               </Field>
-              <Field label="Contractor (GR)" hint="Greek translation — falls back to EN">
+              <Field label="Κατασκευαστής (Ελληνικά)" hint="Αν μείνει κενό, εμφανίζεται το αγγλικό κείμενο.">
                 <input type="text" value={p.contractor_gr || ""} onChange={(e) => set("contractor_gr", e.target.value)} />
               </Field>
             </div>
             <div className="field-group">
-              <Field label="Engineer (EN)">
+              <Field label="Μηχανολόγος (Αγγλικά)">
                 <input type="text" value={p.engineer || ""} onChange={(e) => set("engineer", e.target.value)} />
               </Field>
-              <Field label="Engineer / Μηχανολόγος (GR)" hint="Greek translation — falls back to EN">
+              <Field label="Μηχανολόγος (Ελληνικά)" hint="Αν μείνει κενό, εμφανίζεται το αγγλικό κείμενο.">
                 <input type="text" value={p.engineer_gr || ""} onChange={(e) => set("engineer_gr", e.target.value)} />
               </Field>
             </div>
             <div className="field-group">
-              <Field label="Lead Architect (EN)">
+              <Field label="Επικεφαλής αρχιτέκτονας (Αγγλικά)">
                 <input type="text" value={p.lead_architect || ""} onChange={(e) => set("lead_architect", e.target.value)} />
               </Field>
-              <Field label="Lead Architect (GR)" hint="Greek translation — falls back to EN">
+              <Field label="Επικεφαλής αρχιτέκτονας (Ελληνικά)" hint="Αν μείνει κενό, εμφανίζεται το αγγλικό κείμενο.">
                 <input type="text" value={p.lead_architect_gr || ""} onChange={(e) => set("lead_architect_gr", e.target.value)} />
               </Field>
             </div>
             <div className="field-group">
-              <Field label="Design Team (EN)">
+              <Field label="Ομάδα σχεδιασμού (Αγγλικά)">
                 <input type="text" value={p.design_team || ""} onChange={(e) => set("design_team", e.target.value)} />
               </Field>
-              <Field label="Design Team (GR)" hint="Greek translation — falls back to EN">
+              <Field label="Ομάδα σχεδιασμού (Ελληνικά)" hint="Αν μείνει κενό, εμφανίζεται το αγγλικό κείμενο.">
                 <input type="text" value={p.design_team_gr || ""} onChange={(e) => set("design_team_gr", e.target.value)} />
               </Field>
             </div>
           </div>
 
-          <div className="form-section">
-            <div className="form-section-title">Short description</div>
+          <div className="form-section" hidden={tab !== "texts"}>
+            <div className="form-section-title">Σύντομη περιγραφή</div>
             <div className="field-group">
-              <Field label="Description (EN)">
+              <Field label="Περιγραφή (Αγγλικά)">
                 <textarea value={p.summary} onChange={(e) => set("summary", e.target.value)} />
               </Field>
-              <Field label="Description (GR)" hint="Greek translation — falls back to EN">
+              <Field label="Περιγραφή (Ελληνικά)" hint="Αν μείνει κενό, εμφανίζεται το αγγλικό κείμενο.">
                 <textarea value={p.summary_gr || ""} onChange={(e) => set("summary_gr", e.target.value)} placeholder="Ελληνική μετάφραση" />
               </Field>
             </div>
           </div>
 
-          <div className="form-section">
-            <div className="form-section-title">Hero image</div>
+          <div className="form-section" hidden={tab !== "media"}>
+            <div className="form-section-title">Κεντρική εικόνα</div>
             <ImageInput value={p.hero} onChange={(v) => set("hero", v)} placeholder="Hero · 16:9 recommended" uploadKey={p.id} />
           </div>
 
-          <div className="form-section">
-            <div className="form-section-title">Badge</div>
+          <div className="form-section" hidden={tab !== "media"}>
+            <div className="form-section-title">Λογότυπο έργου</div>
             <ImageInput
-              value={p.icon || fallbackBadge}
-              onChange={(v) => set("icon", v)}
+              value={projectBadge}
+              onChange={(v) => set("icon", v || null)}
               placeholder="Brand logo · square"
               uploadKey={p.id}
               extra={
                 <div className="badge-extra">
                   <span>
-                    {p.icon
-                      ? "Custom badge for this project only."
-                      : "Using the default project badge. Upload one to override it here."}
+                    {p.icon === null
+                      ? "Δεν εμφανίζεται λογότυπο σε αυτό το έργο."
+                      : p.icon
+                      ? "Λογότυπο μόνο για αυτό το έργο."
+                      : "Χρησιμοποιείται το λογότυπο της κατηγορίας ή το γενικό. Ανέβασε άλλο για αυτό το έργο."}
                   </span>
                   <button
                     type="button"
                     className="btn"
-                    disabled={!p.icon}
+                    disabled={p.icon !== null && !p.icon}
                     onClick={() => set("icon", "")}>
-                    Reset to default badge
+                    Επαναφορά προεπιλεγμένου λογοτύπου
                   </button>
                 </div>
               }
             />
           </div>
 
-          <div className="form-section">
+          <div className="form-section" hidden={tab !== "media"}>
             <div className="form-section-title">
-              <span>Gallery</span>
+              <span>Συλλογή εικόνων</span>
               <div className="gal-tools">
                 {p.gallery.length > 1 && (
-                  <div className="gal-viewswitch" role="group" aria-label="Gallery view">
+                  <div className="gal-viewswitch" role="group" aria-label="Προβολή εικόνων">
                     <button
                       type="button"
                       className={galleryView === "grid" ? "on" : ""}
                       onClick={() => chooseGalleryView("grid")}
                       aria-pressed={galleryView === "grid"}
-                      title="Thumbnails"
-                    >{Ic.grid}<span>Thumbnails</span></button>
+                      title="Μικρογραφίες"
+                    >{Ic.grid}<span>Μικρογραφίες</span></button>
                     <button
                       type="button"
                       className={galleryView === "list" ? "on" : ""}
                       onClick={() => chooseGalleryView("list")}
                       aria-pressed={galleryView === "list"}
-                      title="List"
-                    >{Ic.rows}<span>List</span></button>
+                      title="Λίστα"
+                    >{Ic.rows}<span>Λίστα</span></button>
                   </div>
                 )}
-                <button className="add" onClick={addGallery}>{Ic.plus} Add image</button>
+                <button className="add" onClick={addGallery}>{Ic.plus} Προσθήκη εικόνας</button>
               </div>
             </div>
 
             {p.gallery.length === 0 ? (
-              <div className="muted" style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase" }}>No gallery images yet.</div>
+              <div className="muted" style={{ fontFamily: "var(--mono)", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase" }}>Δεν έχουν προστεθεί εικόνες.</div>
             ) : null}
 
             {p.gallery.length > 1 && (
-              <div className="gal-hint">Drag the handle to reorder · order here is the order on the site</div>
+              <div className="gal-hint">Σύρε τη λαβή για αλλαγή σειράς. Η ίδια σειρά εμφανίζεται στην ιστοσελίδα.</div>
             )}
 
             <div className={galleryView === "grid" ? "gal-grid" : ""}>
@@ -3215,7 +3274,7 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
                     <div className="gal-card-top">
                       <button {...handleProps(i)}>{Ic.grip}</button>
                       <span className="gal-num">{i + 1}</span>
-                      <button className="remove" onClick={() => removeGallery(i)} title="Remove">{Ic.trash}</button>
+                      <button className="remove" onClick={() => removeGallery(i)} title="Αφαίρεση">{Ic.trash}</button>
                     </div>
                     <GalleryThumb
                       value={g.src}
@@ -3228,7 +3287,7 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
                       className="gal-caption"
                       value={g.tag || ""}
                       onChange={(e) => setGallery(i, "tag", e.target.value)}
-                      placeholder="Caption (EN)"
+                      placeholder="Λεζάντα (Αγγλικά)"
                     />
                     <select className="span-select" value={g.span || "gal-6"} onChange={(e) => setGallery(i, "span", e.target.value)}>
                       {SPAN_OPTIONS.map((s) => <option key={s.v} value={s.v}>{s.l}</option>)}
@@ -3248,13 +3307,13 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
                             type="text"
                             value={g.tag || ""}
                             onChange={(e) => setGallery(i, "tag", e.target.value)}
-                            placeholder="Caption (EN)"
+                            placeholder="Λεζάντα (Αγγλικά)"
                           />
                           <input
                             type="text"
                             value={g.tag_gr || ""}
                             onChange={(e) => setGallery(i, "tag_gr", e.target.value)}
-                            placeholder="Caption (GR)"
+                            placeholder="Λεζάντα (Ελληνικά)"
                           />
                         </div>
                       }
@@ -3262,7 +3321,7 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
                     <select className="span-select" value={g.span || "gal-6"} onChange={(e) => setGallery(i, "span", e.target.value)}>
                       {SPAN_OPTIONS.map((s) => <option key={s.v} value={s.v}>{s.l}</option>)}
                     </select>
-                    <button className="remove" onClick={() => removeGallery(i)} title="Remove">{Ic.trash}</button>
+                    <button className="remove" onClick={() => removeGallery(i)} title="Αφαίρεση">{Ic.trash}</button>
                   </div>
                 )
               ))}
@@ -3272,37 +3331,35 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
 
         <div className="sheet-foot">
           <div className="left">
-            <span>Saves here, then publishes to the site</span>
-            <span>·</span>
-            <span>ID {p.id}</span>
+            <span>Αυτόματη αποθήκευση προχείρου · Δημοσίευση όταν είσαι έτοιμος.</span>
           </div>
           <div className="right">
-            <button className="btn ghost" onClick={onClose}>Cancel</button>
+
             {!valid || uploadsActive ? (
-              <button className="btn ghost" disabled title={uploadsActive ? "Waiting for images to finish uploading" : "Add a project name and code first"}>
+              <button className="btn ghost" disabled title={uploadsActive ? "Περίμενε να ολοκληρωθεί το ανέβασμα εικόνων" : "Συμπλήρωσε πρώτα όνομα και κωδικό"}>
                 <span className="ic">{Ic.external}</span>
-                <span>{uploadsActive ? "Uploading…" : "Preview"}</span>
+                <span>{uploadsActive ? "Ανέβασμα…" : "Προεπισκόπηση"}</span>
               </button>
             ) : (
-              <a className="btn ghost" href={previewHref} target="_blank" rel="noopener" onClick={preparePreview} title="Preview this draft without publishing it">
+              <a className="btn ghost" href={previewHref} target="_blank" rel="noopener" onClick={preparePreview} title="Προεπισκόπηση χωρίς δημοσίευση">
                 <span className="ic">{Ic.external}</span>
-                <span>Preview</span>
+                <span>Προεπισκόπηση</span>
               </a>
             )}
-            <button className="btn primary" onClick={save} disabled={!valid}>Save project</button>
+            <button className="btn ghost" onClick={close} disabled={uploadsActive}>Κλείσιμο</button>
             {showPublish && (
               <button
                 className={"btn sheet-publish " + (publishReady ? "primary" : "waiting")}
                 onClick={publish}
                 disabled={!publishReady}
                 title={uploadsActive
-                  ? "Waiting for images to finish uploading"
+                  ? "Περίμενε να ολοκληρωθεί το ανέβασμα εικόνων"
                   : publishBusy
-                    ? "Publishing…"
-                    : "Save and publish this project to the live site"}>
+                    ? "Δημοσίευση…"
+                    : "Δημοσίευση μόνο αυτού του έργου"}>
                 <span className="ic">{Ic.external}</span>
                 <span>
-                  {uploadsActive ? "Uploading…" : publishBusy ? "Publishing…" : "Save & publish"}
+                  {uploadsActive ? "Ανέβασμα…" : publishBusy ? "Δημοσίευση…" : "Δημοσίευση έργου"}
                 </span>
               </button>
             )}
@@ -3337,8 +3394,8 @@ function NewsSheet({ item, onSave, onClose }) {
       <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
         <div className="sheet-head">
           <div>
-            <div className="eyebrow">/ {item ? "Editing" : "New"} news item</div>
-            <h2>{n.title || "Untitled"}</h2>
+            <div className="eyebrow">/ {item ? "Editing" : "Νέο"} news item</div>
+            <h2>{n.title || "Χωρίς τίτλο"}</h2>
           </div>
           <div className="controls">
             <button className="btn ghost" onClick={onClose}>{Ic.close}</button>
@@ -3347,10 +3404,10 @@ function NewsSheet({ item, onSave, onClose }) {
 
         <div className="sheet-body">
           <div className="field-group">
-            <Field label="Date" required hint="Format: 2026 — 05 — 06">
+            <Field label="Ημερομηνία" required hint="Format: 2026 — 05 — 06">
               <input type="text" value={n.date} onChange={(e) => set("date", e.target.value)} />
             </Field>
-            <Field label="Category">
+            <Field label="Κατηγορία">
               <select value={n.cat} onChange={(e) => set("cat", e.target.value)}>
                 <option>Project</option>
                 <option>Press</option>
@@ -3361,10 +3418,10 @@ function NewsSheet({ item, onSave, onClose }) {
             </Field>
           </div>
           <div className="field-group">
-            <Field label="Title (EN)" required>
+            <Field label="Τίτλος (Αγγλικά)" required>
               <input type="text" value={n.title} onChange={(e) => set("title", e.target.value)} />
             </Field>
-            <Field label="Title (GR)">
+            <Field label="Τίτλος (Ελληνικά)">
               <input type="text" value={n.title_gr || ""} onChange={(e) => set("title_gr", e.target.value)} />
             </Field>
           </div>
@@ -3381,8 +3438,8 @@ function NewsSheet({ item, onSave, onClose }) {
         <div className="sheet-foot">
           <div className="left"><span>Saves here, then publishes to the site</span></div>
           <div className="right">
-            <button className="btn ghost" onClick={onClose}>Cancel</button>
-            <button className="btn primary" onClick={() => onSave(n)} disabled={!valid}>Save</button>
+            <button className="btn ghost" onClick={onClose}>Ακύρωση</button>
+            <button className="btn primary" onClick={() => onSave(n)} disabled={!valid}>Αποθήκευση</button>
           </div>
         </div>
       </div>
@@ -3414,8 +3471,8 @@ function TeamSheet({ member, onSave, onClose }) {
       <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
         <div className="sheet-head">
           <div>
-            <div className="eyebrow">/ {member ? "Editing" : "New"} team member</div>
-            <h2>{t.name || "Untitled"}</h2>
+            <div className="eyebrow">/ {member ? "Editing" : "Νέο"} team member</div>
+            <h2>{t.name || "Χωρίς τίτλο"}</h2>
           </div>
           <div className="controls">
             <button className="btn ghost" onClick={onClose}>{Ic.close}</button>
@@ -3424,7 +3481,7 @@ function TeamSheet({ member, onSave, onClose }) {
 
         <div className="sheet-body">
           <div className="field-group">
-            <Field label="Name" required hint="Personal names typically stay the same in both languages">
+            <Field label="Όνομα" required hint="Personal names typically stay the same in both languages">
               <input type="text" value={t.name} onChange={(e) => set("name", e.target.value)} />
             </Field>
             <Field label="ID">
@@ -3432,18 +3489,18 @@ function TeamSheet({ member, onSave, onClose }) {
             </Field>
           </div>
           <div className="field-group">
-            <Field label="Role (EN)" required>
+            <Field label="Ρόλος (Αγγλικά)" required>
               <input type="text" value={t.role} onChange={(e) => set("role", e.target.value)} />
             </Field>
-            <Field label="Role (GR)">
+            <Field label="Ρόλος (Ελληνικά)">
               <input type="text" value={t.role_gr || ""} onChange={(e) => set("role_gr", e.target.value)} />
             </Field>
           </div>
           <div className="field-group">
-            <Field label="Note (EN)" hint="Education, credentials, or a short bio line">
+            <Field label="Βιογραφικό ιστοσελίδας (Αγγλικά)" hint="Εμφανίζεται όταν ανοίγεις το μέλος στην ενότητα της ομάδας.">
               <textarea value={t.note} onChange={(e) => set("note", e.target.value)} />
             </Field>
-            <Field label="Note (GR)">
+            <Field label="Βιογραφικό ιστοσελίδας (Ελληνικά)">
               <textarea value={t.note_gr || ""} onChange={(e) => set("note_gr", e.target.value)} />
             </Field>
           </div>
@@ -3456,8 +3513,8 @@ function TeamSheet({ member, onSave, onClose }) {
         <div className="sheet-foot">
           <div className="left"><span>Saves here, then publishes to the site</span></div>
           <div className="right">
-            <button className="btn ghost" onClick={onClose}>Cancel</button>
-            <button className="btn primary" onClick={() => onSave(t)} disabled={!valid}>Save</button>
+            <button className="btn ghost" onClick={onClose}>Ακύρωση</button>
+            <button className="btn primary" onClick={() => onSave(t)} disabled={!valid}>Αποθήκευση</button>
           </div>
         </div>
       </div>
@@ -3468,7 +3525,236 @@ function TeamSheet({ member, onSave, onClose }) {
 /* ============================================================
    CATEGORY SHEET
    ============================================================ */
-function CategorySheet({ category, onSave, onClose }) {
+function BrandSectionsEditor({ brand, projects, onChange, onIntroChange, language, setLanguage }) {
+  const sections = window.brandStorySections(brand, projects);
+  const titleKey = language === 'en' ? 'title' : 'title_gr';
+  const textKey = language === 'en' ? 'text' : 'text_gr';
+  const captionKey = language === 'en' ? 'caption' : 'caption_gr';
+  const types = {text:'Κείμενο', 'image-text':'Εικόνα + κείμενο', gallery:'Εικόνες / gallery'};
+  const edit = (id, patch) => onChange(sections.map(section => section.id === id ? {...section,...patch} : section));
+  const add = type => onChange([...sections, {id:newId('brand-section'),type,title:'',title_gr:'',text:'',text_gr:'',imageSide:'left',images:type === 'text' ? [] : [{src:'',caption:'',caption_gr:''}]}]);
+  const move = (index, delta) => {
+    const next = [...sections];
+    [next[index],next[index+delta]] = [next[index+delta],next[index]];
+    onChange(next);
+  };
+  const arrow = direction => <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={direction === 'up' ? 'M10 16V4m-5 5 5-5 5 5' : 'M10 4v12m-5-5 5 5 5-5'} /></svg>;
+  const intro = window.brandStoryIntro(brand, projects);
+  return <div className="brand-sections-editor">
+    <div className="sheet-section-head"><h3>Παρουσίαση «Continue» · Ενότητες</h3><p>Πρόσθεσε τίτλους, κείμενα και εικόνες με τη σειρά που θέλεις. Οι αλλαγές αποθηκεύονται μαζί με την κατηγορία.</p></div>
+    <div className="brand-sections-toolbar"><span>Γλώσσα περιεχομένου</span><div className="controls">{['en','gr'].map(lang => <button key={lang} type="button" className={`btn ${language === lang ? 'primary' : 'ghost'}`} aria-pressed={language === lang} onClick={() => setLanguage(lang)}>{lang === 'en' ? 'EN' : 'EL'}</button>)}</div></div>
+    <section className="brand-intro-editor" aria-label="Αρχική ενότητα παρουσίασης">
+      <h4>Αρχική ενότητα</h4>
+      <p>Επεξεργάσου τον τίτλο, τον υπότιτλο και την πρώτη εικόνα. Η διάταξη και το animation διατηρούνται.</p>
+      <Field label={`Αρχικός τίτλος (${language === 'en' ? 'EN' : 'EL'})`}><input type="text" aria-label={`Αρχικός τίτλος ${language}`} value={intro[titleKey]} onChange={event => onIntroChange({[language === 'en' ? 'brandStoryTitle' : 'brandStoryTitle_gr']:event.target.value})} /></Field>
+      <Field label={`Υπότιτλος (${language === 'en' ? 'EN' : 'EL'})`}><input type="text" aria-label={`Υπότιτλος παρουσίασης ${language}`} value={intro[language === 'en' ? 'subtitle' : 'subtitle_gr']} onChange={event => onIntroChange({[language === 'en' ? 'brandStorySubtitle' : 'brandStorySubtitle_gr']:event.target.value})} /></Field>
+      <Field label="Πρώτη εικόνα παρουσίασης"><ImageInput value={intro.image?.src || ''} onChange={src => onIntroChange({brandStoryImage:src})} accept="image/*" placeholder="Ανέβασμα εικόνας ή επιλογή από τη Βιβλιοθήκη" /></Field>
+      <button type="button" className="btn ghost" onClick={() => onIntroChange({brandStoryTitle:null,brandStoryTitle_gr:null,brandStorySubtitle:null,brandStorySubtitle_gr:null,brandStoryImage:null})}>Επαναφορά αρχικής ενότητας</button>
+    </section>
+    {sections.length === 0 && <p className="brand-sections-empty">Δεν υπάρχουν ενότητες. Πρόσθεσε την πρώτη παρακάτω.</p>}
+    {sections.map((section,index) => <details className="brand-section-editor" key={section.id} open>
+      <summary>{String(index+1).padStart(2,'0')} · {types[section.type]}{section[titleKey] ? ` · ${section[titleKey]}` : ''}</summary>
+      <div className="brand-section-edit-body">
+        <div className="brand-section-controls controls">
+          <button type="button" className="btn ghost" aria-label={`Ενότητα ${index+1}: πάνω`} disabled={index === 0} onClick={() => move(index,-1)}>{arrow('up')}</button>
+          <button type="button" className="btn ghost" aria-label={`Ενότητα ${index+1}: κάτω`} disabled={index === sections.length-1} onClick={() => move(index,1)}>{arrow('down')}</button>
+          <button type="button" className="btn ghost" aria-label={`Διαγραφή ενότητας ${index+1}`} onClick={() => onChange(sections.filter(item => item.id !== section.id))}>{Ic.trash}<span>Αφαίρεση ενότητας</span></button>
+        </div>
+        <Field label={`Τίτλος (${language === 'en' ? 'EN' : 'EL'})`}><input type="text" aria-label={`Τίτλος ενότητας ${index+1} ${language}`} value={section[titleKey]} onChange={event => edit(section.id,{[titleKey]:event.target.value})} placeholder="Προαιρετικός τίτλος" /></Field>
+        <Field label={`Κείμενο (${language === 'en' ? 'EN' : 'EL'})`}><textarea rows="5" aria-label={`Κείμενο ενότητας ${index+1} ${language}`} value={section[textKey]} onChange={event => edit(section.id,{[textKey]:event.target.value})} placeholder="Γράψε το κείμενο της ενότητας" /></Field>
+        {section.type === 'image-text' && <Field label="Θέση εικόνας στον υπολογιστή"><select aria-label={`Θέση εικόνας ενότητας ${index+1}`} value={section.imageSide} onChange={event => edit(section.id,{imageSide:event.target.value})}><option value="left">Αριστερά</option><option value="right">Δεξιά</option></select></Field>}
+        {section.type !== 'text' && section.images.map((image,imageIndex) => {
+          const updateImage = patch => edit(section.id,{images:section.images.map((item,i) => i === imageIndex ? {...item,...patch} : item)});
+          const moveImage = delta => {const next=[...section.images]; [next[imageIndex],next[imageIndex+delta]]=[next[imageIndex+delta],next[imageIndex]]; edit(section.id,{images:next});};
+          return <div className="brand-section-image-editor" key={`${section.id}-image-${imageIndex}`}>
+            <Field label={`Εικόνα ${imageIndex+1}`}><ImageInput value={image.src} onChange={src => updateImage({src})} accept="image/*" placeholder="Ανέβασμα εικόνας ή επιλογή από τη Βιβλιοθήκη" /></Field>
+            <Field label={`Λεζάντα / περιγραφή εικόνας (${language === 'en' ? 'EN' : 'EL'})`}><input type="text" aria-label={`Λεζάντα ${index+1}.${imageIndex+1} ${language}`} value={image[captionKey]} onChange={event => updateImage({[captionKey]:event.target.value})} /></Field>
+            {section.type === 'gallery' && <div className="controls"><button className="btn ghost" type="button" aria-label={`Εικόνα ${index+1}.${imageIndex+1}: πάνω`} disabled={imageIndex === 0} onClick={() => moveImage(-1)}>{arrow('up')}</button><button className="btn ghost" type="button" aria-label={`Εικόνα ${index+1}.${imageIndex+1}: κάτω`} disabled={imageIndex === section.images.length-1} onClick={() => moveImage(1)}>{arrow('down')}</button><button className="btn ghost" type="button" onClick={() => edit(section.id,{images:section.images.filter((_,i) => i !== imageIndex)})}>{Ic.trash} Αφαίρεση εικόνας</button></div>}
+          </div>;
+        })}
+        {section.type === 'gallery' && <button className="btn ghost" type="button" onClick={() => edit(section.id,{images:[...section.images,{src:'',caption:'',caption_gr:''}]})}>{Ic.plus} Προσθήκη εικόνας</button>}
+      </div>
+    </details>)}
+    <div className="brand-sections-add"><b>Προσθήκη ενότητας</b><div className="controls">{Object.entries(types).map(([type,label]) => <button type="button" className="btn ghost" key={type} onClick={() => add(type)}>{Ic.plus}{label}</button>)}</div></div>
+  </div>;
+}
+
+function BrandPresentationEditor({ brand, projects, onApply, onClose }) {
+  const [draft, setDraft] = useState(() => ({...brand}));
+  const [language, setLanguage] = useState('en');
+  const [view, setView] = useState('edit');
+  const rootRef = useRef(null);
+  const sections = window.brandStorySections(draft, projects);
+  const intro = window.brandStoryIntro(draft, projects);
+  const firstImage = intro.image;
+  const pick = (item, key) => language === 'gr' ? item[`${key}_gr`] || item[key] : item[key];
+  useEffect(() => {
+    rootRef.current?.querySelector('button')?.focus();
+    const keydown = event => {
+      // Image/library dialogs own the keyboard while they are on top.
+      const overlays = document.querySelectorAll('.sheet-wrap');
+      if (overlays[overlays.length - 1] !== rootRef.current) return;
+      if (event.key === 'Escape') { event.preventDefault(); onClose(); }
+      if (event.key === 'Tab') {
+        const items = [...rootRef.current.querySelectorAll('button, input, select, textarea, summary, [tabindex="0"]')].filter(el => !el.disabled && el.getClientRects().length);
+        const first = items[0], last = items[items.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+    };
+    document.addEventListener('keydown', keydown);
+    return () => document.removeEventListener('keydown', keydown);
+  }, []);
+  return <div className="sheet-wrap brand-presentation-wrap" ref={rootRef}>
+    <div className="sheet brand-presentation-window" role="dialog" aria-modal="true" aria-labelledby="brand-presentation-title">
+      <header className="sheet-head">
+        <div><div className="eyebrow">Παρουσίαση · Continue</div><h2 id="brand-presentation-title">{brand.label}</h2></div>
+        <div className="controls"><button className="btn ghost" type="button" aria-label="Κλείσιμο editor χωρίς εφαρμογή" onClick={onClose}>{Ic.close}</button></div>
+      </header>
+      <div className="brand-presentation-tabs controls">{[['edit','Επεξεργασία'],['preview','Προεπισκόπηση']].map(([id,label]) => <button type="button" key={id} className={`btn ${view === id ? 'primary' : 'ghost'}`} aria-pressed={view === id} onClick={() => setView(id)}>{label}</button>)}</div>
+      <div className={`brand-presentation-workspace is-${view}`}>
+        <div className="brand-presentation-fields"><BrandSectionsEditor brand={draft} projects={projects} language={language} setLanguage={setLanguage} onIntroChange={patch => setDraft(current => ({...current,...patch}))} onChange={brandSections => setDraft(current => ({...current,brandSections}))} /></div>
+        <aside className="brand-presentation-preview" aria-label="Προεπισκόπηση παρουσίασης">
+          <div className="brand-preview-label">Προεπισκόπηση περιεχομένου · {language === 'en' ? 'EN' : 'EL'}</div>
+          <article className="brand-preview-page">
+            <header><h2>{intro[language === 'en' ? 'title' : 'title_gr']}</h2><p>{intro[language === 'en' ? 'subtitle' : 'subtitle_gr']}</p></header>
+            {firstImage?.src && <img className="brand-preview-cover" src={firstImage.src} alt={pick(firstImage,'caption') || ''} />}
+            {sections.map(section => <section key={section.id} className={`brand-preview-section is-${section.type} image-${section.imageSide}`}>
+              <div>{pick(section,'title') && <h3>{pick(section,'title')}</h3>}{pick(section,'text') && <p>{pick(section,'text')}</p>}</div>
+              {section.type !== 'text' && <div className="brand-preview-images">{section.images.filter(image => image.src).map((image,index) => <figure key={index}><img src={image.src} alt={pick(image,'caption') || ''} />{pick(image,'caption') && <figcaption>{pick(image,'caption')}</figcaption>}</figure>)}</div>}
+            </section>)}
+          </article>
+        </aside>
+      </div>
+      <footer className="sheet-foot"><div className="left">Εφάρμοσε τις αλλαγές, αποθήκευσε την υποκατηγορία και μετά την κατηγορία.</div><div className="right"><button className="btn ghost" type="button" onClick={onClose}>Ακύρωση</button><button className="btn primary" type="button" onClick={() => onApply(draft)}>{Ic.check} Εφαρμογή αλλαγών</button></div></footer>
+    </div>
+  </div>;
+}
+
+function BrandSettings({ s, projectCount, onChange, validCount }) {
+  const [tab, setTab] = useState('appearance');
+  const tabs = [['appearance','Εμφάνιση'],['texts','Κείμενα'],['stores','Καταστήματα'],['instagram','Instagram'],['map','Χάρτης']];
+  const descriptions = {
+    appearance: 'Δύο διαφορετικά στοιχεία: το λογότυπο είναι το σήμα του brand, ενώ το εξώφυλλο είναι η φωτογραφία του χώρου.',
+    texts: 'Η περιγραφή εμφανίζεται κάτω από το εξώφυλλο. Το αρχιτεκτονικό concept παρουσιάζει τη σχεδιαστική ιδέα.',
+    stores: 'Ρύθμισε τον αριθμό καταστημάτων και το μέγεθός του στην κάρτα του brand στα Projects.',
+    instagram: 'Ο σύνδεσμος του brand που εμφανίζεται στη σελίδα του.',
+    map: 'Η χρωματική ταυτότητα του χάρτη και των σημείων των καταστημάτων.'
+  };
+  return <details className="brand-settings brand-settings-organized" open>
+    <summary>Ρυθμίσεις σελίδας brand</summary>
+    <div className="brand-settings-nav" role="group" aria-label={`Ρυθμίσεις ${s.label}`}>{tabs.map(([id,label]) => <button key={id} type="button" className={`btn ${tab === id ? 'primary' : 'ghost'}`} aria-pressed={tab === id} onClick={() => setTab(id)}>{label}</button>)}</div>
+    <section className={`brand-settings-panel brand-settings-panel--${tab}`} aria-label={tabs.find(([id]) => id === tab)[1]}>
+      <h4>{tabs.find(([id]) => id === tab)[1]}</h4>
+      <p className="brand-settings-intro">{descriptions[tab]}</p>
+      {tab === "appearance" && <div className="brand-settings-fields">
+                <Field label="Λογότυπο · SVG ή PNG" hint="Το σήμα του brand. Εμφανίζεται στη θέση του ονόματος, πάνω στη φωτογραφία εξωφύλλου. Προτίμησε SVG ή PNG με διαφάνεια."><ImageInput value={s.brandLogo || ""} onChange={value => onChange("brandLogo", value)} accept="image/svg+xml,.svg,image/png,.png" uploadLabel="Ανέβασμα λογοτύπου" placeholder="SVG λογότυπο brand" /></Field>
+                <Field label="Γενική εικόνα brand" hint="Χρησιμοποιείται στην κάρτα του brand στα Projects και στο εξώφυλλο της σελίδας του. Επίλεξε από τη Βιβλιοθήκη ή ανέβασε εικόνα. Αν μείνει κενή, χρησιμοποιείται η φωτογραφία του πρώτου έργου."><ImageInput value={s.brandCover || ""} onChange={value => onChange("brandCover", value)} accept="image/*" /></Field>
+      </div>}
+      {tab === "texts" && <div className="brand-settings-fields">
+                <div className="field-group">
+                  <Field label="Περιγραφή brand (EN)"><textarea value={s.brandDescription || ""} onChange={e => onChange("brandDescription", e.target.value)} /></Field>
+                  <Field label="Περιγραφή brand (EL)"><textarea value={s.brandDescription_gr || ""} onChange={e => onChange("brandDescription_gr", e.target.value)} /></Field>
+                </div>
+                <div className="field-group">
+                  <Field label="Αρχιτεκτονικό concept (EN)"><textarea value={s.brandConcept || ""} onChange={e => onChange("brandConcept", e.target.value)} /></Field>
+                  <Field label="Αρχιτεκτονικό concept (EL)"><textarea value={s.brandConcept_gr || ""} onChange={e => onChange("brandConcept_gr", e.target.value)} /></Field>
+                </div>
+      </div>}
+      {tab === "stores" && <div className="brand-settings-fields">
+                <Field label="Αριθμός καταστημάτων" hint="Εμφανίζεται στην κάρτα του brand. Αν μείνει κενό, μετρά αυτόματα τα δημοσιευμένα έργα του brand.">
+                  <input type="number" min="0" step="1" aria-label={`Αριθμός καταστημάτων ${s.label}`} value={s.brandStoreCount ?? ""} onChange={e => onChange("brandStoreCount", e.target.value)} placeholder="Αυτόματος αριθμός" />
+                  {!validCount(s) && <span role="alert">Γράψε ακέραιο αριθμό από το 0 και πάνω.</span>}
+                </Field>
+                <Field label={`Μέγεθος «αριθμός + locations»: ${window.normaliseBrandPresentation(s).brandStoreCountSize}px`} hint="Αλλάζει μαζί το μέγεθος του αριθμού και της λέξης, σε υπολογιστή και κινητό. Προεπιλογή: 18px.">
+                  <input type="range" min="12" max="28" step="1" aria-label={`Μέγεθος αριθμού και locations ${s.label}`} value={window.normaliseBrandPresentation(s).brandStoreCountSize} onChange={e => onChange("brandStoreCountSize", Number(e.target.value))} />
+                  <span style={{display:"block",fontSize:`${window.normaliseBrandPresentation(s).brandStoreCountSize}px`,lineHeight:1.5}}>{window.normaliseBrandPresentation(s).brandStoreCount ?? projectCount} locations</span>
+                </Field>
+      </div>}
+      {tab === "instagram" && <div className="brand-settings-fields">
+                <Field label="Instagram του brand" hint="Γράψε @username ή τον πλήρη σύνδεσμο προφίλ. Αν μείνει κενό, δεν εμφανίζεται σύνδεσμος.">
+                  <input type="text" aria-label={`Instagram ${s.label}`} value={s.instagram || ""} onChange={e => onChange("instagram", e.target.value)} placeholder="@brand" />
+                  {s.instagram && !window.normaliseBrandInstagram(s.instagram) && <span role="alert">Χρειάζεται έγκυρο Instagram username ή HTTPS σύνδεσμος προφίλ.</span>}
+                </Field>
+      </div>}
+      {tab === "map" && <div className="brand-settings-fields">
+                <div className="brand-color-fields">
+                  {[["mapColor", "Βασικό χρώμα"], ["mapBackground", "Φόντο χάρτη"], ["mapAccent", "Επιλεγμένο σημείο"]].map(([key, label]) => <Field key={key} label={label}><input type="color" aria-label={`${label} ${s.label}`} value={window.normaliseBrandPresentation(s)[key]} onChange={e => onChange(key, e.target.value)} /></Field>)}
+                </div>
+      </div>}
+    </section>
+  </details>;
+}
+
+function SubcategorySheet({ subcategory, category, projects, onSave, onClose }) {
+  const [draft, setDraft] = useState(() => ({ ...subcategory }));
+  const [presentationOpen, setPresentationOpen] = useState(false);
+  const rootRef = useRef(null);
+  const presentationTrigger = useRef(null);
+  const set = (key, value) => setDraft(current => ({ ...current, [key]: value }));
+  const validCount = sub => sub.brandStoreCount == null || String(sub.brandStoreCount).trim() === "" || window.normaliseBrandPresentation(sub).brandStoreCount !== null;
+  const valid = !!String(draft.label || "").trim() && (!draft.instagram || window.normaliseBrandInstagram(draft.instagram)) && validCount(draft);
+  const closePresentation = () => {
+    setPresentationOpen(false);
+    requestAnimationFrame(() => presentationTrigger.current?.focus({ preventScroll: true }));
+  };
+  useEffect(() => {
+    if (presentationOpen) return;
+    rootRef.current?.querySelector('input')?.focus({ preventScroll: true });
+    const keydown = event => {
+      const overlays = document.querySelectorAll('.sheet-wrap');
+      if (overlays[overlays.length - 1] !== rootRef.current) return;
+      if (event.key === 'Escape') { event.preventDefault(); onClose(); }
+      if (event.key === 'Tab') {
+        const items = [...rootRef.current.querySelectorAll('button, input, select, textarea, summary, [tabindex="0"]')].filter(el => !el.disabled && el.getClientRects().length);
+        const first = items[0], last = items[items.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }
+    };
+    document.addEventListener('keydown', keydown);
+    return () => document.removeEventListener('keydown', keydown);
+  }, [presentationOpen, onClose]);
+  return <>
+    <div className="sheet-wrap" ref={rootRef} style={presentationOpen ? { display: 'none' } : undefined} onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+      <div className="sheet subcategory-sheet" role="dialog" aria-modal="true" aria-labelledby="subcategory-editor-title">
+        <header className="sheet-head">
+          <div><div className="eyebrow">{category.label} / Sub-category</div><h2 id="subcategory-editor-title">{draft.label || 'Νέα υποκατηγορία'}</h2></div>
+          <div className="controls"><button type="button" className="btn ghost" aria-label="Κλείσιμο υποκατηγορίας" onClick={onClose}>{Ic.close}</button></div>
+        </header>
+        <div className="sheet-body">
+          <div className="field-group">
+            <Field label="Label (EN)" required><input type="text" aria-label="Όνομα υποκατηγορίας (EN)" value={draft.label || ''} onChange={event => set('label', event.target.value)} /></Field>
+            <Field label="Label (EL)"><input type="text" aria-label="Όνομα υποκατηγορίας (EL)" value={draft.label_gr || ''} onChange={event => set('label_gr', event.target.value)} /></Field>
+          </div>
+          {category.id !== 'retail' && <Field label="Εικονίδιο υποκατηγορίας"><SubIconPicker value={draft.icon || ''} onChange={value => set('icon', value)} /></Field>}
+          {category.id === 'retail' && <>
+            <BrandSettings s={draft} projectCount={projects.length} validCount={validCount} onChange={set} />
+            <button ref={presentationTrigger} type="button" className="btn ghost brand-presentation-launch" aria-haspopup="dialog" onClick={() => setPresentationOpen(true)}><DashboardIcon name="website" /><span>Επεξεργασία παρουσίασης · Continue<small>Τίτλοι, κείμενα και εικόνες σε ξεχωριστό παράθυρο</small></span><DashboardIcon name="arrowRight" /></button>
+          </>}
+        </div>
+        <footer className="sheet-foot">
+          <div className="left">Οι αλλαγές εφαρμόζονται με την αποθήκευση της κατηγορίας.</div>
+          <div className="right"><button type="button" className="btn ghost" onClick={onClose}>Ακύρωση</button><button type="button" className="btn primary" disabled={!valid} onClick={() => onSave({ ...draft, label: draft.label.trim() })}>Αποθήκευση υποκατηγορίας</button></div>
+        </footer>
+      </div>
+    </div>
+    {presentationOpen && <BrandPresentationEditor brand={draft} projects={projects} onApply={presentation => { setDraft(current => ({...current,...window.normaliseBrandPresentation(presentation)})); closePresentation(); }} onClose={closePresentation} />}
+  </>;
+}
+
+function CategorySheet({ category, projects = [], onSave, onClose }) {
+  const [subcategoryEditor, setSubcategoryEditor] = useState(null);
+  const subcategoryTrigger = useRef(null);
+  const categoryRoot = useRef(null);
+  const openSubcategory = (subcategory, index, trigger) => {
+    subcategoryTrigger.current = trigger;
+    setSubcategoryEditor({ subcategory, index });
+  };
+  const closeSubcategory = () => {
+    setSubcategoryEditor(null);
+    requestAnimationFrame(() => subcategoryTrigger.current?.focus({ preventScroll: true }));
+  };
   const [c, setC] = useState(() => category ? { ...category, subcategories: (category.subcategories || []).map((s) => ({ ...s })) } : ({
     id: "",
     label: "",
@@ -3482,23 +3768,39 @@ function CategorySheet({ category, onSave, onClose }) {
   }));
   const set = (k, v) => setC((x) => ({ ...x, [k]: v }));
   const subs = c.subcategories || [];
-  const setSub = (i, key, value) => setC((x) => ({ ...x, subcategories: x.subcategories.map((s, j) => j === i ? { ...s, [key]: value } : s) }));
-  const addSub = () => setC((x) => ({ ...x, subcategories: [...(x.subcategories || []), { id: newId("sub"), label: "", order: (x.subcategories || []).length, icon: "" }] }));
+  const addSub = (event) => openSubcategory({ id: newId("sub"), label: "", order: subs.length, icon: "" }, subs.length, event.currentTarget);
+  const saveSubcategory = (subcategory) => {
+    const index = subcategoryEditor.index;
+    setC(current => ({
+      ...current,
+      subcategories: index === current.subcategories.length
+        ? [...current.subcategories, subcategory]
+        : current.subcategories.map((sub, i) => i === index ? subcategory : sub),
+    }));
+    closeSubcategory();
+  };
   const removeSub = (i) => setC((x) => ({ ...x, subcategories: x.subcategories.filter((_, j) => j !== i) }));
   useEffect(() => {
-    const k = (e) => { if (e.key === "Escape") onClose(); };
+    if (subcategoryEditor !== null) return;
+    const k = (e) => {
+      const overlays = document.querySelectorAll('.sheet-wrap');
+      if (overlays[overlays.length - 1] !== categoryRoot.current) return;
+      if (e.key === "Escape") onClose();
+    };
     document.addEventListener("keydown", k);
     return () => document.removeEventListener("keydown", k);
-  }, []);
+  }, [subcategoryEditor, onClose]);
   const slugFromLabel = (c.label || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  const valid = c.label && (c.id || slugFromLabel);
+  const validCount = sub => sub.brandStoreCount == null || String(sub.brandStoreCount).trim() === "" || window.normaliseBrandPresentation(sub).brandStoreCount !== null;
+  const valid = c.label && (c.id || slugFromLabel) && subs.every(sub => (!sub.instagram || window.normaliseBrandInstagram(sub.instagram)) && validCount(sub));
 
   return (
-    <div className="sheet-wrap" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+    <>
+    <div className="sheet-wrap" ref={categoryRoot} style={subcategoryEditor !== null ? {display:"none"} : undefined} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="sheet" onMouseDown={(e) => e.stopPropagation()}>
         <div className="sheet-head">
           <div>
-            <div className="eyebrow">/ {category ? "Editing" : "New"} category</div>
+            <div className="eyebrow">/ {category ? "Editing" : "Νέο"} category</div>
             <h2>{c.label || "Untitled category"}</h2>
           </div>
           <div className="controls">
@@ -3520,7 +3822,7 @@ function CategorySheet({ category, onSave, onClose }) {
               <input type="text" value={c.id || slugFromLabel} onChange={(e) => set("id", e.target.value)} placeholder="retail" />
             </Field>
           </div>
-          <Field label="Description">
+          <Field label="Περιγραφή">
             <textarea value={c.description || ""} onChange={(e) => set("description", e.target.value)} placeholder="Short internal description for the dashboard grouping." />
           </Field>
           <Field label="Search / category banner image" hint="Used in the empty search and on the category card. When empty, the first project image is used automatically.">
@@ -3539,9 +3841,11 @@ function CategorySheet({ category, onSave, onClose }) {
               <div className="sublist-empty">No sub-categories yet.</div>
             ) : subs.map((s, i) => (
               <div className="sublist-row" key={s.id || i}>
-                <input type="text" value={s.label} onChange={(e) => setSub(i, "label", e.target.value)} placeholder={`${c.subLabel || "Sub-category"} ${i + 1}`} />
-                <SubIconPicker value={s.icon || ""} onChange={(v) => setSub(i, "icon", v)} />
-                <button className="delete" onClick={() => removeSub(i)} title="Remove">{Ic.trash}</button>
+                <button type="button" className="subcategory-launch" aria-haspopup="dialog" onClick={event => openSubcategory(s, i, event.currentTarget)}>
+                  <span><strong>{s.label || `${c.subLabel || "Sub-category"} ${i + 1}`}</strong><small>Επεξεργασία υποκατηγορίας</small></span>
+                  <DashboardIcon name="arrowRight" />
+                </button>
+                <button type="button" className="delete" onClick={() => removeSub(i)} aria-label={`Αφαίρεση ${s.label || "υποκατηγορίας"}`} title="Αφαίρεση">{Ic.trash}</button>
               </div>
             ))}
             <button className="btn ghost sublist-add" onClick={addSub}><span className="ic">{Ic.plus}</span><span>Add Sub-category</span></button>
@@ -3551,12 +3855,21 @@ function CategorySheet({ category, onSave, onClose }) {
         <div className="sheet-foot">
           <div className="left"><span>Saves here, then publishes to the site</span></div>
           <div className="right">
-            <button className="btn ghost" onClick={onClose}>Cancel</button>
-            <button className="btn primary" onClick={() => onSave({ ...c, id: c.id || slugFromLabel, subcategories: subs.filter((s) => (s.label || "").trim()) })} disabled={!valid}>Save category</button>
+            <button className="btn ghost" onClick={onClose}>Ακύρωση</button>
+            <button className="btn primary" onClick={() => onSave({ ...c, id: c.id || slugFromLabel, subcategories: subs.filter((s) => (s.label || "").trim()) })} disabled={!valid}>Αποθήκευση κατηγορίας</button>
           </div>
         </div>
       </div>
     </div>
+    {subcategoryEditor !== null && <SubcategorySheet
+      key={subcategoryEditor.subcategory.id}
+      subcategory={subcategoryEditor.subcategory}
+      category={c}
+      projects={projects.filter(project => project.visible !== false && window.projectCategoryId(project) === c.id && String(project.brand || '').trim().toLowerCase() === String(subcategoryEditor.subcategory.label || '').trim().toLowerCase())}
+      onSave={saveSubcategory}
+      onClose={closeSubcategory} />}
+
+    </>
   );
 }
 
@@ -3678,7 +3991,7 @@ function GalleryThumb({ value, onChange, index, uploadKey }) {
         ? <MediaPreview src={value} />
         : <div className="gal-thumb-empty">Image {index + 1}</div>}
       <button type="button" className="gal-thumb-btn" disabled={busy} onClick={() => ref.current && ref.current.click()}>
-        {busy ? "Uploading…" : value ? "Replace" : "Upload"}
+        {busy ? "Ανέβασμα…" : value ? "Αντικατάσταση" : "Ανέβασμα"}
       </button>
     </div>
   );
@@ -3699,15 +4012,15 @@ function SubIconPicker({ value, onChange }) {
         {value ? <img src={value} alt="" /> : <span>—</span>}
       </div>
       <button type="button" className="sub-icon-btn" disabled={busy} onClick={() => ref.current && ref.current.click()} title="Upload a logo for this sub-category">
-        {busy ? "…" : "Upload"}
+        {busy ? "…" : "Ανέβασμα"}
       </button>
-      <button type="button" className="sub-icon-btn" onClick={() => setPicking(true)} title="Pick one already in the library">Library</button>
-      {value ? <button type="button" className="sub-icon-btn" onClick={() => onChange("")} title="Remove logo">Clear</button> : null}
+      <button type="button" className="sub-icon-btn" onClick={() => setPicking(true)} title="Pick one already in the library">Βιβλιοθήκη</button>
+      {value ? <button type="button" className="sub-icon-btn" onClick={() => onChange("")} title="Remove logo">Καθαρισμός</button> : null}
     </div>
   );
 }
 
-function ImageInput({ value, onChange, placeholder, extra, uploadKey }) {
+function ImageInput({ value, onChange, placeholder, extra, uploadKey, accept = "image/*,video/mp4", uploadLabel = "Ανέβασμα" }) {
   const ref = useRef(null);
   const [busy, setBusy] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -3735,18 +4048,18 @@ function ImageInput({ value, onChange, placeholder, extra, uploadKey }) {
         <input
           type="file"
           ref={ref}
-          accept="image/*,video/mp4"
+          accept={accept}
           onChange={onFile}
           style={{ display: "none" }}
         />
         <div className="controls">
           <button className="btn ghost" type="button" disabled={busy} onClick={() => ref.current && ref.current.click()}>
-            <span className="ic">{Ic.upload}</span><span>{busy ? "Uploading…" : value ? "Replace" : "Upload"}</span>
+            <span className="ic">{Ic.upload}</span><span>{busy ? "Ανέβασμα…" : value ? "Αντικατάσταση" : uploadLabel}</span>
           </button>
-          <button className="btn ghost" type="button" onClick={() => setPicking(true)} title="Pick an image already in the library">
-            <span className="ic">{Ic.grid}</span><span>Library</span>
+          <button className="btn ghost" type="button" onClick={() => setPicking(true)} title="Επιλογή εικόνας από τη βιβλιοθήκη">
+            <span className="ic">{Ic.grid}</span><span>Βιβλιοθήκη</span>
           </button>
-          {value ? <button className="btn ghost" type="button" onClick={() => onChange("")}>{Ic.close}<span>Clear</span></button> : null}
+          {value ? <button className="btn ghost" type="button" onClick={() => onChange("")}>{Ic.close}<span>Καθαρισμός</span></button> : null}
         </div>
         <input
           type="text"
@@ -3758,7 +4071,7 @@ function ImageInput({ value, onChange, placeholder, extra, uploadKey }) {
         <div className="meta-row">
           {isDataUrl
             ? `Embedded in this browser · ${sizeKb}kb — move it to the library from the Media section`
-            : value ? "Linked" : "—"}
+            : value ? "Συνδεδεμένο" : "—"}
         </div>
       </div>
     </div>
@@ -3808,9 +4121,12 @@ function setAtPath(root, path, value) {
   return clone;
 }
 
-function MediaTile({ item, projects, onAssign, onDelete, onCaption, onKind, selected, onSelect }) {
+function MediaTile({ item, projects, onAssign, onDelete, onCaption, onKind, selected, onSelect, onActive }) {
   const [caption, setCaption] = useState(item.caption || "");
   useEffect(() => setCaption(item.caption || ""), [item.id, item.caption]);
+  const owner = projects.find(project => project.id === item.projectId);
+  const canActivate = Boolean(owner && item.url && item.kind !== "icon" && item.kind !== "logo");
+  const active = canActivate && projectGalleryHasMedia(owner, item);
 
   return (
     <div className={`media-tile ${selected ? "is-selected" : ""}`}>
@@ -3855,6 +4171,12 @@ function MediaTile({ item, projects, onAssign, onDelete, onCaption, onKind, sele
           <option value="image">Project image</option>
           <option value="graphic">Graphic element</option>
         </select>
+        <label className={`media-active${active ? " is-active" : ""}`}>
+          <input type="checkbox" role="switch" checked={!!active} disabled={!canActivate}
+            aria-label={`Active στη συλλογή έργου: ${item.filename}`}
+            onChange={event => onActive(item, event.target.checked)} />
+          <span><strong>Active</strong><small>{canActivate ? `Στη συλλογή του έργου ${owner.name || owner.id}` : "Επίλεξε έργο και τύπο Project image"}</small></span>
+        </label>
         <div className="media-actions">
           <button
             className="btn ghost"
@@ -3866,7 +4188,7 @@ function MediaTile({ item, projects, onAssign, onDelete, onCaption, onKind, sele
           >
             Copy URL
           </button>
-          <button className="delete" type="button" onClick={() => onDelete(item)} title="Delete">{Ic.trash}</button>
+          <button className="delete" type="button" onClick={() => onDelete(item)} title="Διαγραφή">{Ic.trash}</button>
         </div>
       </div>
     </div>
@@ -3921,6 +4243,7 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
   const [status, setStatus] = useState(initialItems.length ? "ready" : "loading"); // loading | ready | error
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(null);
   const [query, setQuery] = useState("");
   const [projectFilter, setProjectFilter] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
@@ -3967,8 +4290,10 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
     }
 
     const added = [];
+    setUploadProgress({ done: 0, total: files.length, current: files[0].name, status: "uploading" });
     for (let i = 0; i < files.length; i++) {
-      setBusy(files.length > 1 ? `Uploading ${i + 1} of ${files.length}…` : "Uploading…");
+      setBusy(`Ανέβασμα ${added.length}/${files.length}`);
+      setUploadProgress((current) => ({ ...current, current: files[i].name }));
       try {
         const shrunk = await downscaleImage(files[i]);
         const body = await mediaApi.upload({
@@ -3980,17 +4305,19 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
           projectId: uploadDestination === "graphics" ? null : uploadDestination,
         });
         added.push(body.item);
+        setItems((prev) => [body.item, ...prev]);
+        setUploadProgress((current) => ({ ...current, done: i + 1 }));
       } catch (err) {
         // Stop on the first failure instead of one alert per file.
         setBusy(null);
-        if (added.length) setItems((prev) => added.concat(prev));
+        setUploadProgress((current) => ({ ...current, status: "error" }));
         alert("Couldn't upload " + files[i].name + ".\n\n" + err.message);
         return;
       }
     }
 
     setBusy(null);
-    setItems((prev) => added.concat(prev));
+    setUploadProgress((current) => ({ ...current, status: "complete", current: "" }));
     onToast(added.length === 1 ? "Image uploaded" : added.length + " images uploaded");
   };
 
@@ -4016,6 +4343,12 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
   );
   const onCaption = (id, caption) => patch(id, { caption }, "Couldn't save that caption.");
   const onKind = (id, kind) => patch(id, { kind }, "Couldn't change that media type.");
+  const onActive = (item, active) => {
+    const next = setProjectMediaActive(data, item, active);
+    if (next === data) return;
+    onReplaceData(next);
+    onToast(active ? "Η εικόνα προστέθηκε στη συλλογή του έργου." : "Η εικόνα αφαιρέθηκε από τη συλλογή του έργου.");
+  };
 
   const onDelete = (item) => {
     if (!confirm(
@@ -4165,15 +4498,15 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
       <div className="media-note media-note-warn">
         <b>The media library isn't available.</b>
         <p>{error.message}</p>
-        {error.code === "blob_not_configured" && (
-          <p>In Vercel: <b>Storage → Create → Blob</b>, choose <b>Public</b>, connect it to this project, then redeploy.</p>
+        {error.code === "firebase_not_configured" && (
+          <p>Configure the Firebase server environment variables in Vercel and redeploy. See FIREBASE_SETUP.md.</p>
         )}
         <button className="btn ghost" type="button" onClick={refresh}>Try again</button>
       </div>
     );
   }
 
-  const tileProps = { projects, onAssign, onDelete, onCaption, onKind, onSelect: toggleSelected };
+  const tileProps = { projects, onAssign, onDelete, onCaption, onKind, onActive, onSelect: toggleSelected };
   const visibleGroupKeys = [
     groups.graphics.length ? "graphics" : null,
     groups.backlog.length ? "backlog" : null,
@@ -4229,14 +4562,33 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
     <div className="media">
       <SectionHead
         eyebrow="Media"
-        title={`${items.length} file${items.length === 1 ? "" : "s"} · ${groups.backlog.length} in backlog`}
-      />
+        title={`${items.length} file${items.length === 1 ? "" : "s"} · ${groups.backlog.length} in backlog`}>
+        <div className="media-header-actions">
+          <button
+            className={`btn primary media-icon-button media-upload-button${uploadProgress ? " has-progress" : ""}`}
+            type="button"
+            disabled={!!busy}
+            onClick={() => setUploadOpen(true)}
+            aria-label={uploadProgress ? `${uploadProgress.done}/${uploadProgress.total} αρχεία ανέβηκαν${uploadProgress.status === "uploading" ? " · Ανέβασμα σε εξέλιξη" : " · Προσθήκη αρχείων"}` : "Upload media"}
+            title={uploadProgress ? `${uploadProgress.done}/${uploadProgress.total} αρχεία ανέβηκαν` : "Upload media"}>
+            <DashboardIcon name="upload" />
+            {uploadProgress && <>
+              <span className="media-upload-count">{uploadProgress.done}/{uploadProgress.total}</span>
+              <span className="media-upload-fill" aria-hidden="true" style={{ transform: `scaleX(${uploadProgress.done / uploadProgress.total})` }} />
+            </>}
+          </button>
+          <button className="btn ghost media-icon-button" type="button" disabled={!visibleGroupKeys.length} onClick={toggleAllGroups} aria-label={allGroupsHidden ? "Show all groups" : "Hide all groups"} title={allGroupsHidden ? "Show all groups" : "Hide all groups"}><DashboardIcon name={allGroupsHidden ? "expand" : "collapse"} /></button>
+          <button className="btn ghost media-icon-button" type="button" onClick={refresh} aria-label="Ανανέωση" title="Ανανέωση"><DashboardIcon name="reset" /></button>
+        </div>
+      </SectionHead>
+      <p className="media-upload-status" role="status" aria-live="polite" aria-atomic="true">
+        {uploadProgress
+          ? `${uploadProgress.done}/${uploadProgress.total} αρχεία ανέβηκαν${uploadProgress.status === "uploading" ? ` · Ανεβαίνει: ${uploadProgress.current}` : uploadProgress.status === "error" ? ` · Διακοπή στο αρχείο: ${uploadProgress.current}` : " · Ολοκληρώθηκε"}`
+          : busy}
+      </p>
 
       <div className="media-bar">
         <input type="file" ref={fileRef} accept="image/jpeg,image/png,image/webp,image/avif,image/svg+xml,image/gif,video/mp4,.jpg,.jpeg,.png,.webp,.avif,.svg,.gif,.mp4" multiple onChange={onFiles} style={{ display: "none" }} />
-        <button className="btn primary" type="button" disabled={!!busy} onClick={() => setUploadOpen(true)}>
-          <span className="ic">{Ic.upload}</span><span>{busy || "Upload media"}</span>
-        </button>
         <input
           className="media-search"
           type="search"
@@ -4245,16 +4597,12 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
           onChange={(e) => setQuery(e.target.value)}
         />
         <select className="media-filter" value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}>
-          <option value="all">All projects</option>
+          <option value="all">Όλα τα έργα</option>
           <option value="backlog">Backlog</option>
           {projects.map((p) => <option key={p.id} value={p.id}>{p.name || p.id}</option>)}
         </select>
         <label className="media-date">From <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></label>
         <label className="media-date">To <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></label>
-        <button className="btn ghost" type="button" disabled={!visibleGroupKeys.length} onClick={toggleAllGroups}>
-          {allGroupsHidden ? "Show all groups" : "Hide all groups"}
-        </button>
-        <button className="btn ghost" type="button" onClick={refresh}>Refresh</button>
       </div>
 
       {selected.length > 0 && (
@@ -4267,8 +4615,8 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
           <button className="btn ghost" onClick={() => bulkUpdate(bulkProject ? { projectId: bulkProject, kind: "image" } : { projectId: null }, "Selected files moved")}>Move</button>
           <button className="btn ghost" onClick={() => bulkUpdate({ kind: "image" }, "Selected files marked as project images")}>Project images</button>
           <button className="btn ghost" onClick={() => bulkUpdate({ kind: "icon", projectId: null }, "Selected files moved to Graphic Elements")}>Graphic Elements</button>
-          <button className="btn ghost" onClick={() => setSelected([])}>Clear</button>
-          <button className="btn danger" onClick={bulkDelete}>Delete</button>
+          <button className="btn ghost" onClick={() => setSelected([])}>Καθαρισμός</button>
+          <button className="btn danger" onClick={bulkDelete}>Διαγραφή</button>
         </div>
       )}
 
@@ -4335,7 +4683,7 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
               </select>
             </label>
             <div className="media-upload-actions">
-              <button className="btn ghost" type="button" onClick={() => setUploadOpen(false)}>Cancel</button>
+              <button className="btn ghost" type="button" onClick={() => setUploadOpen(false)}>Ακύρωση</button>
               <button
                 className="btn primary"
                 type="button"
@@ -4412,7 +4760,7 @@ function MediaPicker({ currentProjectId, onPick, onClose }) {
       <button key={item.id} type="button" className={`media-pick${owner ? " is-assigned" : ""}`} onClick={() => choose(item)} title={item.filename}>
         <span className="media-pick-preview">
           <MediaPreview src={item.url} alt={item.caption || item.filename} lazy />
-          {owner && <span className={`media-pick-assigned${isCurrent ? " is-current" : ""}`} title={`Already assigned to ${owner}`}><b>✓</b>{isCurrent ? "Current project" : owner}</span>}
+          {owner && <span className={`media-pick-assigned${isCurrent ? " is-current" : ""}`} title={`Already assigned to ${owner}`}><b>{Ic.check}</b>{isCurrent ? "Current project" : owner}</span>}
         </span>
         <span className="media-pick-name">{item.filename}</span>
       </button>
@@ -4450,7 +4798,7 @@ function MediaPicker({ currentProjectId, onPick, onClose }) {
               <div className="media-bar media-picker-bar">
                 <input className="media-search" type="search" value={query} placeholder="Search by filename or caption" onChange={(e) => setQuery(e.target.value)} autoFocus />
                 <select className="media-filter" value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}>
-                  <option value="all">All projects</option>
+                  <option value="all">Όλα τα έργα</option>
                   <option value="backlog">Backlog</option>
                   {projects.map((project) => <option key={project.id} value={project.id}>{project.name || project.id}</option>)}
                 </select>

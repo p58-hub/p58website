@@ -8,3 +8,7 @@ node_modules/
 .env.*.local
 .vercel
 .env*
+
+# Local Firebase CLI diagnostics can contain authentication metadata
+firebase-debug*.log
+.firebase/

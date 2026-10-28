@@ -19,7 +19,7 @@ const COOKIE_NAME = "p58_session";
 const LOGIN_PATH = "/login";
 
 export const config = {
-  matcher: ["/dashboard", "/dashboard.html", "/dashboard.jsx", "/dashboard.css"],
+  matcher: ["/dashboard", "/dashboard.html", "/dashboard.jsx", "/dashboard.css", "/dashboard-cards.jsx", "/dashboard-cards.css", "/card/settings", "/card/settings.html"],
 };
 
 function readCookie(request, name) {
@@ -100,7 +100,7 @@ export default async function middleware(request) {
 
   const toLogin = (reason) => {
     const target = new URL(LOGIN_PATH, url.origin);
-    target.searchParams.set("next", url.pathname);
+    target.searchParams.set("next", url.pathname + url.search);
     if (reason) target.searchParams.set("reason", reason);
     return Response.redirect(target.toString(), 302);
   };

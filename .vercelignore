@@ -1,0 +1,17 @@
+.git/
+.vercel/
+.claude/
+.codex/
+.agents/
+.env*
+.DS_Store
+node_modules/
+ARCHIVES/
+.firebase/
+firebase-debug*.log
+firebase/
+firebase.json
+scripts/
+*.md
+TODO.txt
+.visual-audit*

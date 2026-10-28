@@ -687,7 +687,7 @@ function migrateLegacyFooterTexts(site) {
 
 const DEFAULT_SITE_SETTINGS = {
   favicon: "https://fdjd29ysr4tmphjq.public.blob.vercel-storage.com/media/files/document-w0X6lo2U3mFMxkuvMvwbniYZAwivdT.svg",
-  heroGallery: { interval: 5200, order: [] },
+  heroGallery: { interval: 5200, order: [], idleHintEnabled: true, idleHintDelay: 15000, idleHintDuration: 2400 },
   projectsPage: {
     heroTitle: "Projects",
     heroTitle_gr: "Έργα",
@@ -829,6 +829,9 @@ function normaliseSiteSettings(site = {}) {
     foot_copy_mid: undefined,
     foot_copy_right: undefined,
     heroGallery: {
+      idleHintEnabled: site.heroGallery?.idleHintEnabled !== false,
+      idleHintDelay: Math.min(120000, Math.max(2000, Number(site.heroGallery?.idleHintDelay) || 15000)),
+      idleHintDuration: Math.min(6000, Math.max(1000, Number(site.heroGallery?.idleHintDuration) || 2400)),
       interval: Math.max(2000, Number((site.heroGallery || {}).interval) || 5200),
       // Display order for the home gallery, by project id. Kept separate from
       // the projects' own order so arranging the gallery doesn't reshuffle the
@@ -913,11 +916,11 @@ function normaliseProject(p, order) {
     // existed remains on the public site.
     visible: p.visible !== false,
     brandKey,
-    name_gr: p.name_gr || greekDefaults.name_gr || p.name || "",
-    location_gr: p.location_gr || greekDefaults.location_gr || p.location || "",
-    type_gr: p.type_gr || greekDefaults.type_gr || (p.type === "Fast Casual · Retail" ? "Γρήγορη εστίαση · Λιανική" : p.type || ""),
-    role_gr: p.role_gr || greekDefaults.role_gr || p.role || "",
-    summary_gr: p.summary_gr || greekDefaults.summary_gr || p.summary || "",
+    name_gr: p.name_gr ?? greekDefaults.name_gr ?? p.name ?? "",
+    location_gr: p.location_gr ?? greekDefaults.location_gr ?? p.location ?? "",
+    type_gr: p.type_gr ?? greekDefaults.type_gr ?? (p.type === "Fast Casual · Retail" ? "Γρήγορη εστίαση · Λιανική" : p.type || ""),
+    role_gr: p.role_gr ?? greekDefaults.role_gr ?? p.role ?? "",
+    summary_gr: p.summary_gr ?? greekDefaults.summary_gr ?? p.summary ?? "",
     gallery: Array.isArray(p.gallery) ? p.gallery : [],
     body: Array.isArray(p.body) ? p.body : [],
   };
@@ -939,30 +942,13 @@ function sortByOrder(items) {
   });
 }
 
-/* ---------- where the content comes from ----------
-   Three sources, in order of authority:
-
-     1. /api/content   what the dashboard published — shared by everyone
-     2. localStorage   this browser's own copy, for offline edits and for
-                       deployments with no Blob store linked
-     3. BUNDLED_CONTENT the defaults compiled into this file
-
-   Before (1) existed an edit never left the browser that made it, so
-   visitors always saw (3). REMOTE_CONTENT stays null until the fetch
-   below resolves, which is why the app waits for P58_CONTENT_READY
-   before its first render. */
+/* Published content is authoritative; bundled data is the offline fallback.
+   The app waits for P58_CONTENT_READY before its initial render. Browser
+   drafts only appear through explicit preview links. */
 let REMOTE_CONTENT = null;
 
-/* One exception to that order: once the dashboard writes to localStorage in
-   this browser, the local copy wins. That is the live preview — dashboard in
-   one tab, site in the other — which would otherwise stop working the moment
-   anything was published. Visitors never trip it: nothing writes the key. */
-let LOCAL_EDIT_WINS = false;
-if (typeof window !== "undefined") {
-  window.addEventListener("storage", (e) => {
-    if (e.key === P58_STORE_KEY) LOCAL_EDIT_WINS = true;
-  });
-}
+// Browser drafts are private editing state. Only explicit preview links may
+// overlay published content; a storage event must never publish a draft.
 
 function readPreviewProject() {
   if (typeof window === "undefined") return null;
@@ -982,16 +968,9 @@ function readPreviewProject() {
 }
 
 function readP58Store() {
-  let source = null;
-  if (!LOCAL_EDIT_WINS && REMOTE_CONTENT && typeof REMOTE_CONTENT === "object") {
-    source = REMOTE_CONTENT;
-  } else {
-    try {
-      const stored = JSON.parse(localStorage.getItem(P58_STORE_KEY) || "null");
-      if (stored && typeof stored === "object") source = stored;
-    } catch (e) { /* malformed — fall through to the defaults */ }
-  }
-  if (!source) source = BUNDLED_CONTENT;
+  if (typeof window !== "undefined" && window.P58_VISUAL_CONTENT && new URLSearchParams(location.search).get("visualTextEditor") === "1" && parent !== window) return window.P58_VISUAL_CONTENT;
+  const source = REMOTE_CONTENT && typeof REMOTE_CONTENT === 'object'
+    ? REMOTE_CONTENT : BUNDLED_CONTENT;
 
   const preview = readPreviewProject();
   if (!preview) return source;
@@ -1048,8 +1027,8 @@ function applyP58ContentFromStore() {
           ...greekDefaults,
           order,
           ...m,
-          role_gr: m.role_gr === "Studio Manager" ? "Υπεύθυνος Στούντιο" : (m.role_gr || greekDefaults.role_gr || m.role || ""),
-          note_gr: m.note_gr || greekDefaults.note_gr || m.note || "",
+          role_gr: m.role_gr === "Studio Manager" ? "Υπεύθυνος Στούντιο" : (m.role_gr ?? greekDefaults.role_gr ?? m.role ?? ""),
+          note_gr: m.note_gr ?? greekDefaults.note_gr ?? m.note ?? "",
         };
       }));
       if (team[0] && team[0].name === "Nikos Andreadis") {
@@ -1068,12 +1047,15 @@ function applyP58ContentFromStore() {
   } catch (e) { /* ignore malformed overrides */ }
 }
 
-/* Blob URLs keep their extension, so the file type is readable from the URL.
-   Used wherever a slot can hold either a still or a clip. */
+/* Legacy assets carry their extension in the path; Firestore media uses name. */
 function isVideoSrc(src) {
   if (typeof src !== "string" || !src) return false;
   if (src.startsWith("data:video/")) return true;
-  return /\.mp4$/i.test(src.split(/[?#]/)[0]);
+  try {
+    const url = new URL(src, 'https://p58.invalid');
+    const name = url.pathname === '/api/media-file' ? url.searchParams.get('name') : url.pathname;
+    return /\.mp4$/i.test(name || '');
+  } catch (error) { return false; }
 }
 
 /* ===== Categories =====
@@ -1094,14 +1076,119 @@ const DEFAULT_CATEGORIES = [
 const slugifyCategoryId = (value) => String(value || "").toLowerCase().normalize("NFD")
   .replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
+// Shared by category editing, publication and public brand pages.
+function normaliseBrandInstagram(value) {
+  const input = String(value || "").trim();
+  if (!input) return "";
+  if (/^@?[a-z0-9._]+$/i.test(input)) return `https://www.instagram.com/${input.replace(/^@/, "")}/`;
+  try {
+    const url = new URL(input);
+    if (url.protocol !== "https:" || !["instagram.com", "www.instagram.com"].includes(url.hostname) || url.username || url.password) return "";
+    const handle = url.pathname.split("/").filter(Boolean);
+    return handle.length === 1 && /^[a-z0-9._]+$/i.test(handle[0]) ? `https://www.instagram.com/${handle[0]}/` : "";
+  } catch { return ""; }
+}
+const BRAND_STORIES = {
+  "protein-garden": {
+    text: "A fresh identity, designed to grow. Green tile, pale oak and open kitchens connect the Protein Garden spaces. A shared architectural language adapts to each neighbourhood, from compact city rooms to generous corner sites.",
+    text_gr: "Μια φρέσκια ταυτότητα που εξελίσσεται. Πράσινο πλακάκι, ανοιχτόχρωμο ξύλο και ανοιχτές κουζίνες συνδέουν τους χώρους του Protein Garden. Μια κοινή αρχιτεκτονική γλώσσα προσαρμόζεται σε κάθε γειτονιά, από μικρά αστικά καταστήματα μέχρι ευρύχωρους γωνιακούς χώρους.",
+  },
+  dinas: {
+    text: "One brand, a family of spaces. The Dinas collection explores how an everyday food destination can feel familiar while belonging to its neighbourhood. Discover the individual spaces and the design decisions that connect them.",
+    text_gr: "Ένα brand, μια οικογένεια χώρων. Η συλλογή Dinas εξερευνά πώς ένας καθημερινός προορισμός φαγητού μπορεί να είναι οικείος και ταυτόχρονα να ανήκει στη γειτονιά του. Ανακάλυψε τους χώρους και τις σχεδιαστικές επιλογές που τους συνδέουν.",
+  },
+};
+
+function brandConceptCopy(brand) {
+  return { text: brand.brandConcept || (brand.id === "protein-garden"
+    ? "The design begins with a shared kit of materials: green tile, pale oak and stainless steel. Counters organise the journey from arrival to ordering, while open kitchens make preparation part of the space. Each location adapts this vocabulary to its own footprint and street frontage."
+    : "The collection brings the warmth of a restaurant into an everyday food destination. Open preparation areas, carefully planned counters and places to pause connect service with hospitality. The layout responds to the proportions and street frontage of each site."),
+    text_gr: brand.brandConcept_gr || (brand.brandConcept ? brand.brandConcept : brand.id === "protein-garden"
+    ? "Ο σχεδιασμός ξεκινά από μια κοινή παλέτα υλικών: πράσινο πλακάκι, ανοιχτόχρωμη δρυς και ανοξείδωτο ατσάλι. Οι πάγκοι οργανώνουν την πορεία από την είσοδο στην παραγγελία, ενώ οι ανοιχτές κουζίνες κάνουν την προετοιμασία μέρος του χώρου. Κάθε κατάστημα προσαρμόζει αυτό το λεξιλόγιο στην κάτοψη και στην πρόσοψή του."
+    : "Η συλλογή φέρνει τη ζεστασιά ενός εστιατορίου σε έναν καθημερινό προορισμό φαγητού. Ανοιχτοί χώροι προετοιμασίας, προσεκτικά σχεδιασμένοι πάγκοι και σημεία στάσης συνδέουν την εξυπηρέτηση με τη φιλοξενία. Η διάταξη προσαρμόζεται στις αναλογίες και στην πρόσοψη κάθε καταστήματος.") };
+}
+
+function normaliseBrandSections(value) {
+  if (!Array.isArray(value)) return null;
+  const text = value => typeof value === 'string' ? value : '';
+  const used = new Set();
+  return value.filter(section => section && ['text','image-text','gallery'].includes(section.type)).map((section,index) => {
+    let id = text(section.id) || `section-${index}`;
+    while (used.has(id)) id += '-copy';
+    used.add(id);
+    return {id, type:section.type, title:text(section.title), title_gr:text(section.title_gr), text:text(section.text), text_gr:text(section.text_gr), imageSide:section.imageSide === 'right' ? 'right' : 'left', images:(Array.isArray(section.images) ? section.images : []).filter(image => image && typeof image === 'object').map(image => ({src:text(image.src),caption:text(image.caption),caption_gr:text(image.caption_gr)}))};
+  });
+}
+function brandStoryImages(projects) {
+  const seen = new Set();
+  return projects.flatMap(project => [
+    {src:project.hero,caption:project.name || '',caption_gr:project.name_gr || project.name || ''},
+    ...(project.gallery || []).map(image => ({src:image.src,caption:image.tag || project.name || '',caption_gr:image.tag_gr || image.tag || project.name_gr || project.name || ''})),
+  ]).filter(image => {
+    if (!image.src || seen.has(image.src)) return false;
+    seen.add(image.src);
+    return true;
+  }).slice(0,7);
+}
+function brandStoryIntro(brand, projects = []) {
+  const firstImage = brandStoryImages(projects)[0];
+  const title = brand.brandStoryTitle ?? brand.label ?? '';
+  const subtitle = brand.brandStorySubtitle ?? window.DICT_I18N?.en?.brand_a_shared_design_language ?? 'A shared design language.';
+  return {
+    title,
+    title_gr: brand.brandStoryTitle_gr ?? (brand.brandStoryTitle != null ? title : brand.label_gr ?? title),
+    subtitle,
+    subtitle_gr: brand.brandStorySubtitle_gr ?? (brand.brandStorySubtitle != null ? subtitle : window.DICT_I18N?.gr?.brand_a_shared_design_language ?? 'Μια κοινή σχεδιαστική γλώσσα.'),
+    image: brand.brandStoryImage != null ? {src:brand.brandStoryImage,caption:title,caption_gr:brand.brandStoryTitle_gr ?? title} : firstImage,
+  };
+}
+function brandStorySections(brand, projects) {
+  const custom = normaliseBrandSections(brand.brandSections);
+  if (custom !== null) return custom;
+  const concept = brandConceptCopy(brand);
+  const overview = brand.brandDescription || BRAND_STORIES[brand.id]?.text || '';
+  const overviewGr = brand.brandDescription_gr || (brand.brandDescription ? overview : BRAND_STORIES[brand.id]?.text_gr || overview);
+  return normaliseBrandSections([
+    {id:'concept',type:'text',title:'The concept',title_gr:'Το concept',text:[overview,concept.text].filter(Boolean).join('\n\n'),text_gr:[overviewGr,concept.text_gr].filter(Boolean).join('\n\n')},
+    {id:'gallery',type:'gallery',images:brandStoryImages(projects).slice(1)},
+  ]);
+}
+
+function normaliseBrandPresentation(sub) {
+  const source = sub && typeof sub === "object" ? sub : {};
+  const dinas = source.id === "dinas" || String(source.label || "").toLowerCase() === "dinas";
+  const color = (value, fallback) => /^#[a-f0-9]{6}$/i.test(String(value || "")) ? value : fallback;
+  const count = source.brandStoreCount;
+  const brandStoreCount = (typeof count === "number" || (typeof count === "string" && count.trim() !== "")) && Number.isSafeInteger(Number(count)) && Number(count) >= 0 ? Number(count) : null;
+  const countSize = Number(source.brandStoreCountSize);
+  return {
+    brandSections: normaliseBrandSections(source.brandSections),
+    ...Object.fromEntries(['brandStoryTitle','brandStoryTitle_gr','brandStorySubtitle','brandStorySubtitle_gr','brandStoryImage'].map(key => [key, typeof source[key] === 'string' ? source[key] : null])),
+    brandStoreCount,
+    brandStoreCountSize: Number.isInteger(countSize) && countSize >= 12 && countSize <= 28 ? countSize : 18,
+    instagram: normaliseBrandInstagram(source.instagram),
+    brandCover: typeof source.brandCover === "string" ? source.brandCover : "",
+    brandLogo: typeof source.brandLogo === "string" ? source.brandLogo : "",
+    brandDescription: typeof source.brandDescription === "string" ? source.brandDescription : "",
+    brandDescription_gr: typeof source.brandDescription_gr === "string" ? source.brandDescription_gr : "",
+    brandConcept: typeof source.brandConcept === "string" ? source.brandConcept : "",
+    brandConcept_gr: typeof source.brandConcept_gr === "string" ? source.brandConcept_gr : "",
+    mapColor: color(source.mapColor, dinas ? "#253b91" : "#254f3d"),
+    mapBackground: color(source.mapBackground, dinas ? "#dce3ef" : "#dce7d6"),
+    mapAccent: color(source.mapAccent, dinas ? "#efc85c" : "#e3d5a9"),
+  };
+}
+
 const normaliseCategorySubs = (subs) => (Array.isArray(subs) ? subs : [])
   .map((sub, order) => {
     const label = (typeof sub === "string" ? sub : (sub && sub.label)) || "";
     return {
       id: (sub && sub.id) || slugifyCategoryId(label) || `sub-${order}`,
       label: label || (sub && sub.id) || "Sub-category",
+      label_gr: sub?.label_gr ?? label,
       order: Number.isFinite(Number(sub && sub.order)) ? Number(sub.order) : order,
       icon: (sub && sub.icon) || "",
+      ...normaliseBrandPresentation(sub),
     };
   })
   .filter((sub) => sub.label)
@@ -1172,6 +1259,8 @@ function projectCategoryId(project) {
    icon, then the one shared site-wide default. */
 function projectIconFor(project, site, categories) {
   if (!project) return "";
+  // null is an explicit removal; older empty/missing values still inherit.
+  if (project.icon === null) return "";
   if (project.icon) return project.icon;
 
   // The logo set beside this brand in its category's sub-category list.
@@ -1222,4 +1311,4 @@ const PROJECT_SORTS = {
 applyP58ContentFromStore();
 const P58_CONTENT_READY = loadRemoteContent();
 
-Object.assign(window, { P58_STORE_KEY, P58_CONTENT_READY, DEFAULT_SITE_SETTINGS, DEFAULT_HOME_V2_BANNERS, DEFAULT_INQUIRY_FORM, INQUIRY_FORM_GROUPS, normaliseHomeV2, normaliseInquiryForm, normaliseSiteSettings, applySiteFavicon, projectSlugFromFields, applyP58ContentFromStore, readP58Store, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor, isProjectVisible, visibleProjects, isVideoSrc, DEFAULT_CATEGORIES, normaliseCategories, siteCategories, siteCategory, siteSubcategories, siteSubcategory, projectCategoryId });
+Object.assign(window, { normaliseBrandSections, brandStoryIntro, brandStoryImages, brandStorySections, brandConceptCopy, normaliseBrandInstagram, normaliseBrandPresentation, P58_STORE_KEY, P58_CONTENT_READY, loadRemoteContent, DEFAULT_SITE_SETTINGS, DEFAULT_HOME_V2_BANNERS, DEFAULT_INQUIRY_FORM, INQUIRY_FORM_GROUPS, normaliseHomeV2, normaliseInquiryForm, normaliseSiteSettings, applySiteFavicon, projectSlugFromFields, applyP58ContentFromStore, readP58Store, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor, isProjectVisible, visibleProjects, isVideoSrc, DEFAULT_CATEGORIES, normaliseCategories, siteCategories, siteCategory, siteSubcategories, siteSubcategory, projectCategoryId });

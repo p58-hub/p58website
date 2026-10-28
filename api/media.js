@@ -1,55 +1,36 @@
-/* ============================================================
-   /api/media — the image library
-
-     GET     -> 200 { items }            everything in the library
-     POST    -> 201 { item }             upload one image
-     PATCH   -> 200 { item }             assign to a project / caption
-     DELETE  -> 200 { ok }               remove image + index entry
-
-   All four require a valid session cookie. "Backlog" is not a
-   separate place: it is simply every item whose projectId is null,
-   so moving an image in or out of a project is a metadata change
-   and the image URL never moves.
-
-   Note the server can't validate projectId — the content lives in
-   each browser's localStorage, not here. The dashboard sends ids it
-   knows about, and any item pointing at a project that no longer
-   exists surfaces in the UI as unassigned.
-   ============================================================ */
-
+import { writeFile } from "./_files.js";
 import crypto from "node:crypto";
-import { put, del } from "@vercel/blob";
+import { db, isFirebaseConfigured, storageError } from "./_firebase.js";
 import { json } from "./_auth.js";
 import {
   FILE_PREFIX,
   MAX_IMAGE_BYTES,
   decodeDataUrl,
-  isBlobConfigured,
   notConfigured,
   readIndex,
   readJsonBody,
   requireSession,
   safeName,
-  writeIndex,
 } from "./_media.js";
 
-const ONE_YEAR = 365 * 24 * 60 * 60;
 
 function cleanText(value, max) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
 export default async function handler(req, res) {
-  if (!isBlobConfigured()) return notConfigured(res);
+  if (!isFirebaseConfigured()) return notConfigured(res);
 
   const session = requireSession(req, res);
   if (!session) return; // 401 already sent
 
-  if (req.method === "GET") return listMedia(res);
-  if (req.method === "POST") return uploadMedia(req, res, session);
-  if (req.method === "PATCH") return updateMedia(req, res);
-  if (req.method === "DELETE") return deleteMedia(req, res);
+  try {
+  if (req.method === "GET") return await listMedia(res);
+  if (req.method === "POST") return await uploadMedia(req, res, session);
+  if (req.method === "PATCH") return await updateMedia(req, res);
+  if (req.method === "DELETE") return await deleteMedia(req, res);
 
+  } catch (error) { return storageError(res, error); }
   res.setHeader("Allow", "GET, POST, PATCH, DELETE");
   return json(res, 405, { error: "method_not_allowed" });
 }
@@ -87,26 +68,10 @@ async function uploadMedia(req, res, session) {
   }
 
   const filename = safeName(body.filename);
-  const items = await readIndex();
-  const duplicate = items.find((item) =>
-    item && String(item.filename || "").toLowerCase() === filename.toLowerCase()
-  );
-  if (duplicate) {
-    return json(res, 409, {
-      error: "duplicate_filename",
-      message: `A file named ${filename} already exists in Media. Rename the file before uploading it again.`,
-    });
-  }
-
-  const blob = await put(FILE_PREFIX + filename, decoded.buffer, {
-    access: "public",
-    contentType: decoded.contentType,
-    addRandomSuffix: true, // never collide, and lets the URL cache forever
-    cacheControlMaxAge: ONE_YEAR,
-  });
-
+  const id = crypto.randomUUID();
+  const blob = { url: '/api/media-file?id=' + id + '&name=' + encodeURIComponent(filename), pathname: FILE_PREFIX + id + '/' + filename };
   const item = {
-    id: crypto.randomUUID(),
+    id,
     url: blob.url,
     pathname: blob.pathname,
     filename,
@@ -121,7 +86,18 @@ async function uploadMedia(req, res, session) {
     uploadedBy: session.u,
   };
 
-  await writeIndex([item, ...items]);
+  try {
+    await db().runTransaction(async transaction => {
+      const reservation = db().collection('mediaNames').doc(filename);
+      if ((await transaction.get(reservation)).exists) throw Object.assign(new Error('duplicate'), { code: 'duplicate' });
+      writeFile(transaction, id, decoded.buffer, decoded.contentType);
+      transaction.create(db().collection('media').doc(id), item);
+      transaction.create(reservation, { id });
+    });
+  } catch (error) {
+    if (error.code === 'duplicate') return json(res, 409, { error: 'duplicate_filename', message: 'A file with this name already exists.' });
+    throw error;
+  }
 
   return json(res, 201, { item });
 }
@@ -133,16 +109,12 @@ async function updateMedia(req, res) {
   const id = body && typeof body.id === "string" ? body.id : "";
   if (!id) return json(res, 400, { error: "missing_id", message: "The media item id is missing." });
 
-  const items = await readIndex();
-  const idx = items.findIndex((x) => x && x.id === id);
-  if (idx < 0) {
-    return json(res, 404, {
-      error: "not_found",
-      message: "That media item was not found in the current index. Refresh Media and try again.",
-    });
-  }
-
-  const item = { ...items[idx] };
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(id)) return json(res, 400, { error: 'invalid_id' });
+  if (!['projectId', 'caption', 'kind'].some(key => key in body)) return json(res, 400, { error: 'no_changes', message: 'No media changes were supplied.' });
+  const ref = db().collection('media').doc(id);
+  const snapshot = await ref.get();
+  if (!snapshot.exists) return json(res, 404, { error: 'not_found' });
+  const item = {};
 
   // projectId: a string assigns, null moves it back to the backlog.
   // Absent means "leave it alone", which is why this checks for the key.
@@ -154,18 +126,8 @@ async function updateMedia(req, res) {
     item.kind = body.kind === "logo" || body.kind === "icon" ? body.kind : "image";
   }
 
-  const next = items.slice();
-  next[idx] = item;
-  try {
-    await writeIndex(next);
-  } catch {
-    return json(res, 503, {
-      error: "index_write_failed",
-      message: "Media storage could not save the change. Try again in a moment.",
-    });
-  }
-
-  return json(res, 200, { item });
+  await ref.update(item);
+  return json(res, 200, { item: { ...snapshot.data(), ...item, id } });
 }
 
 /* ---------- DELETE ---------- */
@@ -175,21 +137,19 @@ async function deleteMedia(req, res) {
   const id = url.searchParams.get("id") || "";
   if (!id) return json(res, 400, { error: "missing_id" });
 
-  const items = await readIndex();
-  const item = items.find((x) => x && x.id === id);
-  if (!item) return json(res, 404, { error: "not_found" });
-
-  // Drop the file first; if that fails we keep the index entry rather
-  // than orphaning a blob nobody can see or clean up.
-  try {
-    await del(item.url);
-  } catch {
-    return json(res, 502, {
-      error: "delete_failed",
-      message: "Couldn't remove the file from storage. Nothing was changed.",
-    });
-  }
-
-  await writeIndex(items.filter((x) => x && x.id !== id));
+  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(id)) return json(res, 400, { error: 'invalid_id' });
+  const ref = db().collection('media').doc(id);
+  const snapshot = await ref.get();
+  if (!snapshot.exists) return json(res, 404, { error: 'not_found' });
+  const item = snapshot.data();
+  if (!item.pathname?.startsWith(FILE_PREFIX)) throw new Error('Invalid media path');
+  const batch = db().batch();
+  batch.delete(ref);
+  const fileRef = db().collection('mediaFiles').doc(id);
+  const file = await fileRef.get();
+  for (let i = 0; i < (file.data()?.chunks || 0); i++) batch.delete(fileRef.collection('chunks').doc(String(i)));
+  batch.delete(fileRef);
+  batch.delete(db().collection('mediaNames').doc(item.filename));
+  await batch.commit();
   return json(res, 200, { ok: true, id });
 }

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="el">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f7f5f0">
+  <meta name="description" content="Georgios Grigoriadis · Founder, Project58. Αποθήκευση επαφής και επικοινωνία.">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="P58 Card">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Georgios Grigoriadis · Project58 Card</title>
+  <link rel="manifest" href="/card/manifest.webmanifest">
+  <link rel="apple-touch-icon" href="/card/icon-192.png">
+  <link rel="icon" href="/assets/logo-black.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/card/card.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600&display=swap" rel="stylesheet">
+  <script src="/card/vendor/qrcode.js" defer></script>
+  <script type="module" src="/card/card.js"></script>
+</head>
+<body>
+  <script>if(location.pathname.startsWith('/card/member/') || new URLSearchParams(location.search).has('member')) document.documentElement.classList.add('loading-member');</script>
+  <main class="card-page">
+    <header class="topbar"><a href="/" aria-label="Project58 — αρχική"><img src="/assets/logo-black.svg" alt="Project58" width="112" height="35"></a><div class="language-bar"><label for="card-language">Γλώσσα</label><select id="card-language" class="language-picker"><option value="el" lang="el">Ελληνικά</option><option value="en" lang="en">English</option><option value="fr" lang="fr">Français</option></select></div></header>
+    <section class="identity" aria-label="Ψηφιακή επαγγελματική κάρτα">
+      <div class="portrait-wrap"><img class="portrait" src="/assets/people/georgios-grigoriadis.jpg" alt="Georgios Grigoriadis" width="1200" height="1600"><span class="portrait-label">PERSONAL CONNECTION / P58</span></div>
+      <div class="identity-text"><p class="eyebrow">ATHENS, GREECE</p><h1><span id="first-name">Georgios</span><br><span id="last-name">Grigoriadis.</span></h1><p id="role" class="role">Founder · Project58</p></div>
+        <div class="personal-message">
+          <button id="edit-message" class="intro message-trigger" type="button" aria-expanded="false" aria-controls="message-editor" aria-describedby="message-edit-hint"><span id="intro-message">Το προσωπικό σου μήνυμα εδώ.</span></button>
+          <span id="message-edit-hint" class="message-edit-hint">Πάτησε το κείμενο για αλλαγή <svg class="icon-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 19 19 5M5 5h14v14"/></svg></span>
+          <div id="message-editor" class="message-editor" hidden>
+            <label for="message">Το μήνυμά σου</label><p class="message-language-hint">Γράψε το μήνυμα στη γλώσσα της αποστολής.</p>
+            <textarea id="message" rows="4" maxlength="1000" placeholder="Χάρηκα για τη γνωριμία! Ας κρατήσουμε επαφή."></textarea>
+            <div class="message-meta"><span id="message-count">0 / 1000</span><button id="clear-message" type="button" class="text-button">Καθαρισμός</button></div>
+            <div class="message-editor-actions"><button id="apply-message" type="button" class="primary">Έτοιμο</button><button id="cancel-message" type="button" class="text-button">Ακύρωση</button></div>
+          </div>
+        </div>
+    </section>
+    <p id="profile-description" class="profile-description" hidden></p>
+    <dl class="contact-details compact-details" aria-label="Στοιχεία επικοινωνίας">
+      <div id="detail-phone" hidden><dt>Τηλέφωνο</dt><dd class="phone-display"><svg id="phone-flag" class="country-flag" width="21" height="14" viewBox="0 0 27 18" role="img" aria-label="Ελλάδα" focusable="false" hidden><rect width="27" height="18" fill="#0d5eaf"/><path d="M0 3h27M0 7h27M0 11h27M0 15h27" stroke="#fff" stroke-width="2"/><path d="M0 0h10v10H0z" fill="#0d5eaf"/><path d="M5 0v10M0 5h10" stroke="#fff" stroke-width="2"/></svg><a id="phone-value"></a></dd></div>
+      <div id="detail-email"><dt>Email</dt><dd><a id="email-value">g.grigoriadis@project58.gr</a></dd></div>
+      <div id="detail-website"><dt>Website</dt><dd><a id="website-value">https://p58website.vercel.app/</a></dd></div>
+      <div id="detail-address"><dt>Διεύθυνση</dt><dd id="address-value">Ακαδημίας 76, Αθήνα</dd></div>
+    </dl>
+    <div class="connect-bar"><button id="connect" class="primary full" type="button"><svg class="icon-arrow connect-symbol" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 19 19 5M5 5h14v14"/></svg><span>Σύνδεση & κοινοποίηση</span></button><span class="connect-caption">QR · μήνυμα · NFC</span></div>
+    <footer class="footer"><a href="/card/settings">Ρυθμίσεις <svg class="icon-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 19 19 5M5 5h14v14"/></svg></a><span id="connection-status" role="status">DIGITAL CARD</span></footer>
+    <p id="notice" class="notice" role="status" aria-live="polite"></p>
+    <noscript>Ενεργοποίησε τη JavaScript για QR και αποθήκευση επαφής. Email: g.grigoriadis@project58.gr.</noscript>
+  </main>
+
+  <dialog id="connect-dialog" aria-labelledby="connect-title">
+    <div class="sheet-header"><div><p class="eyebrow">LET’S STAY IN TOUCH</p><h2 id="connect-title">Μια νέα σύνδεση.</h2></div><button class="close" data-close type="button" aria-label="Κλείσιμο">×</button></div>
+    <div class="tabs" role="tablist" aria-label="Τρόπος σύνδεσης"><button id="qr-tab" role="tab" aria-controls="qr-panel" aria-selected="true" type="button" data-tab="qr">QR επαφής</button><button id="share-tab" role="tab" aria-controls="share-panel" aria-selected="false" tabindex="-1" type="button" data-tab="share">Αποστολή</button><button id="nfc-tab" role="tab" aria-controls="nfc-panel" aria-selected="false" tabindex="-1" type="button" data-tab="nfc">NFC</button></div>
+    <section id="qr-panel" role="tabpanel" aria-labelledby="qr-tab">
+      <div class="qr-controls"><label for="qr-kind">Το QR ανοίγει</label><select id="qr-kind"><option value="contact">Απευθείας την επαφή</option><option value="page">Την προσωπική σελίδα</option></select></div>
+      <div id="qr-code" class="qr-code" role="img" aria-label="QR για αποθήκευση επαφής"></div>
+      <p id="qr-description" class="hint centered">Ο άλλος σκανάρει και επιβεβαιώνει την αποθήκευση. Λειτουργεί και χωρίς internet.</p>
+      <button id="download-qr" class="secondary full" type="button">Αποθήκευση εικόνας QR <svg class="icon-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 4v16M5 13l7 7 7-7"/></svg></button>
+    </section>
+    <section id="share-panel" role="tabpanel" aria-labelledby="share-tab" hidden>
+      <p class="eyebrow">ΤΟ ΜΗΝΥΜΑ ΣΟΥ</p>
+      <p id="share-message-preview" class="share-message-preview">Χωρίς προσωπικό μήνυμα.</p>
+      <button id="edit-message-from-share" class="text-button" type="button">Αλλαγή μηνύματος <svg class="icon-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 19 19 5M5 5h14v14"/></svg></button>
+      <p class="hint">Το μήνυμα εμφανίζεται στην κάρτα που στέλνεις με αυτόν τον σύνδεσμο.</p>
+      <label id="attachment-option" class="check-row"><input id="attach-contact" type="checkbox"> Επισύναψη αρχείου επαφής (.vcf)</label>
+      <button id="native-share" class="primary full" type="button">Επιλογή εφαρμογής & κοινοποίηση <svg class="icon-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 19 19 5M5 5h14v14"/></svg></button>
+      <p class="hint">Οι διαθέσιμες εφαρμογές και η υποστήριξη συνημμένων εξαρτώνται από το κινητό σου.</p>
+      <div class="share-links"><a id="share-whatsapp" target="_blank" rel="noopener noreferrer">WhatsApp</a><a id="share-telegram" target="_blank" rel="noopener noreferrer">Telegram</a><a id="share-email">Email</a><a id="share-sms">SMS</a></div>
+      <button id="copy-share" class="secondary full" type="button">Αντιγραφή μηνύματος & συνδέσμου</button>
+      <div id="manual-copy" hidden><label for="copy-text">Αντέγραψε αυτό το κείμενο</label><textarea id="copy-text" readonly rows="4"></textarea></div>
+    </section>
+    <section id="nfc-panel" role="tabpanel" aria-labelledby="nfc-tab" hidden>
+      <div class="nfc-illustration" aria-hidden="true"><span>p58</span><span class="nfc-waves">)))</span></div>
+      <h3>Ένα άγγιγμα αρκεί.</h3><p class="hint">Η κάρτα ή το αυτοκόλλητο NFC ανοίγει τη σελίδα σου με τα στοιχεία επικοινωνίας σε συμβατό κινητό.</p>
+      <label for="nfc-url">Σύνδεσμος για την κάρτα NFC</label><input id="nfc-url" type="url" readonly>
+      <button id="copy-nfc" class="secondary full" type="button">Αντιγραφή συνδέσμου NFC</button>
+      <div id="nfc-write-area" hidden><p class="hint">Πλησίασε μια κενή, εγγράψιμη κάρτα NFC. Η εγγραφή δεν κλειδώνει την κάρτα και δεν αντικαθιστά υπάρχον περιεχόμενο.</p><button id="write-nfc" class="primary full" type="button">Εγγραφή σε κενή κάρτα NFC</button><button id="cancel-nfc" class="text-button" type="button" hidden>Ακύρωση εγγραφής</button></div>
+      <p id="nfc-help" class="hint">Για την αρχική ρύθμιση, γράψε τον παραπάνω σύνδεσμο ως URL με μια εφαρμογή εγγραφής NFC ή δώσε τον στον προμηθευτή της κάρτας. Το iPhone δεν υποστηρίζει εγγραφή NFC από αυτή τη σελίδα.</p>
+      <p id="nfc-status" role="status" class="hint"></p>
+    </section>
+    <p id="sheet-status" role="status" class="sheet-status" aria-live="polite"></p>
+  </dialog>
+
+</body>
+</html>

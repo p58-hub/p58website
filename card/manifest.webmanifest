@@ -1,0 +1,16 @@
+{
+  "id": "/card/georgios",
+  "name": "Georgios · Project58 Card",
+  "short_name": "P58 Card",
+  "lang": "el",
+  "start_url": "/card/georgios",
+  "scope": "/card/",
+  "display": "standalone",
+  "background_color": "#f7f5f0",
+  "theme_color": "#f7f5f0",
+  "icons": [
+    { "src": "/card/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/card/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ],
+  "shortcuts": [{ "name": "Η κάρτα μου", "url": "/card/georgios" }]
+}

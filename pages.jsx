@@ -58,6 +58,80 @@ function useHomeMobile() {
 }
 
 /* ================== HOME — vertical scroll: full-screen hero → project cards ================== */
+function startHomeIdleScroll(hero, settings = {}) {
+  if (new URLSearchParams(location.search).get('visualTextEditor') === '1') return;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  if (!hero || reducedMotion.matches || settings.idleHintEnabled === false) return;
+  const target = hero.closest('.dhome') || hero;
+  if (!target.animate) return;
+  const delay = Math.min(120000, Math.max(2000, Number(settings.idleHintDelay) || 15000));
+  const duration = Math.min(6000, Math.max(1000, Number(settings.idleHintDuration) || 2400));
+  let timer, animation, finished = false, pointerDown = false;
+  const clear = () => window.clearTimeout(timer);
+  const cancelMotion = () => { animation?.cancel(); animation = null; };
+  const arm = () => {
+    clear();
+    cancelMotion();
+    if (finished || document.hidden || reducedMotion.matches || window.scrollY > 8) return;
+    timer = window.setTimeout(() => {
+      if (finished || document.hidden || reducedMotion.matches || window.scrollY > 8) return;
+      if (pointerDown || document.querySelector('dialog[open], [aria-modal="true"]') ||
+          /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '') ||
+          document.activeElement?.isContentEditable || window.getComputedStyle(document.body).overflowY === 'hidden') {
+        arm();
+        return;
+      }
+      finished = true;
+      // Visual hint only: reveal a little of the next section, then return.
+      // The actual scroll position is never changed.
+      const distance = Math.min(56, hero.clientHeight * .06);
+      animation = target.animate([
+        {transform:'translateY(0)', offset:0, easing:'ease-in-out'},
+        {transform:`translateY(-${distance}px)`, offset:.5, easing:'ease-in-out'},
+        {transform:'translateY(0)', offset:1}
+      ], {duration, easing:'linear', iterations:1});
+    }, delay);
+  };
+  const onScroll = () => { if (window.scrollY > 8) { finished = true; clear(); cancelMotion(); } };
+  const onDown = () => { pointerDown = true; arm(); };
+  const onUp = () => { pointerDown = false; arm(); };
+  const events = {pointermove:arm, pointerdown:onDown, pointerup:onUp, pointercancel:onUp, keydown:arm, wheel:arm, scroll:onScroll};
+  Object.entries(events).forEach(([name, handler]) => window.addEventListener(name, handler, {passive:true}));
+  document.addEventListener('visibilitychange', arm);
+  reducedMotion.addEventListener?.('change', arm);
+  arm();
+  return () => {
+    finished = true;
+    clear();
+    cancelMotion();
+    Object.entries(events).forEach(([name, handler]) => window.removeEventListener(name, handler));
+    document.removeEventListener('visibilitychange', arm);
+    reducedMotion.removeEventListener?.('change', arm);
+  };
+}
+
+function HomeHeroTitle({ text }) {
+  const ref = useR(null);
+  React.useLayoutEffect(() => {
+    const title = ref.current;
+    if (!title) return;
+    const measure = () => {
+      let previousTop = null, line = -1;
+      title.querySelectorAll('.home-hero-word').forEach(word => {
+        if (previousTop === null || Math.abs(word.offsetTop - previousTop) > 2) { line++; previousTop = word.offsetTop; }
+        word.style.setProperty('--hero-line-delay', `${Math.min(line, 4) * .1}s`);
+      });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(title);
+    let live = true;
+    document.fonts?.ready.then(() => { if (live) measure(); });
+    return () => { live = false; observer.disconnect(); };
+  }, [text]);
+  return <h1 ref={ref} data-p58-text="home_hero_title">{String(text).split(/(\s+)/).map((word,index) => /\s/.test(word) ? word : <span className="home-hero-word" key={index}>{word}</span>)}</h1>;
+}
+
 function HomePage({ go }) {
   const t = window.useT();
   const pick = window.usePick();
@@ -105,9 +179,63 @@ function HomePage({ go }) {
   const [paused, setPaused] = useS(false);
   const [heroVisible, setHeroVisible] = useS(true);
   const [progress, setProgress] = useS(0);
+  const heroRef = useR(null);
+  const heroGesture = useR(null);
+  const suppressHeroClick = useR(false);
   const trackRef = useR(null);
   const targetX = useR(0);
   const animRef = useR(null);
+
+  useE(() => startHomeIdleScroll(heroRef.current, window.readP58Store?.()?.site?.heroGallery || {}), []);
+
+  const changeHero = direction => setI(current => (current + direction + featured.length) % featured.length);
+  const startHeroGesture = event => {
+    if (!event.isPrimary || event.button !== 0) return;
+    suppressHeroClick.current = false;
+    if (event.target.closest('button, [role="button"]')) return;
+    heroGesture.current = {id:event.pointerId, x:event.clientX, y:event.clientY};
+  };
+  const moveHeroGesture = event => {
+    const start = heroGesture.current;
+    if (!start || start.id !== event.pointerId) return;
+    const dx = event.clientX - start.x, dy = event.clientY - start.y;
+    if (Math.hypot(dx,dy) > 10) suppressHeroClick.current = true;
+    if (Math.abs(dx) > 10 && Math.abs(dx) > Math.abs(dy)) event.currentTarget.setPointerCapture(event.pointerId);
+  };
+  const endHeroGesture = event => {
+    const start = heroGesture.current;
+    heroGesture.current = null;
+    if (!start || start.id !== event.pointerId) return;
+    const dx = event.clientX - start.x, dy = event.clientY - start.y;
+    if (Math.abs(dx) >= 40 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+      suppressHeroClick.current = true;
+      changeHero(dx < 0 ? 1 : -1);
+    }
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+  };
+  useE(() => {
+    const hero = heroRef.current;
+    if (!hero || featured.length < 2) return;
+    let distance = 0, lastEvent = 0, lastChange = -Infinity;
+    const wheel = event => {
+      if (event.ctrlKey) return;
+      const horizontal = event.shiftKey && !event.deltaX ? event.deltaY : event.deltaX;
+      if (!horizontal || (!event.shiftKey && Math.abs(horizontal) <= Math.abs(event.deltaY))) return;
+      event.preventDefault();
+      const now = performance.now();
+      if (now - lastEvent > 180 || Math.sign(distance) !== Math.sign(horizontal)) distance = 0;
+      lastEvent = now;
+      if (now - lastChange < 650) return;
+      distance += horizontal * (event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? hero.clientWidth : 1);
+      if (Math.abs(distance) >= 45) {
+        changeHero(distance > 0 ? 1 : -1);
+        distance = 0;
+        lastChange = now;
+      }
+    };
+    hero.addEventListener('wheel', wheel, {passive:false});
+    return () => hero.removeEventListener('wheel', wheel);
+  }, [featured.length]);
 
   // The v2 vertical presentation is shared by desktop and mobile. The header
   // remains hidden over the opening gallery and returns afterwards.
@@ -242,8 +370,8 @@ function HomePage({ go }) {
     if (banner.id === "workplaces" || destination === "workplace") return () => go({ name: "projects", type: "workplace", transition: "category-open" });
     if (destination === "hospitality") return () => go({ name: "projects", type: "hospitality", transition: "category-open" });
     if (destination === "retail") return () => go({ name: "projects", type: "retail", transition: "category-open" });
-    if (banner.id === "protein-garden" || destination === "protein-garden") return () => go({ name: "projects", type: "retail", brand: "pg", transition: "category-open" });
-    if (banner.id === "dinas" || destination === "dinas") return () => go({ name: "projects", type: "retail", brand: "dn", transition: "category-open" });
+    if (banner.id === "protein-garden" || destination === "protein-garden") return () => go({ name: "brand", id: "protein-garden" });
+    if (banner.id === "dinas" || destination === "dinas") return () => go({ name: "brand", id: "dinas" });
     if (destination === "contact") return () => go({ name: "start" });
     return () => go({ name: "projects" });
   };
@@ -263,31 +391,42 @@ function HomePage({ go }) {
     <div className="dhome">
       <section
         className="dhome-hero"
+        ref={heroRef}
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
-        onClick={() => setI((current) => (current + 1) % featured.length)}
-        aria-label={t("show_next_gallery")}>
+        onPointerDown={startHeroGesture}
+        onPointerMove={moveHeroGesture}
+        onPointerUp={endHeroGesture}
+        onPointerCancel={() => { heroGesture.current = null; suppressHeroClick.current = true; }}
+        onClickCapture={event => { if (suppressHeroClick.current && event.detail !== 0) { event.preventDefault(); event.stopPropagation(); suppressHeroClick.current = false; } }}>
         {featured.map((p, idx) => (
           <div key={p.id} className={`vhome-slide ${idx === activeIndex ? "on" : ""}`}>
-            <img src={p.hero} alt="" />
+            <img src={p.hero} alt="" draggable={false} />
           </div>
         ))}
         <div className="dhome-hero-veil" aria-hidden="true" />
+        <a className="dhome-hero-project-link" href={`/projects/${encodeURIComponent(cur.slug || cur.id)}`} aria-label={`${t("project")}: ${pick(cur, "name")}`}
+          draggable={false}
+          onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); go({ name:"project", id:cur.slug || cur.id, from:{name:"home"} }); }}
+          onKeyDown={event => { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); changeHero(event.key === 'ArrowRight' ? 1 : -1); } }} />
+        {featured.length > 1 && [-1, 1].map(direction => <button
+          key={direction}
+          type="button"
+          className={`dhome-hero-arrow ${direction < 0 ? 'previous' : 'next'}`}
+          aria-label={pick(direction < 0 ? {label:'Previous project',label_gr:'Προηγούμενο έργο'} : {label:'Next project',label_gr:'Επόμενο έργο'}, 'label')}
+          onClick={event => { event.stopPropagation(); changeHero(direction); }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={direction < 0 ? 'M15 5l-7 7 7 7' : 'M9 5l7 7-7 7'} /></svg>
+        </button>)}
         <div className="vhome-brand" onClick={(event) => { event.stopPropagation(); go({ name: "home" }); }} role="button" aria-label="Project58 home">
           <img src="assets/logo-white.png" alt="Project58" />
         </div>
         <div className="dhome-hero-copy">
           <span className="dhome-kicker" data-p58-text="home_hero_kicker">{t("home_hero_kicker")}</span>
-          <h1 data-p58-text="home_hero_title">{t("home_hero_title")}</h1>
+          <div className="dhome-hero-title-row">
+            <HomeHeroTitle text={t("home_hero_title")} />
+          </div>
         </div>
-        <div className="vhome-loc">{pick(cur, "location")}</div>
-        <div className="vhome-cue">
-          <svg className="mouse-icon" viewBox="0 0 18 28" width="18" height="28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <rect x="1" y="1" width="16" height="26" rx="8" stroke="white" strokeWidth="1.5" strokeOpacity="0.85" />
-            <rect className="mouse-wheel" x="8" y="5" width="2" height="5" rx="1" fill="white" />
-          </svg>
-          <span data-p58-text="scroll">{t("scroll")}</span>
-        </div>
+        <div className="vhome-loc"><span data-p58-text={window.siteContentKey("project",cur.id,"location")}>{pick(cur, "location")}</span></div>
         <div className="vhome-dots" onClick={(event) => event.stopPropagation()}>
           {featured.map((p, idx) => (
             <button key={p.id} className={`vhome-dot ${idx === activeIndex ? "on" : ""}`} onClick={() => setI(idx)} aria-label={`${t("project")} ${idx + 1}`} />
@@ -296,7 +435,6 @@ function HomePage({ go }) {
       </section>
 
       <section className="dhome-statement dhome-statement--practice">
-        <span className="dhome-kicker" data-p58-text="home_practice_kicker">{t("home_practice_kicker")}</span>
         <h2 data-p58-text="home_practice_title">{t("home_practice_title")}</h2>
       </section>
 
@@ -307,8 +445,8 @@ function HomePage({ go }) {
               <div className="home-selected-photo"><SiteMedia src={project.hero} alt="" lazy /></div>
               <div className="home-selected-caption">
               <span className="dhome-kicker">{catOf(project)}</span>
-              <h3>{pick(project, "name")}</h3>
-              <p>{pick(project, "location")}</p>
+              <h3><span data-p58-text={window.siteContentKey("project",project.id,"name")}>{pick(project, "name")}</span></h3>
+              <p><span data-p58-text={window.siteContentKey("project",project.id,"location")}>{pick(project, "location")}</span></p>
               </div>
             </button>
           ))}
@@ -325,9 +463,6 @@ function HomePage({ go }) {
       </section>
 
       {homeV2.enabled && banners.length ? <section className="dhome-work home-scalable" aria-label={t("home_scalable_title")}>
-        <header className="dhome-work-head">
-          <span className="dhome-kicker" data-p58-text="home_scalable_section">{t("home_scalable_section")}</span>
-        </header>
         <div className="home-scalable-layout">
           <div className="home-scalable-statement" tabIndex={0}>
             <span className="dhome-kicker" data-p58-text="home_scalable_kicker">{t("home_scalable_kicker")}</span>
@@ -339,8 +474,8 @@ function HomePage({ go }) {
                 {banner.image ? <SiteMedia src={banner.image} alt="" lazy /> : null}
                 <span className="home-brand-shade" aria-hidden="true" />
                 <span className="home-brand-copy">
-                  <span className="dhome-kicker">{pick(banner, "eyebrow")}</span>
-                  <strong>{pick(banner, "title")}</strong>
+                  <span className="dhome-kicker"><span data-p58-text={window.siteContentKey("banner",banner.id,"eyebrow")}>{pick(banner, "eyebrow")}</span></span>
+                  <strong><span data-p58-text={window.siteContentKey("banner",banner.id,"title")}>{pick(banner, "title")}</span></strong>
                 </span>
                 <span className="ui-arrow-up-right" aria-hidden="true" />
               </button>
@@ -376,7 +511,7 @@ function MobileHomePage({ go, featured, active, setActive, cur, catOf }) {
         <div className="vhome-brand" onClick={(e) => { e.stopPropagation(); go({ name: "home" }); }} role="button" aria-label="Project58 home">
           <img src="assets/logo-white.png" alt="Project58" />
         </div>
-        <div className="vhome-loc">{pick(cur, "location")}</div>
+        <div className="vhome-loc"><span data-p58-text={window.siteContentKey("project",cur.id,"location")}>{pick(cur, "location")}</span></div>
         <div className="vhome-dots" onClick={(e) => e.stopPropagation()}>
           {featured.map((p, idx) =>
           <button
@@ -408,8 +543,8 @@ function MobileHomePage({ go, featured, active, setActive, cur, catOf }) {
             <span className="vhome-hpic-cat">{catOf(p)}</span>
             </div>
             <div className="vhome-hcap">
-              <div className="vhome-name">{pick(p, "name")}</div>
-              <div className="vhome-loc-2">{pick(p, "location")}</div>
+              <div className="vhome-name"><span data-p58-text={window.siteContentKey("project",p.id,"name")}>{pick(p, "name")}</span></div>
+              <div className="vhome-loc-2"><span data-p58-text={window.siteContentKey("project",p.id,"location")}>{pick(p, "location")}</span></div>
             </div>
             </a>
         )}
@@ -443,7 +578,7 @@ function Tile({ project, cls, go, idx }) {
   const t = window.useT();
   const pick = window.usePick();
   const rawStatus = project.status || "";
-  const statusLabel = t(rawStatus) !== rawStatus ? t(rawStatus) : rawStatus;
+  const statusLabel = pick(project,"status") !== rawStatus ? pick(project,"status") : (t(rawStatus) !== rawStatus ? t(rawStatus) : rawStatus);
   return (
     <div
       className={`bg-tile ${cls || ""}`}
@@ -458,11 +593,11 @@ function Tile({ project, cls, go, idx }) {
         </div>
         <div className="ovr-bot">
           <div>
-            <div className="ovr-name"><em>{pick(project, "name")}</em></div>
+            <div className="ovr-name"><em><span data-p58-text={window.siteContentKey("project",project.id,"name")}>{pick(project, "name")}</span></em></div>
             <div className="ovr-tag" style={{ marginTop: 14 }}>
-              <span>{pick(project, "location")}</span>
+              <span><span data-p58-text={window.siteContentKey("project",project.id,"location")}>{pick(project, "location")}</span></span>
               <span>·</span>
-              <span>{pick(project, "size")}</span>
+              <span><span data-p58-text={window.siteContentKey("project",project.id,"size")}>{pick(project, "size")}</span></span>
               <span>·</span>
               <span>{statusLabel}</span>
             </div>
@@ -512,7 +647,23 @@ function ProjectsRail({ go, transition }) {
   const isMobile = useHomeMobile();
   const [openingCategory, setOpeningCategory] = useS(false);
   const storedSite = (window.readP58Store ? window.readP58Store() : null)?.site || {};
-  const projectsPage = window.normaliseSiteSettings(storedSite).projectsPage;
+  const [previewProjectsPage, setPreviewProjectsPage] = useS(null);
+  const [previewFocus, setPreviewFocus] = useS(null);
+  useE(() => {
+    if (new URLSearchParams(location.search).get('visualTextEditor') !== '1' || parent === window) return;
+    const receive = event => {
+      if (event.origin !== location.origin || event.source !== parent || event.data?.type !== 'p58:text-preview' || !event.data.projectsPage) return;
+      setPreviewProjectsPage(window.normaliseSiteSettings({projectsPage:event.data.projectsPage}).projectsPage);
+      const focus = event.data.projectFocus;
+      const next = focus && ['heroTitle','introTitle','introNote','centerText','categories'].includes(focus.field) && Number.isFinite(focus.request) ? focus : null;
+      setPreviewFocus(current => current?.request === next?.request && current?.field === next?.field ? current : next);
+    };
+    window.addEventListener('message', receive);
+    // Request the draft again when this route mounts, including after iframe navigation.
+    parent.postMessage({type:'p58:text-ready'}, location.origin);
+    return () => window.removeEventListener('message', receive);
+  }, []);
+  const projectsPage = previewProjectsPage || window.normaliseSiteSettings(storedSite).projectsPage;
   const heroTitleScale = Math.min(250, Math.max(50, Number(projectsPage.heroTitleScale) || 150));
 
   // The categories are the dashboard's, in the dashboard's order. Not cached:
@@ -553,6 +704,24 @@ function ProjectsRail({ go, transition }) {
     // the header stays out of the way while the opening pane fills the screen
     onScroll: (el) => document.body.classList.toggle("hz-at-hero", el.scrollLeft < el.clientWidth * 0.62),
   });
+
+  useE(() => {
+    if (!previewFocus) return;
+    const selectors = {heroTitle:'.hz-hero-title',introTitle:'.hz-intro .vhome-rail-title',introNote:'.hz-intro-note',centerText:'.hz-center-copy p',categories:'.hz-cat .vhome-name'};
+    const target = rail.ref.current?.querySelector(selectors[previewFocus.field]);
+    if (!target) return;
+    target.classList.add('visual-project-target');
+    const tick = requestAnimationFrame(() => {
+      const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth';
+      if (isMobile) target.scrollIntoView({behavior,block:'center',inline:'center'});
+      else {
+        const container = rail.ref.current;
+        const bounds = target.getBoundingClientRect();
+        rail.scrollTo(container.scrollLeft + bounds.left - container.getBoundingClientRect().left - (container.clientWidth - bounds.width) / 2, behavior);
+      }
+    });
+    return () => {cancelAnimationFrame(tick);target.classList.remove('visual-project-target');};
+  }, [previewFocus, isMobile]);
 
   // on a phone the same panes are stacked, so the opening one is measured
   // against the page scroll instead of the rail's
@@ -614,6 +783,7 @@ function ProjectsRail({ go, transition }) {
         </div>
         <h1
           className="hz-hero-title"
+          data-p58-text="projectsPage.heroTitle"
           style={{
             "--projects-hero-title-min": `${56 * heroTitleScale / 100}px`,
             "--projects-hero-title-fluid": `${7 * heroTitleScale / 100}vw`,
@@ -621,7 +791,7 @@ function ProjectsRail({ go, transition }) {
           }}>
           {pick(projectsPage, "heroTitle") || t("projects")}
         </h1>
-        <div className="vhome-loc">{pick(cur, "location")}</div>
+        <div className="vhome-loc"><span data-p58-text={window.siteContentKey("project",cur.id,"location")}>{pick(cur, "location")}</span></div>
         <div className="vhome-cue">
           <svg className="mouse-icon" viewBox="0 0 18 28" width="18" height="28" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <rect x="1" y="1" width="16" height="26" rx="8" stroke="white" strokeWidth="1.5" strokeOpacity="0.85" />
@@ -637,16 +807,22 @@ function ProjectsRail({ go, transition }) {
       </section>
 
       {/* ===== optional intro pane, then portrait category cards ===== */}
-      {projectsPage.showIntro ? (
-        <section className="hz-intro">
-          <h2 className="vhome-rail-title">{pick(projectsPage, "introTitle")}</h2>
-          <p className="hz-intro-note">{pick(projectsPage, "introNote")}</p>
+      {previewFocus && <style>{`
+        .visual-project-target {outline:2px solid #2867d8!important;outline-offset:7px;scroll-margin-block:100px;}
+        .visual-preview-hidden::before {content:"Κρυφό στην ιστοσελίδα · μόνο προεπισκόπηση";display:block;font:11px/1.5 sans-serif;color:#2867d8;margin-bottom:16px;}
+        .hz-center-copy.visual-preview-focus {display:flex;}
+        @media(max-width:720px){.hz-center-copy.visual-preview-focus {height:auto;min-height:240px;padding:80px 24px;flex-direction:column;}}
+      `}</style>}
+      {projectsPage.showIntro || ['introTitle','introNote'].includes(previewFocus?.field) ? (
+        <section className={`hz-intro ${!projectsPage.showIntro ? "visual-preview-hidden" : ""}`}>
+          <h2 className="vhome-rail-title" data-p58-text="projectsPage.introTitle">{pick(projectsPage, "introTitle") || (previewFocus ? "Τίτλος εισαγωγής" : "")}</h2>
+          <p className="hz-intro-note" data-p58-text="projectsPage.introNote">{pick(projectsPage, "introNote") || (previewFocus ? "Κείμενο εισαγωγής" : "")}</p>
         </section>
       ) : null}
 
-      {pick(projectsPage, "centerText") ? (
-        <section className="hz-center-copy">
-          <p>{pick(projectsPage, "centerText")}</p>
+      {pick(projectsPage, "centerText") || previewFocus?.field === "centerText" ? (
+        <section className={`hz-center-copy ${previewFocus?.field === "centerText" ? "visual-preview-focus" : ""} ${previewFocus?.field === "centerText" && (!pick(projectsPage, "centerText") || isMobile) ? "visual-preview-hidden" : ""}`}>
+          <p data-p58-text="projectsPage.centerText">{pick(projectsPage, "centerText") || "Κεντρικό κείμενο"}</p>
         </section>
       ) : null}
 
@@ -677,7 +853,7 @@ function ProjectsRail({ go, transition }) {
             <span className="vhome-hpic-num">N°{String(idx + 1).padStart(2, "0")}</span>
           </div>
           <div className="vhome-hcap">
-            <div className="vhome-name">{pick(c, "label")}</div>
+            <div className="vhome-name"><CategoryIcon id={c.id} /> {pick(c, "label")}</div>
             <div className="vhome-loc-2">
               {c.count ? `${c.count} ${t("proj_word")}` : t("arch_meta_b")}
             </div>
@@ -688,7 +864,7 @@ function ProjectsRail({ go, transition }) {
       <div className="vhome-endcard hz-end">
         <div className="eyebrow" data-p58-text="rail_end_eyebrow">{t("rail_end_eyebrow")}</div>
         <h3 data-p58-text="rail_end_h">{t("rail_end_h")}</h3>
-        <button onClick={() => go({ name: "start" })}>{t("rail_end_cta")} <span className="ui-arrow-up-right" aria-hidden="true" /></button>
+        <button onClick={() => go({ name: "start" })}><span data-p58-text="rail_end_cta">{t("rail_end_cta")}</span> <span className="ui-arrow-up-right" aria-hidden="true" /></button>
       </div>
 
       {/* ===== closing pane — the site footer (100vw) ===== */}
@@ -782,7 +958,7 @@ function MobileCategoryPicker({ categories, activeId, onPick }) {
         aria-haspopup="listbox"
         aria-expanded={open ? "true" : "false"}
         onClick={() => setOpen((value) => !value)}>
-        <span className="cat-picker-name">{pick(active, "label")}</span>
+        <CategoryIcon id={active.id} /><span className="cat-picker-name">{pick(active, "label")}</span>
         <span className="cat-picker-count">{active.projects.length}</span>
         <span className="cat-picker-chev" aria-hidden="true" />
       </button>
@@ -796,8 +972,8 @@ function MobileCategoryPicker({ categories, activeId, onPick }) {
               aria-selected={category.id === active.id ? "true" : "false"}
               className={`cat-picker-item ${category.id === active.id ? "on" : ""}`}
               onClick={() => { setOpen(false); onPick(category.id); }}>
-              <span className="cat-picker-item-num">N°{String(categoryIndex + 1).padStart(2, "0")}</span>
-              <span className="cat-picker-item-name">{pick(category, "label")}</span>
+              <CategoryIcon id={category.id} />
+              <span className="cat-picker-item-name"><span data-p58-text={window.siteContentKey("category",category.id,"label")}>{pick(category, "label")}</span></span>
               <span className="cat-picker-item-count">{category.projects.length}</span>
             </button>
           ))}
@@ -846,70 +1022,7 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
   const firstCategoryId = categoryGroups.find((category) => category.projects.length)?.id || categoryGroups[0]?.id || null;
   const [activeCategory, setActiveCategory] = useS(normalisedType || firstCategoryId);
   const [activeSubcategory, setActiveSubcategory] = useS(null);
-  const coverGallery = (() => {
-    const visible = publicProjects();
-    const featured = visible.filter((p) => p.featured);
-    const gallery = (featured.length ? featured : visible).slice();
-    const stored = window.readP58Store ? window.readP58Store() : null;
-    const galleryOrder = Array.isArray(stored?.site?.heroGallery?.order) ? stored.site.heroGallery.order : [];
-    if (galleryOrder.length) {
-      const rank = new Map(galleryOrder.map((id, index) => [id, index]));
-      gallery.sort((a, b) => (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER));
-    }
-    return gallery.slice(0, 6);
-  })();
-  const [coverIndex, setCoverIndex] = useS(0);
-  const coverGestureRef = useR({ start: null, ignoreClickUntil: 0 });
-  const activeCoverIndex = coverGallery.length ? coverIndex % coverGallery.length : 0;
-  const coverProject = coverGallery[activeCoverIndex] || filtered[0];
-  const showMobileCover = !normalisedType && !normalisedBrand && coverProject;
-  const coverIntervalMs = (() => {
-    const stored = window.readP58Store ? window.readP58Store() : null;
-    return Math.max(2000, Number(stored?.site?.heroGallery?.interval) || 5200);
-  })();
-
-  useE(() => {
-    if (!showMobileCover || coverGallery.length < 2) return undefined;
-    const timer = setTimeout(() => setCoverIndex((index) => (index + 1) % coverGallery.length), coverIntervalMs);
-    return () => clearTimeout(timer);
-  }, [activeCoverIndex, coverGallery.length, coverIntervalMs, !!showMobileCover]);
-
-  useE(() => {
-    const className = "mobile-projects-cover-active";
-    if (!showMobileCover) {
-      document.body.classList.remove(className);
-      return undefined;
-    }
-
-    let frame = 0;
-    const update = () => {
-      frame = 0;
-      const onPhone = window.matchMedia("(max-width: 720px)").matches;
-      const list = document.querySelector(".projects-sheet");
-      const nav = document.querySelector(".nav");
-      const navHeight = nav ? nav.getBoundingClientRect().height : 0;
-      const coverIsActive = onPhone && list && list.getBoundingClientRect().top > navHeight + 1;
-      document.body.classList.toggle(className, !!coverIsActive);
-      const theme = document.querySelector('meta[name="theme-color"]');
-      if (theme) theme.setAttribute("content", coverIsActive ? "#14130f" : "#f7f5f0");
-    };
-    const scheduleUpdate = () => {
-      if (!frame) frame = requestAnimationFrame(update);
-    };
-
-    update();
-    window.addEventListener("scroll", scheduleUpdate, { passive: true });
-    window.addEventListener("resize", scheduleUpdate);
-    return () => {
-      if (frame) cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", scheduleUpdate);
-      window.removeEventListener("resize", scheduleUpdate);
-      document.body.classList.remove(className);
-      const theme = document.querySelector('meta[name="theme-color"]');
-      if (theme) theme.setAttribute("content", "#f7f5f0");
-    };
-  }, [!!showMobileCover]);
-
+  const [collapsedCategories, setCollapsedCategories] = useS({});
   useE(() => {
     const className = "projects-contact-active";
     const headerClassName = "projects-contact-header-active";
@@ -939,7 +1052,7 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
     }, { rootMargin: "-22% 0px -62% 0px", threshold: [0, 0.01, 0.2] });
     sections.forEach((section) => observer.observe(section));
     return () => observer.disconnect();
-  }, [categoryGroups.map((category) => `${category.id}:${category.projects.length}`).join("|")]);
+  }, [normalisedType, categoryGroups.map((category) => `${category.id}:${category.projects.length}`).join("|")]);
 
   useE(() => {
     const sections = Array.from(document.querySelectorAll(".projects-subcategory-section[data-subcategory-key]"));
@@ -954,10 +1067,11 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
     }, { rootMargin: "-26% 0px -58% 0px", threshold: [0, 0.01, 0.2] });
     sections.forEach((section) => observer.observe(section));
     return () => observer.disconnect();
-  }, [categoryGroups.map((category) => `${category.id}:${category.subcategories.length}`).join("|")]);
+  }, [normalisedType, categoryGroups.map((category) => `${category.id}:${category.subcategories.length}`).join("|")]);
 
   useE(() => {
     if (!normalisedType || normalisedBrand) return undefined;
+    setCollapsedCategories(current => ({ ...current, [normalisedType]: false }));
     const timer = window.setTimeout(() => {
       const section = document.getElementById(`projects-category-${normalisedType}`);
       if (section) section.scrollIntoView({ block: "start", behavior: "instant" });
@@ -979,6 +1093,7 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
   }, [normalisedBrand]);
 
   const jumpToCategory = (categoryId) => {
+    setCollapsedCategories(current => ({ ...current, [categoryId]: false }));
     const section = document.getElementById(`projects-category-${categoryId}`);
     if (!section) return;
     setActiveCategory(categoryId);
@@ -1003,83 +1118,8 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
     ...(sort ? { sort } : {}),
     ...(view === "all" ? { view: "all" } : {}),
   };
-  const openCoverProject = () => {
-    if (!coverProject) return;
-    go({ name: "project", id: coverProject.slug || coverProject.id, from: sheetRoute });
-  };
-  const handleCoverTouchStart = (event) => {
-    const touch = event.touches[0];
-    coverGestureRef.current.start = touch ? { x: touch.clientX, y: touch.clientY } : null;
-  };
-  const handleCoverTouchEnd = (event) => {
-    const start = coverGestureRef.current.start;
-    const touch = event.changedTouches[0];
-    coverGestureRef.current.start = null;
-    if (!start || !touch || coverGallery.length < 2) return;
-
-    const deltaX = touch.clientX - start.x;
-    const deltaY = touch.clientY - start.y;
-    if (Math.abs(deltaX) < 42 || Math.abs(deltaX) <= Math.abs(deltaY) * 1.15) return;
-
-    coverGestureRef.current.ignoreClickUntil = Date.now() + 450;
-    setCoverIndex((index) => {
-      const direction = deltaX < 0 ? 1 : -1;
-      return (index + direction + coverGallery.length) % coverGallery.length;
-    });
-  };
-
   return (
-    <div className={`page-enter ${transition === "category-open" ? "category-page-enter" : ""}`} key={`${normalisedType || "all"}:${normalisedBrand || "all"}:${order}`}>
-      {showMobileCover ? (
-        <section
-          className="mobile-projects-cover"
-          aria-label={pick(coverProject, "name")}
-          role="link"
-          tabIndex="0"
-          onClick={() => {
-            if (Date.now() < coverGestureRef.current.ignoreClickUntil) return;
-            openCoverProject();
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              openCoverProject();
-            }
-          }}
-          onTouchStart={handleCoverTouchStart}
-          onTouchEnd={handleCoverTouchEnd}
-          onTouchCancel={() => { coverGestureRef.current.start = null; }}>
-          <div className="mobile-projects-cover-slides">
-            {coverGallery.map((project, index) => (
-              <div key={project.id} className={`mobile-projects-cover-slide ${index === activeCoverIndex ? "on" : ""}`}>
-                <SiteMedia src={project.hero} alt={pick(project, "name")} className="mobile-projects-cover-media" />
-              </div>
-            ))}
-          </div>
-          <div className="mobile-projects-cover-veil" aria-hidden="true" />
-          <div className="mobile-projects-cover-loc">{pick(coverProject, "location")}</div>
-          <div className="mobile-projects-cover-cue" aria-hidden="true">
-            <span data-p58-text="scroll">{t("scroll")}</span>
-            <svg viewBox="0 0 16 26" width="16" height="26" fill="none">
-              <path d="M8 1v22M3 18l5 5 5-5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
-          </div>
-          <div className="mobile-projects-cover-dots">
-            {coverGallery.map((project, index) => (
-              <button
-                key={project.id}
-                type="button"
-                className={`mobile-projects-cover-dot ${index === activeCoverIndex ? "on" : ""}`}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setCoverIndex(index);
-                }}
-                aria-label={`${t("project")} ${index + 1}`} />
-            ))}
-          </div>
-        </section>
-      ) : null}
+    <div className={`projects-page page-enter ${transition === "category-open" ? "category-page-enter" : ""}`} key={`${normalisedType || "all"}:${normalisedBrand || "all"}:${order}`}>
       <div className="projects-sheet">
         <div className="mobile-projects-sheet-head">
           <MobileCategoryPicker
@@ -1090,76 +1130,33 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
         </div>
         <div className="projects-category-browser">
           <div className="projects-category-column">
-            {categoryGroups.map((category, categoryIndex) => (
+            {categoryGroups.map((category) => (
               <section
                 key={category.id}
                 id={`projects-category-${category.id}`}
                 data-category-id={category.id}
-                className="projects-category-section">
+                className={`projects-category-section ${collapsedCategories[category.id] ? "is-collapsed" : ""}`}>
                 <header className="projects-category-heading">
-                  <span>N°{String(categoryIndex + 1).padStart(2, "0")}</span>
-                  <h2>{pick(category, "label")}</h2>
-                  <span>{category.projects.length} {t("proj_word")}</span>
+                  <SiteMedia className="projects-category-cover" src={category.cover || category.projects.find(project => project.hero)?.hero} alt="" lazy />
+                  <CategoryIcon id={category.id} />
+                  <h2><button
+                    className="projects-category-toggle"
+                    type="button"
+                    aria-expanded={!collapsedCategories[category.id]}
+                    aria-controls={`projects-category-content-${category.id}`}
+                    onClick={() => setCollapsedCategories(current => ({ ...current, [category.id]: !current[category.id] }))}>
+                    <span data-p58-text={window.siteContentKey("category",category.id,"label")}>{pick(category, "label")}</span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+                  </button></h2>
+                  <span>{category.projects.length} <span data-p58-text={"proj_word"}>{t("proj_word")}</span></span>
                 </header>
-                {category.subcategories.length ? (
-                  <div className="projects-subcategory-list">
-                    {category.subcategories.map((subcategory) => {
-                      const subcategoryKey = `${category.id}:${subcategory.id}`;
-                      return (
-                        <section
-                          key={subcategory.id}
-                          id={`projects-subcategory-${category.id}-${subcategory.id}`}
-                          data-category-id={category.id}
-                          data-subcategory-key={subcategoryKey}
-                          className="projects-subcategory-section">
-                          <header className="projects-subcategory-heading">
-                            {subcategory.icon ? <img src={subcategory.icon} alt="" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
-                            <div>
-                              <span>{pick(category, "subLabel")}</span>
-                              <h3>{subcategory.label}</h3>
-                            </div>
-                            <b>{subcategory.projects.length}</b>
-                          </header>
-                          <div className="proj-list">
-                            {subcategory.projects.map((project, projectIndex) => (
-                              <ProjListRow
-                                key={project.id}
-                                project={project}
-                                go={go}
-                                idx={projectIndex + 1}
-                                from={keepSort({ name: "projects", type: category.id })} />
-                            ))}
-                            {subcategory.projects.length === 0 ? <div className="proj-list-empty" data-p58-text="no_projects_category">{t("no_projects_category")}</div> : null}
-                          </div>
-                        </section>
-                      );
-                    })}
-                    {category.uncategorisedProjects.length ? (
-                      <div className="proj-list projects-subcategory-unassigned">
-                        {category.uncategorisedProjects.map((project, projectIndex) => (
-                          <ProjListRow
-                            key={project.id}
-                            project={project}
-                            go={go}
-                            idx={projectIndex + 1}
-                            from={keepSort({ name: "projects", type: category.id })} />
-                        ))}
-                      </div>
-                    ) : null}
+                <div className="projects-category-reveal" id={`projects-category-content-${category.id}`} aria-hidden={!!collapsedCategories[category.id]} inert={collapsedCategories[category.id] ? "" : undefined}>
+                  <div className="projects-category-reveal-inner">
+                    <div className="projects-category-content">
+                      <CategoryProjectPreview category={category} go={go} from={keepSort({ name: "projects", type: category.id })} />
+                    </div>
                   </div>
-                ) : (
-                  <div className="proj-list">
-                    {category.projects.map((project, projectIndex) => (
-                      <ProjListRow
-                        key={project.id}
-                        project={project}
-                        go={go}
-                        idx={projectIndex + 1}
-                        from={keepSort({ name: "projects", type: category.id })} />
-                    ))}
-                    {category.projects.length === 0 ? <div className="proj-list-empty" data-p58-text="no_projects_category">{t("no_projects_category")}</div> : null}
-                  </div>
-                )}
+                </div>
               </section>
             ))}
           </div>
@@ -1174,8 +1171,8 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
                   type="button"
                   className={`projects-category-jump-main ${activeCategory === category.id ? "on" : ""}`}
                   onClick={() => jumpToCategory(category.id)}>
-                  <span>{String(index + 1).padStart(2, "0")}</span>
-                  <b>{pick(category, "label")}</b>
+                  <CategoryIcon id={category.id} />
+                  <b><span data-p58-text={window.siteContentKey("category",category.id,"label")}>{pick(category, "label")}</span></b>
                 </button>
                 {category.subcategories.length ? (
                   <div className="projects-category-jump-subs">
@@ -1186,9 +1183,9 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
                           key={subcategory.id}
                           type="button"
                           className={activeSubcategory === subcategoryKey ? "on" : ""}
-                          onClick={() => jumpToSubcategory(category.id, subcategory.id)}>
+                          onClick={() => { const collection = projectCollectionEntries(category.projects, category).find(entry => entry.kind === "brand" && entry.label === subcategory.label); if (collection) go({ name: "brand", id: collection.id }); else jumpToCategory(category.id); }}>
                           <i />
-                          <b>{subcategory.label}</b>
+                          <b data-p58-text={window.siteContentKey("brand",subcategory.id,"label")}>{pick(subcategory,"label")}</b>
                           <span>{subcategory.projects.length}</span>
                         </button>
                       );
@@ -1226,16 +1223,18 @@ function ProjListRow({ project, go, idx, from }) {
   const locParts = rawLoc.split(/\s*·\s*/);
   const locFormatted = [t("country_greece"), ...locParts].join(", ").toUpperCase();
   const rawStatus = project.status || "";
-  const statusLabel = t(rawStatus) !== rawStatus ? t(rawStatus) : rawStatus;
+  const statusLabel = pick(project,"status") !== rawStatus ? pick(project,"status") : (t(rawStatus) !== rawStatus ? t(rawStatus) : rawStatus);
   return (
     <div
       className="proj-list-row"
+      role="link" tabIndex={0}
+      onKeyDown={event => { if (event.key === "Enter") go({ name: "project", id: project.slug || project.id, ...(from ? { from } : {}) }); }}
       onClick={() => go({ name: "project", id: project.slug || project.id, ...(from ? { from } : {}) })}>
       <div className="proj-list-info">
-        {visibleIconSrc
+        {project.icon !== null && (visibleIconSrc
           ? <img className="proj-list-icon proj-list-icon--img" src={visibleIconSrc} alt={project.brand} onError={() => { if (visibleIconSrc === iconSrc) setIconFailed(true); }} />
           : <div className={`proj-list-icon proj-list-icon--${bk}`}>{monogram}</div>
-        }
+        )}
         <div className="proj-list-text">
           <div className="proj-list-brand-name">{project.brand}</div>
           <div className="proj-list-loc">{locFormatted}</div>
@@ -1342,11 +1341,11 @@ function ProjectPage({ id, go, from, transitionDirection }) {
   // Status, size and brand carry one value each — the Greek comes from the
   // dictionary, not from a parallel _gr field on the project.
   const rawStatus = p.status || "";
-  const statusLabel = t(rawStatus) !== rawStatus ? t(rawStatus) : rawStatus;
+  const statusLabel = pick(p,"status") !== rawStatus ? pick(p,"status") : (t(rawStatus) !== rawStatus ? t(rawStatus) : rawStatus);
   const projectMeta = [
     ["location", pick(p, "location")],
     ["status", statusLabel],
-    ["size", p.size],
+    ["size", pick(p,"size")],
     ["pd_type", pick(p, "type")],
     ["pd_lead_architect", pick(p, "lead_architect")],
     ["pd_design_team", pick(p, "design_team")],
@@ -1378,20 +1377,20 @@ function ProjectPage({ id, go, from, transitionDirection }) {
 
       {/* Info + gallery in a centered container */}
       <div className="pd-page">
-        <h1 className="pd-page-title-outside">{pick(p, "name")}</h1>
+        <h1 className="pd-page-title-outside"><span data-p58-text={window.siteContentKey("project",p.id,"name")}>{pick(p, "name")}</span></h1>
         <h2 className="pd-section-title" data-p58-text="pd_details">{t("pd_details")}</h2>
         <dl className="pd-meta-grid">
           {projectMeta.map(([label, value]) => (
             <div className="pd-meta-card" key={label}>
-              <dt>{t(label)}</dt>
-              <dd>{value || "—"}</dd>
+              <dt><span data-p58-text={label}>{t(label)}</span></dt>
+              <dd data-p58-text={window.siteContentKey("project",p.id,label.replace(/^pd_/,""))}>{value || "—"}</dd>
             </div>
           ))}
         </dl>
         {pick(p, "summary") ? (
           <section className="pd-description">
             <h2 className="pd-section-title" data-p58-text="pd_description">{t("pd_description")}</h2>
-            <p className="pd-split-summary">{pick(p, "summary")}</p>
+            <p className="pd-split-summary"><span data-p58-text={window.siteContentKey("project",p.id,"summary")}>{pick(p, "summary")}</span></p>
           </section>
         ) : null}
       </div>
@@ -1400,7 +1399,7 @@ function ProjectPage({ id, go, from, transitionDirection }) {
       {p.gallery.map((g, i) =>
       <div key={i} className="pd-page-gallery-row">
           <SiteMedia src={g.src} alt={pick(g, "tag")} lazy />
-          {pick(g, "tag") ? <span className="pd-page-tag">{t(pick(g, "tag"))}</span> : null}
+          {pick(g, "tag") ? <span className="pd-page-tag"><span data-p58-text={window.siteContentKey("gallery",`${p.id}/${i}`,"tag")}>{pick(g, "tag")}</span></span> : null}
         </div>
       )}
 
@@ -1450,7 +1449,7 @@ function AgencyPage() {
   }, [selectedPerson]);
   return (
     <div className="people-mosaic-page page-enter">
-      <h1 className="people-mosaic-title">{pick(peopleSettings, "title")}</h1>
+      <h1 className="people-mosaic-title" data-p58-text={window.siteContentKey("people","page","title")}>{pick(peopleSettings, "title")}</h1>
       <div className="people-mosaic-grid">
         {people.map((person, index) => {
           const initials = String(person.name || "")
@@ -1473,8 +1472,8 @@ function AgencyPage() {
                 {image ? <img src={image} alt={person.name} /> : <span className="people-mosaic-initials">{initials}</span>}
               </div>
               <div className="people-mosaic-caption">
-                <p>{pick(person, "role")}</p>
-                <h2>{person.name}</h2>
+                <p><span data-p58-text={window.siteContentKey("team",person._id || TEAM.indexOf(person),"role")}>{pick(person, "role")}</span></p>
+                <h2 data-p58-text={window.siteContentKey("team",person._id || TEAM.indexOf(person),"name")}>{pick(person,"name")}</h2>
               </div>
             </article>
           );
@@ -1497,9 +1496,9 @@ function AgencyPage() {
               {(selectedPerson.portrait || peopleSettings.hero) ? <img src={selectedPerson.portrait || peopleSettings.hero} alt="" /> : null}
             </div>
             <div className="people-profile-modal-copy">
-              <h2 id="people-profile-name">{selectedPerson.name}</h2>
-              <p>{pick(selectedPerson, "role")}</p>
-              <div>{pick(selectedPerson, "note") || "—"}</div>
+              <h2 id="people-profile-name" data-p58-text={window.siteContentKey("team",selectedPerson._id || TEAM.indexOf(selectedPerson),"name")}>{pick(selectedPerson,"name")}</h2>
+              <p><span data-p58-text={window.siteContentKey("team",selectedPerson._id || TEAM.indexOf(selectedPerson),"role")}>{pick(selectedPerson, "role")}</span></p>
+              <div data-p58-text={window.siteContentKey("team",selectedPerson._id || TEAM.indexOf(selectedPerson),"note")}>{pick(selectedPerson, "note") || "—"}</div>
             </div>
           </div>
         </div>,
@@ -1518,14 +1517,14 @@ function LegacyAgencyPage({ go }) {
     <div className="page-enter">
       <section className="studio-hero" style={{ padding: "80px var(--gutter) 32px" }}>
         <div className="eyebrow" data-p58-text="agency_eyebrow">{t("agency_eyebrow")}</div>
-        <h1>{t("agency_h_a")} <em data-p58-text="agency_h_em">{t("agency_h_em")}</em> {t("agency_h_b")}</h1>
+        <h1><span data-p58-text={"agency_h_a"}>{t("agency_h_a")}</span> <em data-p58-text="agency_h_em">{t("agency_h_em")}</em> <span data-p58-text={"agency_h_b"}>{t("agency_h_b")}</span></h1>
       </section>
 
       <section className="bleed">
         <div className="studio-cols">
           <div className="col">
             <p>
-              {t("agency_p1")} <em data-p58-text="agency_p1_em">{t("agency_p1_em")}</em>{t("agency_p1_b")} <em data-p58-text="agency_p1_em2">{t("agency_p1_em2")}</em>{t("agency_p1_c")}
+              <span data-p58-text={"agency_p1"}>{t("agency_p1")}</span> <em data-p58-text="agency_p1_em">{t("agency_p1_em")}</em><span data-p58-text={"agency_p1_b"}>{t("agency_p1_b")}</span> <em data-p58-text="agency_p1_em2">{t("agency_p1_em2")}</em><span data-p58-text={"agency_p1_c"}>{t("agency_p1_c")}</span>
             </p>
           </div>
           <div className="col">
@@ -1545,7 +1544,7 @@ function LegacyAgencyPage({ go }) {
       <section className="bleed">
         <div className="hero-meta-row" style={{ borderBottom: 0, marginTop: 24 }}>
           <div><span data-p58-text="team_eyebrow">{t("team_eyebrow")}</span><span className="v" data-p58-text="team_h">{t("team_h")}</span></div>
-          <div><span data-p58-text="headcount">{t("headcount")}</span><span className="v">{TEAM.length} {t("headcount_unit")}</span></div>
+          <div><span data-p58-text="headcount">{t("headcount")}</span><span className="v">{TEAM.length} <span data-p58-text={"headcount_unit"}>{t("headcount_unit")}</span></span></div>
           <div><span data-p58-text="studios">{t("studios")}</span><span className="v" data-p58-text="studio_location">{t("studio_location")}</span></div>
           <div style={{ justifyContent: "flex-end" }}><span className="muted mono" style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.14em" }} data-p58-text="updated_label">{t("updated_label")}</span></div>
         </div>
@@ -1568,7 +1567,7 @@ function LegacyAgencyPage({ go }) {
       <section className="bleed timeline">
         <div className="eyebrow" data-p58-text="practice_eyebrow">{t("practice_eyebrow")}</div>
         <h2 style={{ fontFamily: "var(--sans)", fontWeight: 500, fontSize: "clamp(40px, 5vw, 76px)", letterSpacing: "-0.04em", margin: "12px 0 32px" }}>
-          {t("short_history")}
+          <span data-p58-text={"short_history"}>{t("short_history")}</span>
         </h2>
         {TIMELINE.map((r, i) =>
         <div className="timeline-row" key={i}>
@@ -1583,7 +1582,7 @@ function LegacyAgencyPage({ go }) {
       <section className="bleed agency-news-head" style={{ padding: "60px var(--gutter) 24px", borderTop: "1px solid var(--rule-strong)", marginTop: 40 }}>
         <div className="eyebrow" data-p58-text="news_eyebrow">{t("news_eyebrow")}</div>
         <h2 style={{ fontFamily: "var(--sans)", fontWeight: 500, fontSize: "clamp(40px, 5vw, 76px)", letterSpacing: "-0.04em", margin: "12px 0 32px" }}>
-          {t("recently")}
+          <span data-p58-text={"recently"}>{t("recently")}</span>
         </h2>
       </section>
       <section className="bleed" style={{ padding: "0 var(--gutter) 80px" }}>
@@ -1606,7 +1605,7 @@ function LegacyAgencyPage({ go }) {
           <div>
             <div className="eyebrow" data-p58-text="work_with_us">{t("work_with_us")}</div>
             <h3 style={{ fontFamily: "var(--sans)", fontWeight: 500, fontSize: "clamp(36px, 4.5vw, 64px)", letterSpacing: "-0.04em", margin: "12px 0 0", lineHeight: 1.05 }}>
-              {t("agency_cta")} <em style={{ color: "var(--clay)" }} data-p58-text="cta_2026">{t("cta_2026")}</em> {t("agency_cta_tail")}
+              <span data-p58-text={"agency_cta"}>{t("agency_cta")}</span> <em style={{ color: "var(--clay)" }} data-p58-text="cta_2026">{t("cta_2026")}</em> <span data-p58-text={"agency_cta_tail"}>{t("agency_cta_tail")}</span>
             </h3>
           </div>
           <div style={{ textAlign: "right" }}>
@@ -1638,13 +1637,13 @@ function AgencyFooter() {
       <div className={`agency-foot-contact ${contactOpen ? "open" : ""}`}>
         <div className="agency-foot-contact-inner">
           <div className="agency-foot-contact-col">
-            <div className="agency-foot-contact-label">{contactCopy("location_label")}</div>
-            <div className="agency-foot-contact-item">{contactCopy("address")}</div>
+            <div className="agency-foot-contact-label"><span data-p58-text={window.siteContentKey("contact","footer","location_label")}>{contactCopy("location_label")}</span></div>
+            <div className="agency-foot-contact-item"><span data-p58-text={window.siteContentKey("contact","footer","address")}>{contactCopy("address")}</span></div>
             <a className="agency-foot-contact-item" href={contact.phone_url}>{contact.phone}</a>
             <a className="agency-foot-contact-item" href={contact.email_url}>{contact.email}</a>
             {contact.instagram_url
-              ? <a className="agency-foot-contact-item" href={contact.instagram_url} target="_blank" rel="noopener noreferrer">{contactCopy("instagram_text")}</a>
-              : <span className="agency-foot-contact-item">{contactCopy("instagram_text")}</span>
+              ? <a className="agency-foot-contact-item" href={contact.instagram_url} target="_blank" rel="noopener noreferrer"><span data-p58-text={window.siteContentKey("contact","footer","instagram_text")}>{contactCopy("instagram_text")}</span></a>
+              : <span className="agency-foot-contact-item"><span data-p58-text={window.siteContentKey("contact","footer","instagram_text")}>{contactCopy("instagram_text")}</span></span>
             }
           </div>
         </div>
@@ -1662,7 +1661,7 @@ function AgencyFooter() {
           <button
             className="agency-foot-btn"
             onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
-            {t("back_to_top")} ↑
+            <span data-p58-text={"back_to_top"}>{t("back_to_top")}</span> ↑
           </button>
         </div>
       </div>
@@ -1670,4 +1669,4 @@ function AgencyFooter() {
   );
 }
 
-Object.assign(window, { HomePage, AllProjectsGrid, Tile, ProjectsPage, InteriorsPage, ArchitecturePage, AgencyPage, AgencyFooter, ProjectPage });
+Object.assign(window, { SiteMedia, ProjListRow, HomePage, AllProjectsGrid, Tile, ProjectsPage, InteriorsPage, ArchitecturePage, AgencyPage, AgencyFooter, ProjectPage });

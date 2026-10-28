@@ -1,30 +1,4 @@
-/* ============================================================
-   Project58 — media library helpers (Vercel Node function runtime)
-   ------------------------------------------------------------
-   Files prefixed with "_" are not exposed as routes by Vercel,
-   so this module stays internal to /api.
-
-   Images are stored in Vercel Blob. A single index.json sitting
-   next to them records what each image is and which project it
-   belongs to. Keeping the assignment in the index — rather than
-   in the pathname — means an image URL never changes when it is
-   moved between a project and the backlog, so URLs already saved
-   inside project content can't break.
-
-     media/index.json   the library
-     media/files/…      the images themselves
-
-   Credentials arrive automatically once a Blob store is linked,
-   in one of two shapes depending on how it was connected:
-
-     BLOB_STORE_ID + VERCEL_OIDC_TOKEN   the current default
-     BLOB_READ_WRITE_TOKEN               a static token
-
-   The SDK picks whichever is present, preferring OIDC. Without
-   either we fail closed — same principle as the auth code.
-   ============================================================ */
-
-import { put, head } from "@vercel/blob";
+import { db } from "./_firebase.js";
 import { COOKIE_NAME, verifyToken, readCookie, json } from "./_auth.js";
 
 export const INDEX_PATH = "media/index.json";
@@ -42,24 +16,8 @@ const ALLOWED_TYPES = [
   "video/mp4",
 ];
 
-function isSet(name) {
-  const value = process.env[name];
-  return typeof value === "string" && value.length > 0;
-}
-
-/* BLOB_STORE_ID is set at build time when the store is linked; the
-   matching VERCEL_OIDC_TOKEN is injected into the function at run
-   time, so only the store id is worth checking here. */
-export function isBlobConfigured() {
-  return isSet("BLOB_READ_WRITE_TOKEN") || isSet("BLOB_STORE_ID");
-}
-
 export function notConfigured(res) {
-  return json(res, 503, {
-    error: "blob_not_configured",
-    message:
-      "No Blob store is linked to this deployment. Create one in Vercel (Storage → Create → Blob, Public) and redeploy.",
-  });
+  return json(res, 503, { error: "firebase_not_configured", message: "Firebase is not configured on the server. Set its server environment variables and redeploy." });
 }
 
 /* Any signed-in user may manage media. This is ordinary content
@@ -77,42 +35,9 @@ export function requireSession(req, res) {
 
 /* ---------- the index ---------- */
 
-async function indexUrl() {
-  try {
-    const meta = await head(INDEX_PATH);
-    return meta && meta.url ? meta.url : null;
-  } catch {
-    return null; // nothing uploaded yet — an empty library, not an error
-  }
-}
-
 export async function readIndex() {
-  const url = await indexUrl();
-  if (!url) return [];
-
-  // Public blobs are served through the CDN and a write can take up to a
-  // minute to propagate. The cache-buster keeps reads consistent with the
-  // write we just made.
-  const res = await fetch(url + "?t=" + Date.now(), { cache: "no-store" });
-  if (!res.ok) return [];
-
-  try {
-    const body = await res.json();
-    return Array.isArray(body && body.items) ? body.items : [];
-  } catch {
-    return [];
-  }
-}
-
-export async function writeIndex(items) {
-  await put(INDEX_PATH, JSON.stringify({ items, updatedAt: new Date().toISOString() }, null, 2), {
-    access: "public",
-    contentType: "application/json",
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    cacheControlMaxAge: 0,
-  });
-  return items;
+  const snapshot = await db().collection('media').orderBy('uploadedAt', 'desc').get();
+  return snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
 }
 
 /* ---------- uploads ---------- */
@@ -162,8 +87,9 @@ export function decodeDataUrl(dataUrl) {
    Not reusing readBody() from _auth.js: that one truncates at 10kB,
    which is right for a login form and fatal for an image upload. */
 export function readJsonBody(req, maxBytes = 6 * 1024 * 1024) {
-  if (req.body && typeof req.body === "object") return Promise.resolve(req.body);
+  if (req.body && typeof req.body === "object") return Promise.resolve(Buffer.byteLength(JSON.stringify(req.body)) <= maxBytes ? req.body : null);
   if (typeof req.body === "string") {
+    if (Buffer.byteLength(req.body) > maxBytes) return Promise.resolve(null);
     try {
       return Promise.resolve(JSON.parse(req.body));
     } catch {
