@@ -2669,9 +2669,9 @@ body.interiors-page .brand-head {
 .pd-page-gallery-row img,
 .pd-page-gallery-row video {
   width: 100%;
+  height: auto;
   display: block;
-  object-fit: cover;
-  max-height: 72vh;
+  object-fit: contain;
 }
 
 /* image caption */
