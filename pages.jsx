@@ -440,7 +440,7 @@ function HomePage({ go }) {
 
       <section className="home-selected" ref={selectedSectionRef} aria-label={t("home_selected_title")}>
         <div className="home-selected-grid">
-          {featured.slice(0, 4).map((project) => (
+          {window.homeSelectedProjects(publicProjects(), window.readP58Store()?.site).map((project) => (
             <button key={project.id} className="home-selected-card" onClick={() => go({ name: "project", id: project.slug || project.id, from: { name: "home" } })}>
               <div className="home-selected-photo"><SiteMedia src={project.hero} alt="" lazy /></div>
               <div className="home-selected-caption">

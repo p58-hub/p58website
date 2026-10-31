@@ -930,6 +930,23 @@ function isProjectVisible(project) {
   return Boolean(project) && project.visible !== false;
 }
 
+// The four cards below the hero are independent of the rotating hero gallery.
+const HOME_SELECTED_MAX = 4;
+function homeSelectedProjects(projects, site = {}) {
+  const visible = projects.filter(isProjectVisible);
+  const saved = site?.homeSelected?.order;
+  if (Array.isArray(saved)) {
+    const byId = new Map(visible.map(project => [project.id, project]));
+    return [...new Set(saved)].map(id => byId.get(id)).filter(Boolean).slice(0, HOME_SELECTED_MAX);
+  }
+  // Preserve the existing four cards until the dashboard saves an explicit selection.
+  const featured = visible.filter(project => project.featured);
+  const rank = new Map((site?.heroGallery?.order || []).map((id, index) => [id, index]));
+  return (featured.length ? featured : visible).slice()
+    .sort((a, b) => (rank.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (rank.get(b.id) ?? Number.MAX_SAFE_INTEGER))
+    .slice(0, HOME_SELECTED_MAX);
+}
+
 function visibleProjects() {
   return PROJECTS.filter(isProjectVisible);
 }
@@ -1471,7 +1488,7 @@ const normaliseCategorySubs = (subs) => (Array.isArray(subs) ? subs : [])
   .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
 
 function normaliseCategories(items) {
-  const source = Array.isArray(items) && items.length ? items : DEFAULT_CATEGORIES;
+  const source = Array.isArray(items) ? items : DEFAULT_CATEGORIES;
   const defaultsById = Object.fromEntries(DEFAULT_CATEGORIES.map((category) => [category.id, category]));
   return source
     .map((c, order) => {
@@ -1587,4 +1604,4 @@ const PROJECT_SORTS = {
 applyP58ContentFromStore();
 const P58_CONTENT_READY = loadRemoteContent();
 
-Object.assign(window, { normaliseBrandSections, brandStoryIntro, brandStoryImages, brandStorySections, brandConceptCopy, normaliseBrandInstagram, normaliseBrandPresentation, P58_STORE_KEY, P58_CONTENT_READY, loadRemoteContent, DEFAULT_SITE_SETTINGS, DEFAULT_HOME_V2_BANNERS, DEFAULT_INQUIRY_FORM, INQUIRY_FORM_GROUPS, normaliseHomeV2, normaliseInquiryForm, normaliseSiteSettings, applySiteFavicon, projectSlugFromFields, applyP58ContentFromStore, readP58Store, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor, isProjectVisible, visibleProjects, isVideoSrc, DEFAULT_CATEGORIES, normaliseCategories, siteCategories, siteCategory, siteSubcategories, siteSubcategory, projectCategoryId });
+Object.assign(window, { HOME_SELECTED_MAX, homeSelectedProjects, normaliseBrandSections, brandStoryIntro, brandStoryImages, brandStorySections, brandConceptCopy, normaliseBrandInstagram, normaliseBrandPresentation, P58_STORE_KEY, P58_CONTENT_READY, loadRemoteContent, DEFAULT_SITE_SETTINGS, DEFAULT_HOME_V2_BANNERS, DEFAULT_INQUIRY_FORM, INQUIRY_FORM_GROUPS, normaliseHomeV2, normaliseInquiryForm, normaliseSiteSettings, applySiteFavicon, projectSlugFromFields, applyP58ContentFromStore, readP58Store, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor, isProjectVisible, visibleProjects, isVideoSrc, DEFAULT_CATEGORIES, normaliseCategories, siteCategories, siteCategory, siteSubcategories, siteSubcategory, projectCategoryId });

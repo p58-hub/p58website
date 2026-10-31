@@ -199,19 +199,26 @@ test('applying the presentation transfers both intro edits and sections into the
 });
 
 
-test('mobile map card stays near its pin and inside the visible area above the dock', () => {
-  const card = {width:340,height:132}, bounds = {left:12,right:501,top:120,bottom:836};
-  const centered = context.brandMapCardPosition({x:256,y:500},card,bounds);
-  assert.equal(centered.left,86);
-  assert.equal(centered.top,340);
-  const nearTop = context.brandMapCardPosition({x:30,y:140},card,bounds);
-  assert.equal(nearTop.top,168);
-  assert.equal(nearTop.left,12);
-  for (const point of [{x:490,y:900},{x:-20,y:-100},{x:250,y:300}]) {
-    const result = context.brandMapCardPosition(point,card,bounds);
+test('mobile map card stays centered at the bottom of the visible map above the dock', () => {
+  for (const [viewportWidth, bottom] of [[529, 836], [390, 748], [320, 472]]) {
+    const card = {width: Math.min(340, viewportWidth - 24), height:132};
+    const bounds = {left:12, right:viewportWidth - 12, top:120, bottom};
+    const result = context.brandMapCardPosition(card, bounds);
+    assert.equal(result.left + card.width / 2, viewportWidth / 2);
+    assert.equal(result.top + card.height, bottom);
+    assert.ok(result.top >= bounds.top);
     assert.ok(result.left >= bounds.left);
     assert.ok(result.left + card.width <= bounds.right);
-    assert.ok(result.top >= bounds.top);
-    assert.ok(result.top + card.height <= bounds.bottom);
   }
+});
+
+test('mobile card follows the visible lower edge on scroll and stays inside short map space', () => {
+  const card = {width:340,height:132};
+  const bounds = {left:12,right:517,top:120,bottom:836};
+  const before = context.brandMapCardPosition(card, bounds);
+  const after = context.brandMapCardPosition(card, {...bounds, bottom:936});
+  assert.equal(after.top - before.top, 100);
+  assert.equal(after.left, before.left);
+  const short = context.brandMapCardPosition({width:340,height:80}, {...bounds,bottom:200});
+  assert.equal(short.top, 120);
 });

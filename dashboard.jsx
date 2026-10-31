@@ -47,7 +47,7 @@ const normaliseSubcategories = (subs) => (Array.isArray(subs) ? subs : [])
   .filter((s) => s.label)
   .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
 const normaliseCategories = (items) => {
-  const source = Array.isArray(items) && items.length ? items : DEFAULT_CATEGORIES;
+  const source = Array.isArray(items) ? items : DEFAULT_CATEGORIES;
   return source
     .map((c, order) => ({
       id: c.id || slugifyId(c.label) || newId("cat"),
@@ -204,6 +204,7 @@ function DashboardIcon({ name, size = 20, active = false }) {
     settings: <><path d="M4 6h6m4 0h6M4 12h2m4 0h10M4 18h10m4 0h2"/><circle cx="12" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="16" cy="18" r="2"/></>,
     plus: <path d="M12 4v16M4 12h16"/>,
     trash: <><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"/></>,
+    crop: <path d="M6 3v15h15M3 6h15v15"/>,
     upload: <><path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6"/></>,
     download: <><path d="M12 3v13m-5-5 5 5 5-5M4 15v6h16v-6"/></>,
     external: <><path d="M9 4H4v16h16v-5M14 4h6v6M20 4 10 14"/></>,
@@ -646,8 +647,11 @@ function App({ session }) {
     // Nothing published yet: everything is pending, by definition.
     if (!publishedSnapshot) return projects.map((p) => p.id);
     const live = new Map((publishedSnapshot.projects || []).map((p) => [p.id, JSON.stringify(p)]));
-    return projects.filter((p) => live.get(p.id) !== JSON.stringify(p)).map((p) => p.id);
-  }, [data.projects, publishedSnapshot]);
+    const before = window.homeSelectedProjects(publishedSnapshot.projects || [], publishedSnapshot.site).map(project => project.id);
+    const after = window.homeSelectedProjects(projects, data.site).map(project => project.id);
+    const selectionChanged = JSON.stringify(before) !== JSON.stringify(after);
+    return projects.filter(p => live.get(p.id) !== JSON.stringify(p) || (selectionChanged && (before.includes(p.id) || after.includes(p.id)))).map(p => p.id);
+  }, [data.projects, data.site, publishedSnapshot]);
 
   /* Whether anything at all differs from what the site is serving. pendingIds
      only watches projects, but settings, team, news and categories are just as
@@ -701,15 +705,7 @@ function App({ session }) {
   const publishOneProject = (id) => {
     const project = (data.projects || []).find((p) => p.id === id);
     if (!project) return Promise.resolve();
-    if (!publishedSnapshot) return runPublish(data); // nothing live yet — seed it
-
-    const live = publishedSnapshot.projects || [];
-    const at = live.findIndex((p) => p.id === id);
-    const projects = at >= 0
-      ? live.map((p) => (p.id === id ? project : p))
-      : [...live, project];
-
-    return runPublish({ ...publishedSnapshot, projects });
+    return runPublish(projectPublishPayload(publishedSnapshot, data, project));
   };
 
   /* The sheet's own Publish: store the edit, then push just this project live.
@@ -718,16 +714,7 @@ function App({ session }) {
   const onSaveAndPublishProject = (proj) => {
     proj = { ...proj, updatedAt: Date.now() };
     onSaveProject(proj);
-    const live = publishedSnapshot ? (publishedSnapshot.projects || []) : null;
-    if (!live) {
-      const projects = (data.projects || []).some((p) => p.id === proj.id)
-        ? (data.projects || []).map((p) => (p.id === proj.id ? proj : p))
-        : [proj, ...(data.projects || [])];
-      return runPublish({ ...data, projects }).catch(() => {});
-    }
-    const at = live.findIndex((p) => p.id === proj.id);
-    const projects = at >= 0 ? live.map((p) => (p.id === proj.id ? proj : p)) : [...live, proj];
-    return runPublish({ ...publishedSnapshot, projects }).catch(() => {});
+    return runPublish(projectPublishPayload(publishedSnapshot, data, proj)).catch(() => {});
   };
 
   useEffect(() => {
@@ -823,6 +810,9 @@ function App({ session }) {
       setToast('Περίμενε να φορτωθούν τα δεδομένα. Αν υπάρχει σφάλμα, ανανέωσε τη σελίδα.');
       return;
     }
+    if (!Array.isArray(next.site?.homeSelected?.order)) {
+      next = { ...next, site: { ...next.site, homeSelected: { order: window.homeSelectedProjects(data.projects, data.site).map(project => project.id) } } };
+    }
     rememberPendingDraft(next);
     setDraftState("saving");
     dirtyRef.current = true; setData(next); setDirty(true);
@@ -841,12 +831,24 @@ function App({ session }) {
       if (n) setToast(n === 1 ? "1 file filed under this project" : n + " files filed under this project");
     });
   };
+  const onHomeSelection = (project, enabled, replaceId) => {
+    const next = applyHomeSelection(data, { ...project, updatedAt: Date.now() }, enabled, replaceId);
+    if (next === data) return false;
+    update(next);
+    if (!editing?.id) setEditing({ kind: "project", id: project.id });
+    setToast(enabled ? "Η επιλογή έργων αρχικής αποθηκεύτηκε στο πρόχειρο." : "Το έργο αφαιρέθηκε από τις κάρτες αρχικής.");
+    return true;
+  };
   const onSaveCategory = (category) => {
     const nextCategory = {
       ...category,
       id: (category.id || category.label || newId("cat")).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""),
     };
     const exists = data.categories.findIndex((c) => c.id === nextCategory.id);
+    if (exists >= 0 && editing?.id !== nextCategory.id) {
+      setToast("Υπάρχει ήδη κατηγορία με αυτό το ID. Επίλεξε διαφορετικό ID.");
+      return;
+    }
     const categories = exists >= 0
       ? data.categories.map((c, i) => i === exists ? nextCategory : c)
       : [...data.categories, { ...nextCategory, order: data.categories.length }];
@@ -904,7 +906,11 @@ function App({ session }) {
     setEditing(null);
   };
   const onDelete = (kind, idOrIdx) => {
-    if (!confirm("Delete this " + kind + "? This cannot be undone.")) return;
+    const categoryProjectCount = kind === "category" ? data.projects.filter(project => (project.category || project.typology || "retail") === idOrIdx).length : 0;
+    const message = kind === "category"
+      ? `Αφαίρεση κατηγορίας;${categoryProjectCount ? ` Τα ${categoryProjectCount} έργα της θα παραμείνουν στο dashboard χωρίς διαθέσιμη κατηγορία. Επίλεξε άλλη κατηγορία για να εμφανίζονται στη λίστα έργων της ιστοσελίδας.` : ""} Η αλλαγή εφαρμόζεται στην ιστοσελίδα μετά τη δημοσίευση.`
+      : "Delete this " + kind + "? This cannot be undone.";
+    if (!confirm(message)) return;
     if (kind === "project") update({ ...data, projects: data.projects.filter((p) => p.id !== idOrIdx) });
     if (kind === "category") update({ ...data, categories: normaliseCategories(data.categories.filter((c) => c.id !== idOrIdx)) });
     if (kind === "news") update({ ...data, news: data.news.filter((n) => n._id !== idOrIdx) });
@@ -982,9 +988,7 @@ function App({ session }) {
     if (result !== "published") throw new Error("Not published: content API unavailable. Your draft is saved locally.");
   };
 
-  /* The gallery is driven by each project's `featured` flag, so this is the
-     same switch as "Εμφάνιση στην αρχική σελίδα" in the project editor — just reachable
-     from the one screen that shows the whole selection at once. */
+  /* The rotating hero has its own selection, separate from the four home cards. */
   const onToggleFeatured = (id, on) => {
     const current = normaliseSite(data.site || DEFAULT_SITE);
     const existing = current.heroGallery.order || [];
@@ -1136,7 +1140,7 @@ function App({ session }) {
             />
           )}
           {section === "projects" && (
-            <ProjectsList data={data.projects} categories={data.categories} onEdit={(id) => setEditing({ kind: "project", id })} onDelete={(id) => onDelete("project", id)} onMove={onMoveProject} onToggleVisibility={onToggleProjectVisibility} onNew={() => setEditing({ kind: "project", id: null })} pendingIds={pendingIds} uploads={uploads} onPublishOne={(id) => publishOneProject(id).catch(() => { /* shown in the header */ })} publishBusy={publishState.status === "busy" || draftState !== "saved"} />
+            <ProjectsList data={data.projects} categories={data.categories} onManageCategories={() => goSection("categories")} onEdit={(id) => setEditing({ kind: "project", id })} onDelete={(id) => onDelete("project", id)} onMove={onMoveProject} onToggleVisibility={onToggleProjectVisibility} onNew={() => setEditing({ kind: "project", id: null })} pendingIds={pendingIds} uploads={uploads} onPublishOne={(id) => publishOneProject(id).catch(() => { /* shown in the header */ })} publishBusy={publishState.status === "busy" || draftState !== "saved"} />
           )}
           {section === "texts" && (
             <ProjectTextsSheet
@@ -1215,6 +1219,9 @@ function App({ session }) {
         <ProjectSheet
           project={editing.id ? data.projects.find((p) => p.id === editing.id) : null}
           categories={data.categories}
+          homeProjects={window.homeSelectedProjects(data.projects, data.site)}
+          onHomeSelection={onHomeSelection}
+          onManageCategories={() => { setEditing(null); goSection("categories"); }}
           defaultProjectBadge={normaliseSite(data.site || DEFAULT_SITE).defaultProjectBadge}
           onSave={onSaveProject}
           onPublish={onSaveAndPublishProject}
@@ -1589,6 +1596,84 @@ function ProjectTextsSheet({ projects, categories = [], initialProject = "all", 
   );
 }
 
+function applyHomeSelection(content, project, enabled, replaceId) {
+  const selected = window.homeSelectedProjects(content.projects, content.site);
+  const order = selected.map(item => item.id);
+  const alreadySelected = order.includes(project.id);
+  if (enabled && project.visible === false) return content;
+  if (enabled && !alreadySelected) {
+    if (order.length >= window.HOME_SELECTED_MAX) {
+      const index = order.indexOf(replaceId);
+      if (index < 0) return content;
+      order[index] = project.id;
+    } else order.push(project.id);
+  }
+  const projects = content.projects.some(item => item.id === project.id)
+    ? content.projects.map(item => item.id === project.id ? project : item)
+    : [project, ...content.projects];
+  return { ...content, projects, site: { ...content.site, homeSelected: { order: enabled ? order : order.filter(id => id !== project.id) } } };
+}
+
+// Publish the related card selection alongside a project, preserving unrelated drafts.
+function projectPublishPayload(published, draft, project) {
+  if (!published) return { ...draft, projects: draft.projects.some(item => item.id === project.id)
+    ? draft.projects.map(item => item.id === project.id ? project : item) : [project, ...draft.projects] };
+  const previous = window.homeSelectedProjects(published.projects, published.site).map(item => item.id);
+  const next = window.homeSelectedProjects(draft.projects, draft.site).map(item => item.id);
+  let projects = published.projects.some(item => item.id === project.id)
+    ? published.projects.map(item => item.id === project.id ? project : item) : [...published.projects, project];
+  const selectionChanged = JSON.stringify(previous) !== JSON.stringify(next);
+  // Materialise the live selection even when only hero flags or ordering change.
+  let site = { ...published.site, homeSelected: { order: previous } };
+  if (selectionChanged && (previous.includes(project.id) || next.includes(project.id))) {
+    site = { ...published.site, homeSelected: { order: next } };
+    for (const id of next) {
+      const index = projects.findIndex(item => item.id === id);
+      if (index < 0) {
+        const selected = draft.projects.find(item => item.id === id);
+        if (selected) projects.push(selected);
+      } else if (projects[index].visible === false) {
+        // A selected replacement must be visible, even when publishing from the displaced card.
+        projects[index] = { ...projects[index], visible: true };
+      }
+    }
+  }
+  return { ...published, projects, site };
+}
+
+function HomeSelectionDialog({ projects, incoming, onReplace, onClose }) {
+  const dialogRef = useRef(null);
+  const [selectedId, setSelectedId] = useState(null);
+  useEffect(() => {
+    const previousFocus = document.activeElement;
+    const dialog = dialogRef.current;
+    const overflow = document.body.style.overflow;
+    dialog.showModal();
+    document.body.style.overflow = "hidden";
+    return () => {
+      dialog.close();
+      document.body.style.overflow = overflow;
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+    };
+  }, []);
+  return ReactDOM.createPortal(
+    <dialog ref={dialogRef} className="home-selection-dialog" aria-labelledby="home-selection-title" aria-describedby="home-selection-description"
+      onCancel={event => { event.preventDefault(); event.stopPropagation(); onClose(); }}
+      onKeyDown={event => { if (event.key === "Escape") event.stopPropagation(); }}>
+      <header><h2 id="home-selection-title">Δεν υπάρχει διαθέσιμη θέση</h2><button className="btn ghost" type="button" aria-label="Ακύρωση αντικατάστασης" onClick={onClose}>{Ic.close}</button></header>
+      <p id="home-selection-description">Η αρχική σελίδα εμφανίζει έως {window.HOME_SELECTED_MAX} έργα. Επίλεξε ποιο θέλεις να αντικαταστήσεις με το «{incoming.name || incoming.name_gr}».</p>
+      <div className="home-selection-grid" role="group" aria-label="Έργα που εμφανίζονται στην αρχική">
+        {projects.map(project => <button key={project.id} type="button" className={`home-selection-choice ${selectedId === project.id ? "selected" : ""}`}
+          aria-pressed={selectedId === project.id} onClick={() => setSelectedId(project.id)}>
+          <span className="home-selection-photo">{project.hero ? <MediaPreview src={project.hero} alt="" /> : <span>Χωρίς εικόνα</span>}{selectedId === project.id && <span className="home-selection-check">{Ic.check}</span>}</span>
+          <strong>{project.name_gr || project.name}</strong><span>{project.location_gr || project.location}</span>
+        </button>)}
+      </div>
+      <p className="hint">Το έργο αφαιρείται μόνο από αυτή την ενότητα της αρχικής. Παραμένει στην ιστοσελίδα και στο dashboard.</p>
+      <footer><button className="btn ghost" type="button" onClick={onClose}>Ακύρωση και επιστροφή</button><button className="btn primary" type="button" disabled={!projects.some(project => project.id === selectedId)} onClick={() => onReplace(selectedId)}>Αντικατάσταση έργου</button></footer>
+    </dialog>, document.body);
+}
+
 function categoryLabel(categories, id) {
   const cat = categories.find((c) => c.id === id);
   return cat ? cat.label : id || "Χωρίς κατηγορία";
@@ -1612,7 +1697,7 @@ function filterDashboardProjects(projects, filters, categories) {
   });
 }
 
-function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisibility, onNew, pendingIds, uploads, onPublishOne, publishBusy }) {
+function ProjectsList({ data, categories, onManageCategories, onEdit, onDelete, onMove, onToggleVisibility, onNew, pendingIds, uploads, onPublishOne, publishBusy }) {
   const emptyFilters = { query: "", category: "", brand: "", year: "", status: "", visibility: "" };
   const [filters, setFilters] = useState(emptyFilters);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -1723,6 +1808,7 @@ function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisi
   return (
     <>
       <SectionHead title="Έργα">
+        <button className="btn ghost" type="button" onClick={onManageCategories}>{Ic.plus} Διαχείριση κατηγοριών</button>
         <div className="project-search">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>
           <input type="search" aria-label="Αναζήτηση έργων" placeholder="Όνομα, τοποθεσία ή κωδικός…" value={filters.query} onChange={event => updateFilter("query", event.target.value)} />
@@ -1787,7 +1873,10 @@ function CategoriesList({ data, projects, onEdit, onDelete, onMove, onNew }) {
   if (!data.length) return <Empty kind="categories" onNew={onNew} />;
   return (
     <>
-      <SectionHead eyebrow="/ Οργάνωση έργων" title="Κατηγορίες" />
+      <SectionHead eyebrow="/ Οργάνωση έργων" title="Κατηγορίες">
+        <button className="btn primary" type="button" onClick={onNew}>{Ic.plus} Προσθήκη κατηγορίας</button>
+      </SectionHead>
+      <p className="category-management-hint">Οι κατηγορίες τροφοδοτούν τη λίστα επιλογής στα έργα. Εμφανίζονται στην ιστοσελίδα όταν περιέχουν ορατά έργα και δημοσιεύσεις τις αλλαγές.</p>
       <div className="list">
         <div className="list-head head-categories">
           <span>Κατηγορία</span>
@@ -1803,7 +1892,7 @@ function CategoriesList({ data, projects, onEdit, onDelete, onMove, onNew }) {
             <div className="row-actions">
               <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(c.id, -1); }} title="Μετακίνηση πάνω" disabled={i === 0}>{Ic.arrowUp}</button>
               <button className="delete" onClick={(e) => { e.stopPropagation(); onMove(c.id, 1); }} title="Μετακίνηση κάτω" disabled={i === data.length - 1}>{Ic.arrowDown}</button>
-              <button className="delete" onClick={(e) => { e.stopPropagation(); onDelete(c.id); }} title="Διαγραφή">{Ic.trash}</button>
+              <button className="delete" onClick={(e) => { e.stopPropagation(); onDelete(c.id); }} aria-label={`Αφαίρεση κατηγορίας ${c.label}`} title="Αφαίρεση κατηγορίας">{Ic.trash}</button>
             </div>
           </div>
         ))}
@@ -2464,7 +2553,7 @@ function HeroGallerySettings({ heroGallery, projects, onSave, onToggleFeatured, 
           <div className="form-section-title">Projects in the gallery</div>
           <p className="hero-hint">
             Each project's <b>hero image</b> is what the gallery shows. This is the same switch as
-            “Show on home rail” inside a project — changing it here changes it there.
+            “Στο hero της αρχικής” inside a project — changing it here changes it there.
           </p>
 
           {chosen.length === 0 ? (
@@ -2929,31 +3018,43 @@ function ProjectAddressField({ project, onChange }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const request = useRef(0);
-  useEffect(() => () => { request.current += 1; }, []);
+  const changeRef = useRef(onChange);
+  changeRef.current = onChange;
   const address = project.address || "";
   const point = project.coordinates;
-  const located = point && point.address === address.trim() && Number.isFinite(point.lat) && Number.isFinite(point.lng) && Math.abs(point.lat) <= 90 && Math.abs(point.lng) <= 180;
-  const search = async () => {
+  const located = !!(point && point.address === address.trim() && Number.isFinite(point.lat) && Number.isFinite(point.lng) && Math.abs(point.lat) <= 90 && Math.abs(point.lng) <= 180);
+  useEffect(() => {
+    if (located || address.trim().length < 5) return;
     const id = ++request.current;
-    setBusy(true); setResults([]); setStatus("");
-    try {
-      const response = await fetch('/api/geocode',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({address})});
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.message || 'Η αναζήτηση απέτυχε.');
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
       if (id !== request.current) return;
-      setResults(body.results);
-      setStatus(body.results.length ? 'Επίλεξε το σωστό σημείο για το έργο.' : 'Δεν βρέθηκε διεύθυνση. Πρόσθεσε πόλη, ταχυδρομικό κώδικα ή χώρα και δοκίμασε ξανά.');
-    } catch (error) {
-      if (id === request.current) setStatus(error.message || 'Η αναζήτηση απέτυχε.');
-    } finally { if (id === request.current) setBusy(false); }
-  };
+      setBusy(true); setResults([]); setStatus("");
+      try {
+        const response = await fetch('/api/geocode',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:address.trim()}),signal:controller.signal});
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.message || 'Η αναζήτηση απέτυχε.');
+        if (id !== request.current) return;
+        const matches = body.results || [];
+        if (matches.length) {
+          changeRef.current({coordinates:{...matches[0],address:address.trim()}});
+          setResults(matches.length > 1 ? matches : []);
+          setStatus('Η διεύθυνση εντοπίστηκε στον χάρτη. Διόρθωσε την πινέζα ή επίλεξε άλλη αντιστοίχιση, αν χρειάζεται.');
+        } else {
+          setStatus('Δεν βρέθηκε διεύθυνση. Πρόσθεσε πόλη, ταχυδρομικό κώδικα ή χώρα, ή επίλεξε σημείο στον χάρτη.');
+        }
+      } catch (error) {
+        if (id === request.current && !controller.signal.aborted) setStatus(error.message || 'Η αναζήτηση απέτυχε.');
+      } finally { if (id === request.current) setBusy(false); }
+    }, 1100);
+    return () => { clearTimeout(timer); controller.abort(); request.current += 1; };
+  }, [address, located, project.id]);
   return <div className="project-address-field">
-    <Field label="Διεύθυνση έργου" hint="Αναζήτησε τη διεύθυνση και διόρθωσε τη θέση πάνω στον χάρτη. Μπορείς επίσης να επιλέξεις απευθείας σημείο χωρίς αναζήτηση.">
+    <Field label="Διεύθυνση έργου" hint="Γράψε τη διεύθυνση και ο χάρτης θα εντοπίσει αυτόματα το σημείο. Μπορείς να διορθώσεις τη θέση σύροντας την πινέζα ή κάνοντας κλικ στον χάρτη.">
       <input type="text" maxLength="400" value={address} placeholder="π.χ. Ακαδημίας 76, Αθήνα 106 76, Ελλάδα"
         onChange={event => { request.current += 1; setBusy(false); setResults([]); setStatus(""); onChange({address:event.target.value,coordinates:null}); }} />
     </Field>
-    <button className="btn ghost" type="button" disabled={busy || address.trim().length < 5} onClick={search}>{busy ? 'Αναζήτηση…' : 'Εντοπισμός στον χάρτη'}</button>
-    <p role="status" aria-live="polite">{status}</p>
+    <p role="status" aria-live="polite">{busy ? 'Αναζήτηση διεύθυνσης…' : status}</p>
     {results.length > 0 && <div className="project-address-results">{results.map((result,index) => <button className="btn ghost" type="button" key={index} onClick={() => {
       onChange({coordinates:{...result,address:address.trim()}}); setResults([]); setStatus('Το σημείο συνδέθηκε με τη διεύθυνση.');
     }}><span>{result.label}{result.approximate ? ' · Κατά προσέγγιση' : ''}</span></button>)}</div>}
@@ -2968,20 +3069,20 @@ function ProjectAddressField({ project, onChange }) {
   </div>;
 }
 
-function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPublish, onDraft, draftState, pending, onClose, uploadsActive, publishBusy }) {
+function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories = DEFAULT_CATEGORIES, onManageCategories, defaultProjectBadge, onSave, onPublish, onDraft, draftState, pending, onClose, uploadsActive, publishBusy }) {
   const [p, setP] = useState(() => project ? JSON.parse(JSON.stringify(project)) : ({
     id: newId("pj"),
     slug: "",
     code: "P58-" + String(Math.floor(Math.random() * 900) + 100),
     brand: "Protein Garden",
-    category: "retail",
+    category: categories[0]?.id || "",
     order: 0,
     featured: false,
     visible: true,
     name: "",
     location: "Athens · ",
     type: "Fast Casual · Retail",
-    typology: "retail",
+    typology: categories[0]?.id || "",
     year: String(new Date().getFullYear()),
     status: "In design",
     status_gr: "",
@@ -3000,6 +3101,7 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
     icon: "",
     gallery: [],
   }));
+  const [homeSelectionOpen, setHomeSelectionOpen] = useState(false);
   const [tab, setTab] = useState("details");
   const lastDraft = useRef(JSON.stringify(p));
   const draftCallback = useRef(onDraft);
@@ -3224,11 +3326,12 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
   });
 
   const suggestedSlug = descriptiveProjectSlug(p);
-  const activeCat = (categories && categories.length ? categories : DEFAULT_CATEGORIES).find((cc) => cc.id === (p.category || p.typology || "retail"));
+  const selectedCategory = p.category ?? p.typology ?? "retail";
+  const activeCat = categories.find((cc) => cc.id === selectedCategory);
   const subOptions = (activeCat && activeCat.subcategories) || [];
   const subLabel = (activeCat && activeCat.subLabel && activeCat.subLabel !== "Sub-category") ? activeCat.subLabel : "Brand";
   const valid = Boolean(String(p.name || "").trim() && String(p.code || "").trim());
-  const finished = () => ({ ...p, slug: p.slug || suggestedSlug || p.id, typology: p.category || p.typology || "retail" });
+  const finished = () => ({ ...p, slug: p.slug || suggestedSlug || p.id, typology: selectedCategory });
   const previewHref = valid
     ? `/index.html?preview=${encodeURIComponent(p.id)}#project/${encodeURIComponent(p.slug || suggestedSlug || p.id)}`
     : "";
@@ -3269,18 +3372,29 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
   const publish = () => publishReady && onPublish(finished());
 
   useEffect(() => {
-    const k = (e) => { if (e.key === "Escape") close(); };
+    const k = (e) => { if (e.key === "Escape" && !homeSelectionOpen && !e.defaultPrevented) close(); };
     document.addEventListener("keydown", k);
     return () => document.removeEventListener("keydown", k);
-  }, [p, uploadsActive, changed]);
+  }, [p, uploadsActive, changed, homeSelectionOpen]);
 
   return (
     <div className="sheet-wrap">
+      {homeSelectionOpen && <HomeSelectionDialog projects={homeProjects} incoming={p} onClose={() => setHomeSelectionOpen(false)} onReplace={id => {
+        if (onHomeSelection(finished(), true, id)) setHomeSelectionOpen(false);
+      }} />}
       <div className="sheet" role="dialog" aria-modal="true" aria-label="Επεξεργασία έργου" onMouseDown={(e) => e.stopPropagation()}>
         <div className="sheet-head">
           <div>
             <div className="eyebrow">/ {project ? "Επεξεργασία έργου" : "Νέο έργο"}</div>
             <h2>{p.name || "Έργο χωρίς τίτλο"}</h2>
+            <div className="project-visibility-control">
+              <label>
+                <span>Ορατότητα στην ιστοσελίδα</span>
+                <input type="checkbox" role="switch" aria-label="Ορατό στην ιστοσελίδα" checked={p.visible !== false} onChange={event => set("visible", event.target.checked)} />
+                <strong className={p.visible === false ? "is-hidden" : "is-visible"}>{p.visible === false ? "Κρυφό" : "Ορατό"}</strong>
+              </label>
+              <p>Οι αλλαγές εφαρμόζονται με τη δημοσίευση. Το έργο παραμένει στο dashboard.</p>
+            </div>
           </div>
           <div className="controls">
             <span className="status-pill" role="status">{!valid ? "Συμπλήρωσε όνομα και κωδικό" : changed || draftState === "saving" ? "Αποθήκευση…" : draftState === "error" ? "Σφάλμα αποθήκευσης" : "Αποθηκεύτηκε"}</span>
@@ -3326,33 +3440,42 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
               </Field>
 
             </div>
-            <div className="field-group cols-3">
-              <Field label="Κατηγορία">
-                <select value={p.category || p.typology || "retail"} onChange={(e) => set("category", e.target.value)}>
-                  {(categories && categories.length ? categories : DEFAULT_CATEGORIES).map((c) => (
-                    <option key={c.id} value={c.id}>{c.label}</option>
+            <div className="field-group">
+              <Field label="Κατηγορία" hint="Η επιλογή εμφανίζεται στη δημόσια ιστοσελίδα μετά τη δημοσίευση.">
+                <select aria-label="Κατηγορία έργου" value={selectedCategory} onChange={(e) => set("category", e.target.value)}>
+                  {!activeCat && <option value={selectedCategory} disabled>{categories.length ? "Επίλεξε κατηγορία" : "Δεν υπάρχουν κατηγορίες"}</option>}
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.label_gr || c.label}</option>
                   ))}
                 </select>
+                <button className="btn ghost category-manage-link" type="button" disabled={uploadsActive || (changed && !valid)} title={changed && !valid ? "Συμπλήρωσε όνομα και κωδικό για να διατηρηθούν οι αλλαγές." : "Άνοιγμα διαχείρισης κατηγοριών"} onClick={() => { if (valid) onDraft(finished()); onManageCategories(); }}>{Ic.plus} Προσθήκη / αφαίρεση κατηγοριών</button>
               </Field>
               <Field label="Έτος">
                 <input type="text" value={p.year} onChange={(e) => set("year", e.target.value)} />
               </Field>
-              <Field label="Στην αρχική">
-                <label className="checkline">
-                  <input type="checkbox" checked={Boolean(p.featured)} onChange={(e) => set("featured", e.target.checked)} />
-                  <span>Εμφάνιση στην αρχική σελίδα</span>
-                </label>
-              </Field>
-            </div>
-            <div className="field-group cols-1">
-              <Field label="Ορατό στην ιστοσελίδα" hint="Η αλλαγή ορατότητας εφαρμόζεται όταν δημοσιεύσεις. Το έργο παραμένει στο dashboard.">
-                <label className="checkline">
-                  <input type="checkbox" checked={p.visible !== false} onChange={(e) => set("visible", e.target.checked)} />
-                  <span>{p.visible === false ? "Κρυφό από την ιστοσελίδα" : "Ορατό στην ιστοσελίδα"}</span>
-                </label>
-              </Field>
             </div>
           </div>
+
+          <section className="form-section project-home-promotion" hidden={tab !== "details"} aria-labelledby="project-home-promotion-title">
+            <h3 className="form-section-title" id="project-home-promotion-title">Προβολή στην αρχική</h3>
+            <p className="project-home-promotion-hint">Επίλεξε πού θα προβάλλεται το έργο στην αρχική σελίδα.</p>
+            <div className="field-group">
+              <Field label="Επιλεγμένα έργα" hint={`${homeProjects.length} από ${window.HOME_SELECTED_MAX} θέσεις · Κάρτες κάτω από το hero.`}>
+                <label className="checkline">
+                  <input type="checkbox" checked={homeProjects.some(project => project.id === p.id)} disabled={!valid || uploadsActive || p.visible === false}
+                    onChange={event => {
+                      if (event.target.checked && homeProjects.length >= window.HOME_SELECTED_MAX) setHomeSelectionOpen(true);
+                      else onHomeSelection(finished(), event.target.checked);
+                    }} />
+                  <span>Στα τέσσερα επιλεγμένα έργα</span>
+                </label>
+              </Field>
+              <Field label="Hero" hint="Εναλλασσόμενες εικόνες στο πάνω μέρος της αρχικής.">
+                <label className="checkline"><input type="checkbox" checked={Boolean(p.featured)} onChange={event => set("featured", event.target.checked)} /><span>Στο hero της αρχικής</span></label>
+              </Field>
+            </div>
+            {p.visible === false && <p className="project-home-promotion-hint">Το έργο είναι κρυφό. Οι επιλογές προβολής εφαρμόζονται όταν το κάνεις ορατό και δημοσιεύσεις τις αλλαγές.</p>}
+          </section>
 
           <div className="form-section" hidden={tab !== "details"}>
             <div className="form-section-title">Διεύθυνση & χάρτης</div>
@@ -3570,6 +3693,7 @@ function ProjectSheet({ project, categories, defaultProjectBadge, onSave, onPubl
                     </GalleryThumb>
                     <div className="gal-caption-row">
                     <GalleryCaptionInput image={g} index={i} onChange={(field, value) => setGallery(i, field, value)} />
+                    <ImageCropButton src={g.src} onChange={value => setGallery(i, "src", value)} uploadKey={p.id} compact />
                     <button type="button" className="gal-library-btn" title="Αλλαγή εικόνας από τη βιβλιοθήκη"
                       aria-label={`Αλλαγή εικόνας ${i + 1} από τη βιβλιοθήκη`} onClick={() => setReplacingGallery(i)}>{Ic.grid}</button>
                     </div>
@@ -4108,7 +4232,7 @@ function CategorySheet({ category, projects = [], onSave, onClose }) {
           </div>
           <div className="field-group">
             <Field label="ID" hint="Used by projects and URLs. Lowercase letters, numbers, and hyphens.">
-              <input type="text" value={c.id || slugFromLabel} onChange={(e) => set("id", e.target.value)} placeholder="retail" />
+              <input type="text" value={c.id || slugFromLabel} disabled={!!category} onChange={(e) => set("id", slugifyId(e.target.value))} placeholder="retail" />
             </Field>
           </div>
           <Field label="Περιγραφή">
@@ -4201,6 +4325,200 @@ function MediaPreview({ src, alt, className, lazy }) {
       draggable="false"
     />
   );
+}
+
+// Crop coordinates always use source pixels, independent of preview size.
+function fitImageCrop(width, height, ratio = 0) {
+  const w = ratio ? Math.min(width, height * ratio) : width;
+  const h = ratio ? w / ratio : height;
+  return { x: (width - w) / 2, y: (height - h) / 2, width: w, height: h };
+}
+
+function constrainImageCrop(crop, width, height, ratio = 0) {
+  const x = Math.max(0, Math.min(width - 1, crop.x));
+  const y = Math.max(0, Math.min(height - 1, crop.y));
+  let w = Math.max(1, Math.min(width - x, crop.width));
+  let h = Math.max(1, Math.min(height - y, crop.height));
+  if (ratio) {
+    w = Math.min(Math.max(w, ratio), width - x, (height - y) * ratio);
+    h = w / ratio;
+  }
+  return { x, y, width: w, height: h };
+}
+
+function canCropImage(src, contentType = '') {
+  if (!src || window.isVideoSrc(src)) return false;
+  // Animated GIF and vector artwork must keep their original format.
+  return !/^(video\/|image\/(gif|svg\+xml))/i.test(contentType)
+    && !/^data:(video\/|image\/(gif|svg\+xml))/i.test(src)
+    && !/\.(gif|svg|mp4)(?:[?#&]|$)/i.test(src);
+}
+
+function ImageCropButton({ src, onChange, uploadKey, item, onSaved, compact = false }) {
+  const [open, setOpen] = useState(false);
+  if (!canCropImage(src, item?.contentType)) return null;
+  return <>
+    <button type="button" className={compact ? "gal-library-btn" : "btn ghost"}
+      title="Περικοπή εικόνας" aria-label="Περικοπή εικόνας" onClick={() => setOpen(true)}>
+      <DashboardIcon name="crop" size={16} />{!compact && <span>Crop</span>}
+    </button>
+    {open && <ImageCropDialog src={src} uploadKey={uploadKey} item={item}
+      onClose={() => setOpen(false)} onSave={saved => { onChange?.(saved.url); onSaved?.(saved); setOpen(false); }} />}
+  </>;
+}
+
+function ImageCropDialog({ src, uploadKey, item, onClose, onSave }) {
+  const [image, setImage] = useState(null);
+  const [crop, setCrop] = useState(null);
+  const [ratio, setRatio] = useState(0);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const dialogRef = useRef(null);
+  const stageRef = useRef(null);
+  const gesture = useRef(null);
+  const saving = useRef(false);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  useEffect(() => {
+    let cancelled = false;
+    const loaded = new Image();
+    loaded.crossOrigin = 'anonymous';
+    loaded.onload = () => {
+      if (cancelled) return;
+      setImage(loaded);
+      setCrop(fitImageCrop(loaded.naturalWidth, loaded.naturalHeight));
+    };
+    loaded.onerror = () => { if (!cancelled) setError('Η εικόνα δεν φορτώθηκε για επεξεργασία. Αν είναι εξωτερικό URL, κατέβασέ την και ανέβασέ την στη βιβλιοθήκη.'); };
+    loaded.src = src;
+    return () => { cancelled = true; loaded.onload = null; loaded.onerror = null; };
+  }, [src]);
+
+  useEffect(() => {
+    const previous = document.activeElement;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    dialogRef.current?.focus();
+    const keydown = event => {
+      if (event.key === 'Escape') {
+        event.preventDefault(); event.stopImmediatePropagation();
+        if (!saving.current) closeRef.current();
+      }
+      if (event.key === 'Tab') {
+        event.stopImmediatePropagation();
+        const elements = [...dialogRef.current.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled)')];
+        const first = elements[0], last = elements[elements.length - 1];
+        if (!first) { event.preventDefault(); return; }
+        if (event.shiftKey && (document.activeElement === first || document.activeElement === dialogRef.current)) { event.preventDefault(); last.focus(); }
+        else if (!event.shiftKey && (document.activeElement === last || !dialogRef.current.contains(document.activeElement) || document.activeElement === dialogRef.current)) { event.preventDefault(); first.focus(); }
+      }
+    };
+    // Capture at window before parent editor dialogs receive keyboard events.
+    window.addEventListener('keydown', keydown, true);
+    return () => {
+      window.removeEventListener('keydown', keydown, true);
+      document.body.style.overflow = overflow;
+      if (previous?.isConnected) previous.focus();
+    };
+  }, []);
+
+  const startDrag = (event, mode) => {
+    if (saving.current || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    event.preventDefault(); event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    gesture.current = { mode, x: event.clientX, y: event.clientY, crop, bounds: stageRef.current.getBoundingClientRect() };
+  };
+  const drag = event => {
+    const g = gesture.current;
+    if (!g || saving.current) return;
+    const dx = (event.clientX - g.x) * image.naturalWidth / g.bounds.width;
+    const dy = (event.clientY - g.y) * image.naturalHeight / g.bounds.height;
+    if (g.mode === 'move') {
+      setCrop({ ...g.crop,
+        x: Math.max(0, Math.min(image.naturalWidth - g.crop.width, g.crop.x + dx)),
+        y: Math.max(0, Math.min(image.naturalHeight - g.crop.height, g.crop.y + dy)) });
+    } else {
+      setCrop(constrainImageCrop({ ...g.crop, width: g.crop.width + dx, height: g.crop.height + dy }, image.naturalWidth, image.naturalHeight, ratio));
+    }
+  };
+  const stopDrag = () => { gesture.current = null; };
+  const changeCrop = (field, value) => {
+    const next = { ...crop, [field]: Number(value) };
+    if (field === 'x') next.x = Math.min(next.x, image.naturalWidth - crop.width);
+    if (field === 'y') next.y = Math.min(next.y, image.naturalHeight - crop.height);
+    setCrop(constrainImageCrop(next, image.naturalWidth, image.naturalHeight, ratio));
+  };
+  const save = async () => {
+    if (saving.current || !image || !crop) return;
+    saving.current = true; setBusy(true); setError('');
+    const projectId = uploadKey || item?.projectId || null;
+    uploadRegistry.begin(projectId, 1);
+    try {
+      const scale = Math.min(1, MEDIA_MAX_DIM / Math.max(crop.width, crop.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(crop.width * scale));
+      canvas.height = Math.max(1, Math.round(crop.height * scale));
+      const context = canvas.getContext('2d');
+      if (!context) throw new Error('Δεν είναι διαθέσιμη η επεξεργασία εικόνας σε αυτόν τον browser.');
+      context.drawImage(image, crop.x, crop.y, crop.width, crop.height, 0, 0, canvas.width, canvas.height);
+      // WebP preserves transparency while reducing the upload size.
+      const dataUrl = canvas.toDataURL('image/webp', MEDIA_QUALITY);
+      const extension = dataUrl.startsWith('data:image/webp;') ? 'webp' : 'png';
+      const original = item || cachedMediaItems().find(media => media.url === src);
+      const stem = (original?.filename || 'image').replace(/\.[^.]+$/, '').slice(0, 70);
+      const body = await mediaApi.upload({
+        filename: `${stem}-crop-${crypto.randomUUID()}.${extension}`, dataUrl,
+        width: canvas.width, height: canvas.height, projectId,
+        kind: original?.kind || 'image', caption: original?.caption || '',
+      });
+      onSave(body.item);
+    } catch (err) {
+      setError(err.name === 'SecurityError' ? 'Το εξωτερικό URL δεν επιτρέπει επεξεργασία. Ανέβασε την εικόνα στη βιβλιοθήκη και δοκίμασε ξανά.' : `Η περικοπή δεν αποθηκεύτηκε. ${err.message}`);
+    } finally {
+      uploadRegistry.step(projectId);
+      saving.current = false; setBusy(false);
+    }
+  };
+
+  return ReactDOM.createPortal(<div className="image-crop-backdrop" onMouseDown={event => {
+    if (event.target === event.currentTarget && !saving.current) onClose();
+  }}>
+    <div className="image-crop-dialog" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="image-crop-title" aria-describedby="image-crop-hint" aria-busy={busy}>
+      <div className="image-crop-heading"><h2 id="image-crop-title">Περικοπή εικόνας</h2>
+        <button type="button" className="btn ghost" disabled={busy} aria-label="Κλείσιμο περικοπής" onClick={onClose}>{Ic.close}</button>
+      </div>
+      <p id="image-crop-hint">Σύρε το πλαίσιο για μετακίνηση και την κάτω δεξιά γωνία για αλλαγή μεγέθους. Το αρχικό αρχείο παραμένει στη βιβλιοθήκη.</p>
+      {!image && !error && <p role="status">Φόρτωση εικόνας…</p>}
+      {image && crop && <>
+        <div className="image-crop-toolbar">
+          <label>Αναλογία <select value={ratio} disabled={busy} onChange={event => {
+            const next = Number(event.target.value); setRatio(next); setCrop(fitImageCrop(image.naturalWidth, image.naturalHeight, next));
+          }}>
+            <option value={0}>Ελεύθερη</option><option value={1}>1:1</option><option value={4 / 3}>4:3</option>
+            <option value={3 / 2}>3:2</option><option value={16 / 9}>16:9</option><option value={4 / 5}>4:5</option><option value={9 / 16}>9:16</option>
+          </select></label>
+          <button type="button" className="btn ghost" disabled={busy} onClick={() => { setRatio(0); setCrop(fitImageCrop(image.naturalWidth, image.naturalHeight)); }}>{Ic.reset} Επαναφορά</button>
+          <output>{Math.round(crop.width)} × {Math.round(crop.height)} px</output>
+        </div>
+        <div className="image-crop-stage" ref={stageRef} style={{ aspectRatio: `${image.naturalWidth} / ${image.naturalHeight}`, width: `min(100%, ${60 * image.naturalWidth / image.naturalHeight}vh)` }}>
+          <img src={src} alt="Εικόνα προς περικοπή" draggable="false" />
+          <div className="image-crop-selection" style={{ left: `${crop.x / image.naturalWidth * 100}%`, top: `${crop.y / image.naturalHeight * 100}%`, width: `${crop.width / image.naturalWidth * 100}%`, height: `${crop.height / image.naturalHeight * 100}%` }}
+            onPointerDown={event => startDrag(event, 'move')} onPointerMove={drag} onPointerUp={stopDrag} onPointerCancel={stopDrag} onLostPointerCapture={stopDrag}>
+            <span className="image-crop-resize" onPointerDown={event => startDrag(event, 'resize')}><DashboardIcon name="crop" size={18} /></span>
+          </div>
+        </div>
+        <div className="image-crop-values">
+          {[['x', 'Οριζόντια θέση', 0, image.naturalWidth - crop.width], ['y', 'Κατακόρυφη θέση', 0, image.naturalHeight - crop.height], ['width', 'Πλάτος', 1, image.naturalWidth - crop.x], ...(!ratio ? [['height', 'Ύψος', 1, image.naturalHeight - crop.y]] : [])].map(([field, label, min, max]) =>
+            <label key={field}>{label}<input type="range" min={min} max={max} step="any" value={crop[field]} disabled={busy} onChange={event => changeCrop(field, event.target.value)} /></label>)}
+        </div>
+      </>}
+      {error && <p className="image-crop-error" role="alert">{error}</p>}
+      <div className="image-crop-footer">
+        <button type="button" className="btn ghost" disabled={busy} onClick={onClose}>Ακύρωση</button>
+        <button type="button" className="btn primary" disabled={busy || !image || !crop} onClick={save}>{busy ? 'Αποθήκευση…' : item ? 'Αποθήκευση αντιγράφου' : 'Εφαρμογή περικοπής'}</button>
+      </div>
+    </div>
+  </div>, document.body);
 }
 
 // Shared by ImageInput and the compact gallery thumbnail.
@@ -4338,6 +4656,7 @@ function ImageInput({ value, onChange, placeholder, extra, uploadKey, accept = "
           <button className="btn ghost" type="button" onClick={() => setPicking(true)} title="Επιλογή εικόνας από τη βιβλιοθήκη">
             <span className="ic">{Ic.grid}</span><span>Βιβλιοθήκη</span>
           </button>
+          <ImageCropButton src={value} onChange={onChange} uploadKey={uploadKey} />
           {value ? <button className="btn ghost" type="button" onClick={() => onChange("")}>{Ic.close}<span>Καθαρισμός</span></button> : null}
         </div>
         <input
@@ -4400,7 +4719,7 @@ function setAtPath(root, path, value) {
   return clone;
 }
 
-function MediaTile({ item, projects, onAssign, onDelete, onCaption, onKind, selected, onSelect, onActive }) {
+function MediaTile({ item, projects, onAssign, onDelete, onCaption, onKind, selected, onSelect, onActive, onCrop }) {
   const [caption, setCaption] = useState(item.caption || "");
   useEffect(() => setCaption(item.caption || ""), [item.id, item.caption]);
   const owner = projects.find(project => project.id === item.projectId);
@@ -4457,6 +4776,7 @@ function MediaTile({ item, projects, onAssign, onDelete, onCaption, onKind, sele
           <span><strong>Active</strong><small>{canActivate ? `Στη συλλογή του έργου ${owner.name || owner.id}` : "Επίλεξε έργο και τύπο Project image"}</small></span>
         </label>
         <div className="media-actions">
+          <ImageCropButton src={item.url} item={item} onSaved={onCrop} />
           <button
             className="btn ghost"
             type="button"
@@ -4785,7 +5105,9 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
     );
   }
 
-  const tileProps = { projects, onAssign, onDelete, onCaption, onKind, onActive, onSelect: toggleSelected };
+  const tileProps = { projects, onAssign, onDelete, onCaption, onKind, onActive, onSelect: toggleSelected,
+    onCrop: item => { setItems(current => [item, ...current]); onToast('Η περικοπή αποθηκεύτηκε ως νέο αρχείο. Επίλεξέ το από τη βιβλιοθήκη για χρήση.'); },
+  };
   const visibleGroupKeys = [
     groups.graphics.length ? "graphics" : null,
     groups.backlog.length ? "backlog" : null,

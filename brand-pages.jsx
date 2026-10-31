@@ -113,11 +113,10 @@ function brandMapColorMatrix(dark, light) {
     return `${.2126 * range} ${.7152 * range} ${.0722 * range} 0 ${start}`;
   }).join(" ") + " 0 0 0 1 0";
 }
-function brandMapCardPosition(point, card, bounds) {
-  const left = Math.max(bounds.left, Math.min(point.x - card.width / 2, bounds.right - card.width));
-  const above = point.y - card.height - 28;
-  const preferred = above >= bounds.top ? above : point.y + 28;
-  const top = Math.max(bounds.top, Math.min(preferred, bounds.bottom - card.height));
+function brandMapCardPosition(card, bounds) {
+  // Keep the mobile card centered just above the dock, independent of the pin.
+  const left = Math.max(bounds.left, (bounds.left + bounds.right - card.width) / 2);
+  const top = Math.max(bounds.top, bounds.bottom - card.height);
   return { left, top };
 }
 function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick, color, background, children }) {
@@ -159,9 +158,8 @@ function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick
     if (marker && panToSelection) mapRef.current?.panTo(marker.getLatLng());
   }, [selectedId, panToSelection, projects, pick]);
   React.useEffect(() => {
-    const map = mapRef.current;
     const card = detailRef.current;
-    if (!map || !card) return;
+    if (!ref.current || !card) return;
     let frame;
     const update = () => {
       if (!window.matchMedia('(max-width: 720px)').matches) { setCardPosition(null); return; }
@@ -174,23 +172,25 @@ function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick
       const head = ref.current.closest('.brand-locations')?.querySelector('.brand-locations-head')?.getBoundingClientRect();
       const top = Math.max(12, viewportTop - rect.top + 12, head && head.bottom > viewportTop ? head.bottom - rect.top + 12 : 0);
       const bottom = Math.min(rect.height - 12, dockTop - rect.top - 12);
-      const marker = markersRef.current.get(selectedId);
-      const point = marker ? map.latLngToContainerPoint(marker.getLatLng()) : { x: rect.width / 2, y: rect.height / 2 };
       const height = Math.min(card.scrollHeight, Math.max(0, bottom - top));
-      const position = brandMapCardPosition(point, { width: card.offsetWidth, height }, { left: 12, right: rect.width - 12, top, bottom });
+      const position = brandMapCardPosition({ width: card.offsetWidth, height }, { left: 12, right: rect.width - 12, top, bottom });
       setCardPosition({ ...position, maxHeight: Math.max(0, bottom - top), visibility: bottom - top < 80 ? 'hidden' : 'visible' });
     };
     const schedule = () => { cancelAnimationFrame(frame); frame = requestAnimationFrame(update); };
     const observer = new ResizeObserver(schedule);
     observer.observe(card);
-    map.on('move zoom resize', schedule);
+    observer.observe(ref.current);
+    const dock = document.querySelector('.mobile-tab-bar');
+    if (dock) observer.observe(dock);
+    document.addEventListener('fullscreenchange', schedule);
     window.addEventListener('scroll', schedule, true);
     window.addEventListener('resize', schedule);
     window.visualViewport?.addEventListener('resize', schedule);
     window.visualViewport?.addEventListener('scroll', schedule);
     update();
     return () => {
-      cancelAnimationFrame(frame); observer.disconnect(); map.off('move zoom resize', schedule);
+      cancelAnimationFrame(frame); observer.disconnect();
+      document.removeEventListener('fullscreenchange', schedule);
       window.removeEventListener('scroll', schedule, true); window.removeEventListener('resize', schedule);
       window.visualViewport?.removeEventListener('resize', schedule); window.visualViewport?.removeEventListener('scroll', schedule);
     };
