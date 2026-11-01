@@ -1224,6 +1224,9 @@ a { color: inherit; }
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--ink-3) 13%, transparent);
 }
 .project-visibility-group.is-hidden .project-visibility-head h4 { color: var(--ink-3); }
+.project-visibility-group.is-hidden .row-projects { opacity: .65; }
+.project-visibility-group.is-hidden .row-projects:hover,
+.project-visibility-group.is-hidden .row-projects:focus-within { opacity: .9; }
 .project-visibility-count {
   min-width: 22px;
   margin-left: auto;
