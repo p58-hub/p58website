@@ -8,12 +8,15 @@ const source = fs.readFileSync('dashboard.jsx', 'utf8');
 const component = parse(source, { sourceType: 'script', plugins: ['jsx'] }).program.body
   .find(node => node.type === 'FunctionDeclaration' && node.id.name === 'ProjectAddressField');
 const effect = component.body.body.find(node => node.type === 'ExpressionStatement' && node.expression.callee?.name === 'useEffect').expression.arguments[0];
+const changesHelper = parse(source, { sourceType: 'script', plugins: ['jsx'] }).program.body
+  .find(node => node.type === 'FunctionDeclaration' && node.id.name === 'projectAddressChanges');
+const projectAddressChanges = vm.runInNewContext(`(${source.slice(changesHelper.start, changesHelper.end)})`);
 
 function harness({ address = 'Ακαδημίας 56, Αθήνα 10679', located = false } = {}) {
   const state = { busy: false, results: [], status: '', changes: [], requests: [], timer: null };
   const request = { current: 0 };
   const context = vm.createContext({
-    address, located, request, AbortController,
+    address, located, request, AbortController, projectAddressChanges,
     changeRef: { current: value => state.changes.push(value) },
     setBusy: value => { state.busy = value; },
     setResults: value => { state.results = value; },
@@ -25,7 +28,7 @@ function harness({ address = 'Ακαδημίας 56, Αθήνα 10679', located 
   const cleanup = vm.runInContext(`(${source.slice(effect.start, effect.end)})()`, context);
   return { state, request, cleanup };
 }
-const match = { lat: 37.98, lng: 23.73, label: 'Ακαδημίας 56', approximate: false };
+const match = { lat: 37.98, lng: 23.73, label: 'Ακαδημίας 56', location: 'Ακαδημίας 56, Εξάρχεια, Αθήνα', approximate: false };
 const respond = (pending, results) => pending.resolve({ ok: true, json: async () => ({ results }) });
 
 test('address lookup waits for typing to pause and automatically saves the first match with alternatives', async () => {
@@ -39,8 +42,19 @@ test('address lookup waits for typing to pause and automatically saves the first
   await pending;
   assert.equal(state.changes[0].coordinates.lat, match.lat);
   assert.equal(state.changes[0].coordinates.address, 'Ακαδημίας 56, Αθήνα 10679');
+  assert.equal(state.changes[0].location, 'Ακαδημίας 56, Εξάρχεια, Αθήνα');
+  assert.equal(state.changes[0].location_gr, 'Ακαδημίας 56, Εξάρχεια, Αθήνα');
   assert.equal(state.results.length, 2);
   assert.equal(state.busy, false);
+});
+
+test('alternative address selections update location while incomplete results preserve existing text', () => {
+  const alternative = {...match, location: 'Ermou 10, Syntagma, Athens'};
+  assert.equal(projectAddressChanges(alternative, ' Ermou 10 ').location, alternative.location);
+  const incomplete = projectAddressChanges({...match, location: ''}, 'Athens');
+  assert.equal(Object.hasOwn(incomplete, 'location'), false);
+  assert.equal(Object.hasOwn(incomplete, 'location_gr'), false);
+  assert.equal(incomplete.coordinates.address, 'Athens');
 });
 
 test('saved pins and short addresses do not trigger a lookup', () => {

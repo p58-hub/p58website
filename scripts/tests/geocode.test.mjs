@@ -16,6 +16,15 @@ test('address results preserve Greek labels, correct coordinate order and approx
   assert.throws(() => geocodeResults({}));
 });
 
+test('public location uses street and number, region, city without postal code or country', () => {
+  const locate = properties => geocodeResults({features:[{...feature,properties}]})[0].location;
+  assert.equal(locate({...feature.properties,district:'Εξάρχεια',state:'Αττική',postcode:'10678'}), 'Ακαδημίας 76, Εξάρχεια, Αθήνα');
+  assert.equal(locate({street:'High Street',housenumber:'12',county:'Surrey',town:'Guildford',country:'United Kingdom'}), 'High Street 12, Surrey, Guildford');
+  assert.equal(locate({street:'Ermou',city:'Athens',district:'Athens'}), 'Ermou, Athens');
+  assert.equal(locate({street:'Ermou',city:'Athens'}), 'Ermou, Athens');
+  assert.equal(locate({name:'Athens',city:'Athens'}), '');
+});
+
 test('geocoding requires login, validates addresses, caches searches and handles provider errors', async t => {
   process.env.SESSION_SECRET = 'test-secret-with-at-least-thirty-two-characters';
   const cookie = 'p58_session=' + createToken({u:'test',role:'admin'},60);

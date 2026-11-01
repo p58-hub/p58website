@@ -3013,6 +3013,13 @@ function ProjectPointPicker({ point, onPick }) {
   </div>;
 }
 
+function projectAddressChanges(result, address) {
+  return {
+    coordinates: {...result, address: address.trim()},
+    ...(result.location ? {location: result.location, location_gr: result.location} : {}),
+  };
+}
+
 function ProjectAddressField({ project, onChange }) {
   const [results, setResults] = useState([]);
   const [status, setStatus] = useState("");
@@ -3037,7 +3044,7 @@ function ProjectAddressField({ project, onChange }) {
         if (id !== request.current) return;
         const matches = body.results || [];
         if (matches.length) {
-          changeRef.current({coordinates:{...matches[0],address:address.trim()}});
+          changeRef.current(projectAddressChanges(matches[0], address));
           setResults(matches.length > 1 ? matches : []);
           setStatus('Η διεύθυνση εντοπίστηκε στον χάρτη. Διόρθωσε την πινέζα ή επίλεξε άλλη αντιστοίχιση, αν χρειάζεται.');
         } else {
@@ -3050,13 +3057,13 @@ function ProjectAddressField({ project, onChange }) {
     return () => { clearTimeout(timer); controller.abort(); request.current += 1; };
   }, [address, located, project.id]);
   return <div className="project-address-field">
-    <Field label="Διεύθυνση έργου" hint="Γράψε τη διεύθυνση και ο χάρτης θα εντοπίσει αυτόματα το σημείο. Μπορείς να διορθώσεις τη θέση σύροντας την πινέζα ή κάνοντας κλικ στον χάρτη.">
+    <Field label="Διεύθυνση έργου" hint="Γράψε τη διεύθυνση για αυτόματο εντοπισμό στον χάρτη και συμπλήρωση της τοποθεσίας: Street, Region, City (Οδός και αριθμός, Περιοχή, Πόλη). Έλεγξε τις δύο γλώσσες στην καρτέλα κειμένων. Μπορείς να διορθώσεις την πινέζα στον χάρτη.">
       <input type="text" maxLength="400" value={address} placeholder="π.χ. Ακαδημίας 76, Αθήνα 106 76, Ελλάδα"
         onChange={event => { request.current += 1; setBusy(false); setResults([]); setStatus(""); onChange({address:event.target.value,coordinates:null}); }} />
     </Field>
     <p role="status" aria-live="polite">{busy ? 'Αναζήτηση διεύθυνσης…' : status}</p>
     {results.length > 0 && <div className="project-address-results">{results.map((result,index) => <button className="btn ghost" type="button" key={index} onClick={() => {
-      onChange({coordinates:{...result,address:address.trim()}}); setResults([]); setStatus('Το σημείο συνδέθηκε με τη διεύθυνση.');
+      onChange(projectAddressChanges(result, address)); setResults([]); setStatus('Το σημείο και η τοποθεσία συνδέθηκαν με τη διεύθυνση.');
     }}><span>{result.label}{result.approximate ? ' · Κατά προσέγγιση' : ''}</span></button>)}</div>}
     {located && <p>Σημείο: {point.label || address}{point.approximate ? ' (κατά προσέγγιση)' : ''} · <a href={`https://www.openstreetmap.org/?mlat=${point.lat}&mlon=${point.lng}#map=18/${point.lat}/${point.lng}`} target="_blank" rel="noopener noreferrer">Έλεγχος στον χάρτη</a></p>}
     <ProjectPointPicker point={located ? point : null} onPick={({ lat, lng }) => {
@@ -3080,7 +3087,7 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
     featured: false,
     visible: true,
     name: "",
-    location: "Athens · ",
+    location: "",
     type: "Fast Casual · Retail",
     typology: categories[0]?.id || "",
     year: String(new Date().getFullYear()),
@@ -3485,11 +3492,11 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
           <div className="form-section" hidden={tab !== "texts"}>
             <div className="form-section-title">Λεπτομέρειες έργου</div>
             <div className="field-group">
-              <Field label="Τοποθεσία (Αγγλικά)">
-                <input type="text" value={p.location} onChange={(e) => set("location", e.target.value)} />
+              <Field label="Τοποθεσία (Αγγλικά)" hint="Street, Region, City — συμπληρώνεται από τη διεύθυνση. Διόρθωσε τη μετάφραση αν χρειάζεται.">
+                <input type="text" value={p.location} onChange={(e) => set("location", e.target.value)} placeholder="Akadimias 76, Exarchia, Athens" />
               </Field>
-              <Field label="Τοποθεσία (Ελληνικά)">
-                <input type="text" value={p.location_gr || ""} onChange={(e) => set("location_gr", e.target.value)} placeholder="π.χ. Αθήνα · Πανόρμου" />
+              <Field label="Τοποθεσία (Ελληνικά)" hint="Οδός και αριθμός, Περιοχή, Πόλη — μπορείς να διορθώσεις το αποτέλεσμα της αναζήτησης.">
+                <input type="text" value={p.location_gr || ""} onChange={(e) => set("location_gr", e.target.value)} placeholder="Ακαδημίας 76, Εξάρχεια, Αθήνα" />
               </Field>
             </div>
             <div className="field-group">

@@ -10,8 +10,12 @@ export function geocodeResults(body) {
     const [lng, lat] = feature.geometry?.coordinates || [];
     if (feature.geometry?.type !== 'Point' || !Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return [];
     const p = feature.properties || {};
+    const street = [p.street, p.housenumber].filter(Boolean).join(' ');
+    const city = p.city || p.town || p.village;
+    const region = p.district || p.locality || p.county || p.state;
+    const location = [...new Set([street, region, city].filter(value => typeof value === 'string' && value.trim()).map(value => value.trim()))].join(', ');
     const label = [...new Set([p.name, [p.street,p.housenumber].filter(Boolean).join(' '),p.postcode,p.city || p.town || p.village,p.state,p.country].filter(value => typeof value === 'string' && value))].join(', ').slice(0,600);
-    return label ? [{label,lat,lng,approximate:!p.housenumber}] : [];
+    return label ? [{label,lat,lng,location:street ? location : '',approximate:!p.housenumber}] : [];
   }).slice(0,5);
 }
 
