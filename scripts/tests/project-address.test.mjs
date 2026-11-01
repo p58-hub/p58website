@@ -12,11 +12,12 @@ const changesHelper = parse(source, { sourceType: 'script', plugins: ['jsx'] }).
   .find(node => node.type === 'FunctionDeclaration' && node.id.name === 'projectAddressChanges');
 const projectAddressChanges = vm.runInNewContext(`(${source.slice(changesHelper.start, changesHelper.end)})`);
 
-function harness({ address = 'Ακαδημίας 56, Αθήνα 10679', located = false } = {}) {
+function harness({ address = 'Ακαδημίας 56, Αθήνα 10679', located = false, refresh = false } = {}) {
   const state = { busy: false, results: [], status: '', changes: [], requests: [], timer: null };
   const request = { current: 0 };
   const context = vm.createContext({
     address, located, request, AbortController, projectAddressChanges,
+    refreshRequested: {current: refresh},
     changeRef: { current: value => state.changes.push(value) },
     setBusy: value => { state.busy = value; },
     setResults: value => { state.results = value; },
@@ -60,6 +61,28 @@ test('alternative address selections update location while incomplete results pr
 test('saved pins and short addresses do not trigger a lookup', () => {
   assert.equal(harness({ located: true }).state.timer, null);
   assert.equal(harness({ address: '  abc  ' }).state.timer, null);
+});
+
+test('explicit refresh updates an already located address immediately', async () => {
+  const {state} = harness({located: true, refresh: true});
+  assert.equal(state.delay, 0);
+  const pending = state.timer();
+  respond(state.requests[0], [match]);
+  await pending;
+  assert.equal(state.changes[0].location, match.location);
+  assert.equal(state.changes[0].coordinates.lat, match.lat);
+  assert.equal(state.busy, false);
+  assert.equal(harness({address: 'abc', refresh: true}).state.timer, null);
+});
+
+test('failed explicit refresh keeps the existing saved address and allows retry', async () => {
+  const {state} = harness({located: true, refresh: true});
+  const pending = state.timer();
+  state.requests[0].reject(new Error('Lookup unavailable'));
+  await pending;
+  assert.equal(state.changes.length, 0);
+  assert.equal(state.busy, false);
+  assert.equal(state.status, 'Lookup unavailable');
 });
 
 test('changing the address or closing the editor cancels pending work and ignores a late response', async () => {

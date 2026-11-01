@@ -3025,13 +3025,17 @@ function ProjectAddressField({ project, onChange }) {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const request = useRef(0);
+  const refreshRequested = useRef(false);
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const changeRef = useRef(onChange);
   changeRef.current = onChange;
   const address = project.address || "";
   const point = project.coordinates;
   const located = !!(point && point.address === address.trim() && Number.isFinite(point.lat) && Number.isFinite(point.lng) && Math.abs(point.lat) <= 90 && Math.abs(point.lng) <= 180);
   useEffect(() => {
-    if (located || address.trim().length < 5) return;
+    const refresh = refreshRequested.current;
+    refreshRequested.current = false;
+    if ((located && !refresh) || address.trim().length < 5) return;
     const id = ++request.current;
     const controller = new AbortController();
     const timer = setTimeout(async () => {
@@ -3046,21 +3050,27 @@ function ProjectAddressField({ project, onChange }) {
         if (matches.length) {
           changeRef.current(projectAddressChanges(matches[0], address));
           setResults(matches.length > 1 ? matches : []);
-          setStatus('Η διεύθυνση εντοπίστηκε στον χάρτη. Διόρθωσε την πινέζα ή επίλεξε άλλη αντιστοίχιση, αν χρειάζεται.');
+          setStatus('Η διεύθυνση εντοπίστηκε στον χάρτη.' + (matches[0].location ? ' Η τοποθεσία ενημερώθηκε σε μορφή Street, Region, City.' : ' Δεν βρέθηκε οδός για αυτόματη ενημέρωση της τοποθεσίας.') + ' Οι αλλαγές θα εμφανιστούν στην ιστοσελίδα μετά τη δημοσίευση.');
         } else {
           setStatus('Δεν βρέθηκε διεύθυνση. Πρόσθεσε πόλη, ταχυδρομικό κώδικα ή χώρα, ή επίλεξε σημείο στον χάρτη.');
         }
       } catch (error) {
         if (id === request.current && !controller.signal.aborted) setStatus(error.message || 'Η αναζήτηση απέτυχε.');
       } finally { if (id === request.current) setBusy(false); }
-    }, 1100);
+    }, refresh ? 0 : 1100);
     return () => { clearTimeout(timer); controller.abort(); request.current += 1; };
-  }, [address, located, project.id]);
+  }, [address, located, project.id, refreshVersion]);
   return <div className="project-address-field">
     <Field label="Διεύθυνση έργου" hint="Γράψε τη διεύθυνση για αυτόματο εντοπισμό στον χάρτη και συμπλήρωση της τοποθεσίας: Street, Region, City (Οδός και αριθμός, Περιοχή, Πόλη). Έλεγξε τις δύο γλώσσες στην καρτέλα κειμένων. Μπορείς να διορθώσεις την πινέζα στον χάρτη.">
       <input type="text" maxLength="400" value={address} placeholder="π.χ. Ακαδημίας 76, Αθήνα 106 76, Ελλάδα"
         onChange={event => { request.current += 1; setBusy(false); setResults([]); setStatus(""); onChange({address:event.target.value,coordinates:null}); }} />
     </Field>
+    <button type="button" className="btn ghost" disabled={busy || address.trim().length < 5} onClick={() => {
+      request.current += 1;
+      refreshRequested.current = true;
+      setBusy(true); setResults([]); setStatus("");
+      setRefreshVersion(version => version + 1);
+    }}>{busy ? 'Ενημέρωση…' : 'Ενημέρωση διεύθυνσης'}</button>
     <p role="status" aria-live="polite">{busy ? 'Αναζήτηση διεύθυνσης…' : status}</p>
     {results.length > 0 && <div className="project-address-results">{results.map((result,index) => <button className="btn ghost" type="button" key={index} onClick={() => {
       onChange(projectAddressChanges(result, address)); setResults([]); setStatus('Το σημείο και η τοποθεσία συνδέθηκαν με τη διεύθυνση.');
