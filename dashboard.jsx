@@ -1140,7 +1140,7 @@ function App({ session }) {
             />
           )}
           {section === "projects" && (
-            <ProjectsList data={data.projects} categories={data.categories} onManageCategories={() => goSection("categories")} onEdit={(id) => setEditing({ kind: "project", id })} onDelete={(id) => onDelete("project", id)} onMove={onMoveProject} onToggleVisibility={onToggleProjectVisibility} onNew={() => setEditing({ kind: "project", id: null })} pendingIds={pendingIds} uploads={uploads} onPublishOne={(id) => publishOneProject(id).catch(() => { /* shown in the header */ })} publishBusy={publishState.status === "busy" || draftState !== "saved"} />
+            <ProjectsList data={data.projects} categories={data.categories} onEdit={(id) => setEditing({ kind: "project", id })} onDelete={(id) => onDelete("project", id)} onMove={onMoveProject} onToggleVisibility={onToggleProjectVisibility} onNew={() => setEditing({ kind: "project", id: null })} pendingIds={pendingIds} uploads={uploads} onPublishOne={(id) => publishOneProject(id).catch(() => { /* shown in the header */ })} publishBusy={publishState.status === "busy" || draftState !== "saved"} />
           )}
           {section === "texts" && (
             <ProjectTextsSheet
@@ -1696,7 +1696,7 @@ function filterDashboardProjects(projects, filters, categories) {
   });
 }
 
-function ProjectsList({ data, categories, onManageCategories, onEdit, onDelete, onMove, onToggleVisibility, onNew, pendingIds, uploads, onPublishOne, publishBusy }) {
+function ProjectsList({ data, categories, onEdit, onDelete, onMove, onToggleVisibility, onNew, pendingIds, uploads, onPublishOne, publishBusy }) {
   const emptyFilters = { query: "", category: "", brand: "", year: "", status: "", visibility: "" };
   const [filters, setFilters] = useState(emptyFilters);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -1807,7 +1807,6 @@ function ProjectsList({ data, categories, onManageCategories, onEdit, onDelete, 
   return (
     <>
       <SectionHead title="Έργα" titleAction={<button className="btn primary" type="button" onClick={onNew}>{Ic.plus}<span>Νέο έργο</span></button>}>
-        <button className="btn ghost" type="button" onClick={onManageCategories}>{Ic.plus} Διαχείριση κατηγοριών</button>
         <div className="project-search">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>
           <input type="search" aria-label="Αναζήτηση έργων" placeholder="Όνομα, τοποθεσία ή κωδικός…" value={filters.query} onChange={event => updateFilter("query", event.target.value)} />
