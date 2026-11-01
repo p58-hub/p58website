@@ -1082,7 +1082,7 @@ function App({ session }) {
             </div>
 
             {publishState.status === "error" && <span className="publish-state publish-state--error" role="alert">{publishState.message}</span>}
-            {createKind && <button className="btn ghost new-content-btn" onClick={() => setEditing({ kind: createKind, id: null })}>{Ic.plus}<span>{createLabel}</span></button>}
+            {createKind && section !== "projects" && <button className="btn ghost new-content-btn" onClick={() => setEditing({ kind: createKind, id: null })}>{Ic.plus}<span>{createLabel}</span></button>}
             {can("siteSettings") && <div className="topbar-editor"><window.VisualTextEditor content={data} disabled={publishedCheck !== "connected"} draftState={draftState} site={normaliseSite(data.site || DEFAULT_SITE)} onSave={saveVisualTexts} onPublish={publishVisualTexts} /></div>}
             {showPublish && publishedCheck !== "loading" && (
               <button className="btn primary publish-btn" onClick={() => runPublish(data).catch(() => {})} disabled={publishState.status === "busy" || uploads.active || draftState !== "saved" || publishedCheck !== "connected"}>
@@ -1806,7 +1806,7 @@ function ProjectsList({ data, categories, onManageCategories, onEdit, onDelete, 
 
   return (
     <>
-      <SectionHead title="Έργα">
+      <SectionHead title="Έργα" titleAction={<button className="btn primary" type="button" onClick={onNew}>{Ic.plus}<span>Νέο έργο</span></button>}>
         <button className="btn ghost" type="button" onClick={onManageCategories}>{Ic.plus} Διαχείριση κατηγοριών</button>
         <div className="project-search">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg>
@@ -2327,12 +2327,13 @@ function InquirySheet({ inquiry, onDelete, onClose }) {
   );
 }
 
-function SectionHead({ eyebrow, title, children }) {
+function SectionHead({ eyebrow, title, titleAction, children }) {
   return (
     <div className="section-head">
-      <div>
+      <div className={titleAction ? "section-head-title" : undefined}>
         {eyebrow ? <div className="eyebrow">{eyebrow}</div> : null}
         <h1>{title}</h1>
+        {titleAction}
       </div>
       {children ? <div className="section-head-actions">{children}</div> : null}
     </div>

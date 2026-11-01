@@ -524,6 +524,8 @@ a { color: inherit; }
   margin: 0;
 }
 .section-head-actions { display: flex; align-items: center; justify-content: flex-end; }
+.section-head-title { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.section-head-title > .btn { flex-shrink: 0; }
 
 /* ============ Overview ============ */
 .overview { max-width: 1240px; margin: 0 auto; }
