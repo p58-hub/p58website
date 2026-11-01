@@ -3115,6 +3115,21 @@ function galleryDragScrollSpeed(y, top, bottom) {
   return 0;
 }
 
+function galleryDragPreview(gallery, from, target, box, ratios, gap) {
+  const order = gallery.map((_, i) => i);
+  if (target !== null) order.splice(target, 0, order.splice(from, 1)[0]);
+  const next = target !== null ? window.reorderGalleryGrid(gallery, from, target)
+    : box ? window.placeGalleryImage(gallery, from, box, ratios, gap) : gallery;
+  const layout = window.projectGalleryImageLayout(next, ratios, gap);
+  const byIndex = [];
+  order.forEach((original, index) => { byIndex[original] = layout[index]; });
+  const visualOrder = order.slice().sort((a, b) => byIndex[a].y - byIndex[b].y || byIndex[a].x - byIndex[b].x);
+  return {
+    gallery: visualOrder.map(original => ({ ...gallery[original], grid: byIndex[original] })),
+    layout: byIndex, position: visualOrder.indexOf(from), box: byIndex[from],
+  };
+}
+
 function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories = DEFAULT_CATEGORIES, onManageCategories, defaultProjectBadge, onSave, onPublish, onDraft, draftState, pending, onClose, uploadsActive, publishBusy }) {
   const [p, setP] = useState(() => project ? JSON.parse(JSON.stringify(project)) : ({
     id: newId("pj"),
@@ -3195,6 +3210,9 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
   const dragFrame = useRef(null);
   const dragTick = useRef(null);
   const [dropBox, setDropBox] = useState(null);
+  const [dragPreview, setDragPreview] = useState(null);
+  const [dragFloat, setDragFloat] = useState(null);
+  const dragFloatRef = useRef(null);
   useEffect(() => () => { cancelAnimationFrame(dragFrame.current); dragGesture.current = null; }, []);
   const resizeGesture = useRef(null);
   const [resizeDraft, setResizeDraft] = useState(null);
@@ -3202,9 +3220,10 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
   const galleryRatios = window.useGalleryMediaRatios(p.gallery);
   const galleryGap = window.projectGalleryGap(p);
   const previewGallery = resizeDraft ? window.placeGalleryImage(p.gallery, resizeDraft.i, resizeDraft.box, galleryRatios, galleryGap, true) : p.gallery;
-  const cardLayout = exactGalleryGrid ? window.projectGalleryImageLayout(previewGallery, galleryRatios, galleryGap) : [];
-  const galleryCenterOffset = window.galleryGridCenterOffset(cardLayout);
-  const galleryEmptySlots = exactGalleryGrid ? window.galleryImageEmptySlots(cardLayout, galleryCenterOffset) : [];
+  const baseCardLayout = exactGalleryGrid ? window.projectGalleryImageLayout(previewGallery, galleryRatios, galleryGap) : [];
+  const cardLayout = dragPreview?.layout || baseCardLayout;
+  const galleryCenterOffset = window.galleryGridCenterOffset(dragIndex !== null ? baseCardLayout : cardLayout);
+  const galleryEmptySlots = exactGalleryGrid && dragIndex === null ? window.galleryImageEmptySlots(cardLayout, galleryCenterOffset) : [];
   const autoLayoutHistory = useRef({ key: '', signatures: new Set() });
   const [autoLayoutCount, setAutoLayoutCount] = useState(0);
   const autoLayout = () => {
@@ -3278,7 +3297,7 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
   const endDrag = () => {
     cancelAnimationFrame(dragFrame.current);
     dragGesture.current = null;
-    setDragIndex(null); setOverIndex(null); setDropBox(null);
+    setDragIndex(null); setOverIndex(null); setDropBox(null); setDragPreview(null); setDragFloat(null);
   };
   const placeGallery = (index, box) => setP(current => {
     const gallery = window.placeGalleryImage(current.gallery, index, box, galleryRatios, galleryGap);
@@ -3286,28 +3305,41 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
   });
   const updateDragTarget = () => {
     const gesture = dragGesture.current;
-    if (!gesture || !gesture.moved) return;
+    if (!gesture) return;
     const { files, x, y, i } = gesture;
+    if (dragFloatRef.current) dragFloatRef.current.style.transform = `translate3d(${x - 24}px, ${y - 24}px, 0)`;
+    if (!gesture.moved) return;
     gesture.target = null; gesture.box = null;
     const viewport = gesture.scroller.getBoundingClientRect();
-    const hit = y >= viewport.top && y <= viewport.bottom ? document.elementFromPoint(x, y) : null;
-    const card = hit?.closest('[data-gallery-index]');
-    if (card && files.contains(card) && Number(card.dataset.galleryIndex) !== i) {
-      gesture.target = Number(card.dataset.galleryIndex);
-    } else if (exactGalleryGrid) {
+    if (exactGalleryGrid) {
       const grid = files.querySelector('.gal-grid-exact');
       const rect = grid.getBoundingClientRect();
       if (x >= rect.left && x <= rect.right && y >= rect.top && y >= viewport.top && y <= viewport.bottom) {
         const step = (rect.width + rect.width * galleryGap / 100) / 12;
-        const box = window.galleryImageBox({ ...cardLayout[i],
-          x: 1 + (x - rect.left) / step - gesture.offsetX - galleryCenterOffset,
-          y: Math.max(1, 1 + (y - rect.top) / step - gesture.offsetY),
+        const point = { x: 1 + (x - rect.left) / step - galleryCenterOffset, y: 1 + (y - rect.top) / step };
+        // Hit-test the starting slots, not cards animating into the preview positions.
+        const target = gesture.layout.findIndex(other => point.x >= other.x && point.x <= other.x + other.w && point.y >= other.y && point.y <= other.y + other.h);
+        if (target !== -1 && target !== i) gesture.target = target;
+        const box = window.galleryImageBox({ ...gesture.layout[i],
+          x: point.x - gesture.offsetX,
+          y: Math.max(1, point.y - gesture.offsetY),
         }, galleryRatios[p.gallery[i].src], galleryGap);
-        if (!cardLayout.some((other, index) => index !== i && window.galleryImageOverlaps(box, other))) gesture.box = box;
+        if (target !== i && gesture.target === null && !gesture.layout.some((other, index) => index !== i && window.galleryImageOverlaps(box, other))) gesture.box = box;
       }
+      const key = JSON.stringify([gesture.target, gesture.box]);
+      if (key !== gesture.previewKey) {
+        gesture.previewKey = key;
+        gesture.preview = gesture.target !== null || gesture.box
+          ? galleryDragPreview(p.gallery, i, gesture.target, gesture.box, galleryRatios, galleryGap) : null;
+        setDragPreview(gesture.preview);
+        setDropBox(gesture.preview?.box || gesture.layout[i]);
+      }
+    } else {
+      const hit = y >= viewport.top && y <= viewport.bottom ? document.elementFromPoint(x, y) : null;
+      const card = hit?.closest('[data-gallery-index]');
+      if (card && files.contains(card) && Number(card.dataset.galleryIndex) !== i) gesture.target = Number(card.dataset.galleryIndex);
     }
     setOverIndex(gesture.target);
-    setDropBox(current => JSON.stringify(current) === JSON.stringify(gesture.box) ? current : gesture.box);
   };
   dragTick.current = time => {
     const gesture = dragGesture.current;
@@ -3349,7 +3381,11 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
       const step = grid ? grid.clientWidth * (1 + galleryGap / 100) / 12 : 1;
       dragGesture.current = { i, files, scroller, x: event.clientX, y: event.clientY,
         startX: event.clientX, startY: event.clientY, moved: false,
+        layout: baseCardLayout, target: null, box: null, preview: null,
         offsetX: (event.clientX - rect.left) / step, offsetY: (event.clientY - rect.top) / step };
+      const width = Math.min(200, rect.width * .55, 260 * rect.width / rect.height);
+      setDragFloat({ src: p.gallery[i].src, width, height: width * rect.height / rect.width, x: event.clientX, y: event.clientY });
+      if (exactGalleryGrid) setDropBox(baseCardLayout[i]);
       handle.focus({ preventScroll: true });
       handle.setPointerCapture(event.pointerId);
       setDragIndex(i);
@@ -3373,7 +3409,8 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
       gesture.x = event.clientX; gesture.y = event.clientY;
       updateDragTarget();
       if (gesture.moved) {
-        if (gesture.target !== null) moveGallery(i, gesture.target);
+        if (gesture.preview) setP(current => ({ ...current, gallery: gesture.preview.gallery }));
+        else if (gesture.target !== null) moveGallery(i, gesture.target);
         else if (gesture.box) placeGallery(i, gesture.box);
       }
       endDrag();
@@ -3737,9 +3774,9 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
               <div className="gal-hint">{p.galleryLayout === "grid" ? "Κράτησε τη λαβή για μικρογραφίες και μετακίνηση. Πλησίασε πάνω ή κάτω για κύλιση. Η σειρά ενημερώνεται αυτόματα." : "Σύρε τη λαβή για αλλαγή σειράς. Η ίδια σειρά εμφανίζεται στην ιστοσελίδα."}</div>
             )}
 
-            <div className={`gal-files ${exactGalleryGrid ? "gal-files-scroll" : ""} ${dragIndex !== null ? "is-moving" : ""}`}><div className={exactGalleryGrid ? "gallery-layout-container" : ""}>
+            <div className={`gal-files ${exactGalleryGrid ? "gal-files-scroll" : ""} ${dragIndex !== null ? "is-moving" : ""} ${dragPreview ? "is-previewing" : ""}`}><div className={exactGalleryGrid ? "gallery-layout-container" : ""}>
             <div className={galleryView === "grid" ? `gal-grid ${exactGalleryGrid ? "gallery-layout-canvas gal-grid-exact" : ""}` : ""}
-              style={exactGalleryGrid ? { "--gallery-center": galleryCenterOffset, "--gallery-gap": `${window.projectGalleryGap(p)}cqw`, ...window.galleryImageCanvasStyle(cardLayout.length ? cardLayout : galleryEmptySlots) } : undefined}>
+              style={exactGalleryGrid ? { "--gallery-center": galleryCenterOffset, "--gallery-gap": `${window.projectGalleryGap(p)}cqw`, ...window.galleryImageCanvasStyle(dragIndex !== null ? [...baseCardLayout, ...cardLayout] : cardLayout.length ? cardLayout : galleryEmptySlots) } : undefined}>
               {p.gallery.map((g, i) => (
                 galleryView === "grid" ? (
                   <div key={i} {...dragProps(i)} style={exactGalleryGrid ? window.galleryImageStyle(cardLayout[i]) : undefined}>
@@ -3814,6 +3851,11 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
               </button>)}
               {exactGalleryGrid && dropBox && <div className="gal-drop-preview" aria-hidden="true" style={window.galleryImageStyle(dropBox)} />}
             </div></div></div>
+            {dragFloat && ReactDOM.createPortal(<div className="gal-drag-floating" ref={dragFloatRef} aria-hidden="true"
+              style={{ width: dragFloat.width, height: dragFloat.height, transform: `translate3d(${dragFloat.x - 24}px, ${dragFloat.y - 24}px, 0)` }}>
+              <MediaPreview src={dragFloat.src} alt="" />
+              <span>Θέση {(dragPreview?.position ?? dragIndex) + 1}</span>
+            </div>, document.body)}
           </div>
         </div>
 

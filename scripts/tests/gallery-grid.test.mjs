@@ -399,12 +399,47 @@ test('auto layouts offer distinct compact arrangements without cropping or chang
 });
 
 // Exercise the editor's saved order separately from its transient drag scale.
-for (const name of ['galleryInVisualOrder', 'galleryDragScrollSpeed']) {
+for (const name of ['galleryInVisualOrder', 'galleryDragScrollSpeed', 'galleryDragPreview']) {
   const node = parse(dashboardSource, { sourceType: 'script', plugins: ['jsx'] }).program.body
     .find(node => node.type === 'FunctionDeclaration' && node.id.name === name);
   vm.runInContext(dashboardSource.slice(node.start, node.end), context);
 }
 context.window.projectGalleryImageLayout = context.projectGalleryImageLayout;
+context.window.reorderGalleryGrid = context.reorderGalleryGrid;
+context.window.placeGalleryImage = context.placeGalleryImage;
+
+test('live drag preview maps moving cards to stable originals and commits the exact displayed geometry', () => {
+  const gallery = [
+    { src: 'a', tag: 'A', grid: { x: 1, y: 1, w: 6, h: 4 } },
+    { src: 'b', tag: 'B', grid: { x: 7, y: 1, w: 6, h: 8 } },
+    { src: 'a', tag: 'C', grid: { x: 1, y: 5, w: 6, h: 4 } },
+  ];
+  const ratios = { a: 1.5, b: .75 };
+  const original = plain(gallery);
+  for (const target of [1, 2, 1]) {
+    const preview = context.galleryDragPreview(gallery, 0, target, null, ratios, .6);
+    assert.equal(preview.position, preview.gallery.findIndex(image => image.tag === 'A'));
+    for (let i = 0; i < gallery.length; i++) {
+      assert.deepEqual(plain(preview.layout[i]), plain(preview.gallery.find(image => image.tag === gallery[i].tag).grid));
+    }
+    assert.deepEqual(plain(context.projectGalleryImageLayout(preview.gallery, ratios, .6)), plain(preview.gallery.map(image => image.grid)));
+    assert.deepEqual(plain(preview.box), plain(preview.layout[0]));
+  }
+  assert.deepEqual(gallery, original, 'preview and cancellation never alter the saved gallery');
+});
+
+test('spatial drag preview keeps image dimensions and synchronizes the displayed drop position', () => {
+  const gallery = [
+    { src: 'a', tag: 'A', grid: { x: 1, y: 1, w: 4, h: 4 } },
+    { src: 'b', tag: 'B', grid: { x: 5, y: 1, w: 4, h: 4 } },
+  ];
+  const preview = context.galleryDragPreview(gallery, 0, null, { x: 9, y: 1, w: 4, h: 4 }, { a: 1, b: 1 }, .6);
+  assert.deepEqual(plain(preview.gallery.map(image => image.tag)), ['B', 'A']);
+  assert.equal(preview.position, 1);
+  assert.equal(preview.box.x, 9);
+  assert.equal(preview.box.w, 4);
+  assert.deepEqual(plain(preview.layout[0]), plain(preview.gallery[1].grid));
+});
 
 test('spatial moves synchronize saved order without changing geometry, captions or duplicate media', () => {
   const gallery = [
