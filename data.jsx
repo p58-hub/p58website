@@ -1548,6 +1548,15 @@ function projectCategoryId(project) {
   return raw === "architecture" ? "residential" : raw;
 }
 
+// The category dropdown is the source of both translated project type labels.
+function projectTypeFromCategory(project, categories) {
+  const category = categories.find(item => item.id === projectCategoryId(project));
+  if (!category) return { type: project.type || "", type_gr: project.type_gr || project.type || "" };
+  const label = category.label || category.id;
+  return { type: label, type_gr: category.label_gr || label };
+}
+window.projectTypeFromCategory = projectTypeFromCategory;
+
 /* The badge a project shows in the indexes: project override, then category
    icon, then the one shared site-wide default. */
 function projectIconFor(project, site, categories) {

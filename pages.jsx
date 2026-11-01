@@ -1381,7 +1381,7 @@ function ProjectPage({ id, go, from, transitionDirection }) {
     ["location", pick(p, "location")],
     ["status", statusLabel],
     ["size", pick(p,"size")],
-    ["pd_type", pick(p, "type")],
+    ["pd_type", pick(window.projectTypeFromCategory(p, window.siteCategories()), "type")],
     ["pd_lead_architect", pick(p, "lead_architect")],
     ["pd_design_team", pick(p, "design_team")],
     ["pd_contractor", pick(p, "contractor")],
@@ -1418,7 +1418,7 @@ function ProjectPage({ id, go, from, transitionDirection }) {
           {projectMeta.map(([label, value]) => (
             <div className="pd-meta-card" key={label}>
               <dt><span data-p58-text={label}>{t(label)}</span></dt>
-              <dd data-p58-text={window.siteContentKey("project",p.id,label.replace(/^pd_/,""))}>{value || "—"}</dd>
+              <dd data-p58-text={label === "pd_type" ? undefined : window.siteContentKey("project",p.id,label.replace(/^pd_/,""))}>{value || "—"}</dd>
             </div>
           ))}
         </dl>

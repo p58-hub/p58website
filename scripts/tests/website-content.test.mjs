@@ -65,3 +65,14 @@ test('presentation title edits use their own fields without renaming the brand o
  assert.ok(next.projects.every(project=>project.brand==='Protein Garden'));
  assert.equal(catalogue(next).fields.find(field=>field.key===key('brand','protein-garden','brandStoryTitle')).en,'Our spaces');
 });
+
+test('project type cannot be overridden through visual text editing; category labels remain editable',()=>{
+ const original=input();original.projects[0].type='Legacy';
+ const fields=catalogue(original).fields;
+ assert.equal(fields.some(field=>field.key===key('project','one','type')),false);
+ assert.equal(fields.some(field=>field.key===key('category','retail','label')),true);
+ const next=apply(original,{[key('project','one','type')]:{en:'Manual override'},[key('category','retail','label')]:{en:'Shops',gr:'Καταστήματα'}});
+ assert.equal(next.projects[0].type,'Legacy');
+ assert.equal(next.categories[0].label,'Shops');
+ assert.equal(next.categories[0].label_gr,'Καταστήματα');
+});

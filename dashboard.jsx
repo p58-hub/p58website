@@ -1308,7 +1308,6 @@ function Overview({ data, inquiries, unreadInquiries, onGo, onNewProject, onEdit
 const PROJECT_TEXT_FIELDS = [
   { key: "name", label: "Project name", greek: "name_gr", compact: true },
   { key: "location", label: "Τοποθεσία", greek: "location_gr", compact: true },
-  { key: "type", label: "Type", greek: "type_gr", compact: true },
   { key: "contractor", label: "Contractor", greek: "contractor_gr", compact: true },
   { key: "engineer", label: "Mechanical Engineer", greek: "engineer_gr", compact: true },
   { key: "lead_architect", label: "Lead architect", greek: "lead_architect_gr", compact: true },
@@ -3114,7 +3113,7 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
     visible: true,
     name: "",
     location: "",
-    type: "Fast Casual · Retail",
+    type: "",
     typology: categories[0]?.id || "",
     year: String(new Date().getFullYear()),
     status: "In design",
@@ -3394,7 +3393,7 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
   const subOptions = (activeCat && activeCat.subcategories) || [];
   const subLabel = (activeCat && activeCat.subLabel && activeCat.subLabel !== "Sub-category") ? activeCat.subLabel : "Brand";
   const valid = Boolean(String(p.name || "").trim() && String(p.code || "").trim());
-  const finished = () => ({ ...p, slug: p.slug || suggestedSlug || p.id, typology: selectedCategory });
+  const finished = () => ({ ...p, ...window.projectTypeFromCategory(p, categories), slug: p.slug || suggestedSlug || p.id, typology: selectedCategory });
   const previewHref = valid
     ? `/index.html?preview=${encodeURIComponent(p.id)}#project/${encodeURIComponent(p.slug || suggestedSlug || p.id)}`
     : "";
@@ -3508,7 +3507,10 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
             </div>
             <div className="field-group">
               <Field label="Κατηγορία" hint="Η επιλογή εμφανίζεται στη δημόσια ιστοσελίδα μετά τη δημοσίευση.">
-                <select aria-label="Κατηγορία έργου" value={selectedCategory} onChange={(e) => set("category", e.target.value)}>
+                <select aria-label="Κατηγορία έργου" value={selectedCategory} onChange={(e) => {
+                  const category = e.target.value;
+                  setP(current => ({ ...current, category, typology: category, ...window.projectTypeFromCategory({ ...current, category }, categories) }));
+                }}>
                   {!activeCat && <option value={selectedCategory} disabled>{categories.length ? "Επίλεξε κατηγορία" : "Δεν υπάρχουν κατηγορίες"}</option>}
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>{c.label_gr || c.label}</option>
@@ -3581,14 +3583,6 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
                 </div>
               </Field>
 
-            </div>
-            <div className="field-group">
-              <Field label="Τύπος (Αγγλικά)">
-                <input type="text" value={p.type} onChange={(e) => set("type", e.target.value)} />
-              </Field>
-              <Field label="Τύπος (Ελληνικά)" hint="Αν μείνει κενό, εμφανίζεται το αγγλικό κείμενο.">
-                <input type="text" value={p.type_gr || ""} onChange={(e) => set("type_gr", e.target.value)} />
-              </Field>
             </div>
             <div className="field-group">
               <Field label="Κατασκευαστής (Αγγλικά)">

@@ -37,3 +37,28 @@ test('category additions, removal, labels and ordering survive dashboard/public 
   assert.equal(afterRemoval.length, 1);
   assert.equal(afterRemoval[0].id, 'custom');
 });
+
+const typeContext = vm.createContext({});
+vm.runInContext(declarations('data.jsx', ['projectCategoryId', 'projectTypeFromCategory']), typeContext);
+const plain = value => JSON.parse(JSON.stringify(value));
+test('project type follows the selected category in both languages, including renamed and custom categories', () => {
+  const categories = [
+    { id: 'retail', label: 'Retail', label_gr: 'Λιανική' },
+    { id: 'hospitality', label: 'Hospitality', label_gr: 'Φιλοξενία' },
+    { id: 'custom', label: 'Cultural spaces', label_gr: 'Χώροι πολιτισμού' },
+  ];
+  const project = { category: 'retail', type: 'Old manual type', type_gr: 'Παλιός τύπος' };
+  for (const category of categories) {
+    assert.deepEqual(plain(typeContext.projectTypeFromCategory({ ...project, category: category.id }, categories)),
+      { type: category.label, type_gr: category.label_gr });
+  }
+  categories[0].label = 'Shops'; categories[0].label_gr = 'Καταστήματα';
+  assert.deepEqual(plain(typeContext.projectTypeFromCategory(project, categories)), { type: 'Shops', type_gr: 'Καταστήματα' });
+  assert.equal(project.type, 'Old manual type');
+});
+test('project type handles legacy category ids, missing translations and deleted categories', () => {
+  const categories = [{ id: 'residential', label: 'Residential' }];
+  assert.deepEqual(plain(typeContext.projectTypeFromCategory({ typology: 'architecture' }, categories)), { type: 'Residential', type_gr: 'Residential' });
+  assert.deepEqual(plain(typeContext.projectTypeFromCategory({ category: 'deleted', type: 'Legacy', type_gr: 'Παλιό' }, categories)), { type: 'Legacy', type_gr: 'Παλιό' });
+  assert.deepEqual(plain(typeContext.projectTypeFromCategory({ category: 'deleted' }, [])), { type: '', type_gr: '' });
+});

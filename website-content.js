@@ -14,7 +14,7 @@
     };
     (content.projects || []).forEach((p,i) => {
       const route=`project/${p.id}`;
-      ['name','location','summary','type','status','size','lead_architect','design_team','contractor','engineer'].forEach(field=>add('project',p.id,field,['projects',i],`${p.name} · ${field}`,route,field==='status'?{gr:p.status_gr ?? window.DICT_I18N?.gr?.[p.status] ?? p.status ?? ''}:{}));
+      ['name','location','summary','status','size','lead_architect','design_team','contractor','engineer'].forEach(field=>add('project',p.id,field,['projects',i],`${p.name} · ${field}`,route,field==='status'?{gr:p.status_gr ?? window.DICT_I18N?.gr?.[p.status] ?? p.status ?? ''}:{}));
       (p.gallery || []).forEach((image,j)=>add('gallery',`${p.id}/${j}`,'tag',['projects',i,'gallery',j],`${p.name} · Λεζάντα ${j+1}`,route));
     });
     (content.team || []).forEach((p,i)=>['name','role','note'].forEach(field=>add('team',p._id || i,field,['team',i],`${p.name} · ${field}`,'agency')));
