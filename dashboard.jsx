@@ -2912,6 +2912,20 @@ function appendProjectGalleryImage(project, item) {
   return { ...project, gallery: layout ? gallery.map((image, i) => ({ ...image, grid: layout[i] })) : gallery };
 }
 
+function replaceProjectGalleryImage(project, index, item) {
+  const current = project.gallery[index];
+  if (!current || !item || typeof item.url !== "string" || !item.url.trim() || current.src === item.url) return project;
+  const existingIndex = project.gallery.findIndex(image => image.src === item.url);
+  const replacement = existingIndex < 0
+    ? { src: item.url, tag: item.caption || "", tag_gr: item.caption_gr || "" }
+    : project.gallery[existingIndex];
+  // Keep each slot's geometry; captions travel with the image being exchanged.
+  const content = image => ({ src: image.src, tag: image.tag || "", tag_gr: image.tag_gr || "" });
+  return { ...project, gallery: project.gallery.map((image, i) =>
+    i === index ? { ...image, ...content(replacement) }
+      : i === existingIndex ? { ...image, ...content(current) } : image) };
+}
+
 function GalleryScaleSelect({ image, index, onChange }) {
   return <label className="gal-scale-control">
     <span>Πλάτος</span>
@@ -3691,8 +3705,8 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
 
             {addingGallery && <MediaPicker currentProjectId={p.id} selectedUrls={p.gallery.map(image => image.src)} allowUpload onPick={addGallery} onClose={() => { setAddingGallery(false); setGalleryInsertSlot(null); }} />}
             {replacingGallery !== null && <MediaPicker currentProjectId={p.id} currentProjectName={p.name} initialProjectFilter={p.id}
-              replacementImage={p.gallery[replacingGallery]} allowUpload
-              onPick={item => setGallery(replacingGallery, "src", item.url)}
+              replacementImage={p.gallery[replacingGallery]} selectedUrls={p.gallery.map(image => image.src)} allowUpload
+              onPick={item => setP(project => replaceProjectGalleryImage(project, replacingGallery, item))}
               onClose={() => setReplacingGallery(null)} />}
             <div className="gallery-layout-mode">
               <label>Διάταξη στην ιστοσελίδα
@@ -5465,7 +5479,6 @@ function MediaPicker({ currentProjectId, currentProjectName, initialProjectFilte
     () => groupMediaItems(items, projects, query, projectFilter, dateFrom, dateTo),
     [items, projects, query, projectFilter, dateFrom, dateTo]
   );
-  const projectNames = useMemo(() => new Map(projects.map((project) => [project.id, project.name || project.id])), [projects]);
   const groupNav = [
     groups.graphics.length ? { key: "graphics", label: "Graphic Elements", count: groups.graphics.length } : null,
     groups.backlog.length ? { key: "backlog", label: "Backlog", count: groups.backlog.length } : null,
@@ -5474,22 +5487,20 @@ function MediaPicker({ currentProjectId, currentProjectName, initialProjectFilte
   const visibleGroupKeys = groupNav.map((group) => group.key);
   const activeGroupView = groupView === "all" || visibleGroupKeys.includes(groupView) ? groupView : "all";
   const pickerTitle = replacementImage ? "Αντικατάσταση εικόνας" : allowUpload ? "Προσθήκη εικόνας" : "Βιβλιοθήκη εικόνων";
-  const choose = (item) => { if (!busyRef.current && !selected.has(item.url) && item.url !== replacementImage?.src) { onPick(item); onClose(); } };
+  const choose = (item) => { if (!busyRef.current && (replacementImage || !selected.has(item.url)) && item.url !== replacementImage?.src) { onPick(item); onClose(); } };
   const renderTile = (item) => {
-    const owner = item.projectId && projectNames.get(item.projectId);
-    const isCurrent = owner && item.projectId === currentProjectId;
     const alreadySelected = selected.has(item.url);
     const isReplacementSource = Boolean(replacementImage && item.url === replacementImage.src);
-    const unavailable = alreadySelected || isReplacementSource;
-    const label = isReplacementSource ? "Τρέχουσα εικόνα" : alreadySelected ? "Ήδη στη συλλογή" : null;
+    const unavailable = (!replacementImage && alreadySelected) || isReplacementSource;
+    const label = isReplacementSource ? "Τρέχουσα εικόνα" : alreadySelected ? "Επιλεγμένη στη σελίδα" : null;
     return (
-      <button key={item.id} type="button" className={`media-pick${owner ? " is-assigned" : ""}${unavailable ? " is-selected" : ""}`} onClick={() => choose(item)} disabled={uploading || unavailable} title={label ? `${item.filename} — ${label}` : item.filename}>
+      <button key={item.id} type="button" className={`media-pick${label ? " is-assigned" : ""}${unavailable ? " is-selected" : ""}`} onClick={() => choose(item)} disabled={uploading || unavailable} title={label ? `${item.filename} — ${label}` : item.filename}>
         <span className="media-pick-preview">
           <MediaPreview src={item.url} alt={item.caption || item.filename} lazy />
-          {(label || owner) && <span className={`media-pick-assigned${isCurrent || label ? " is-current" : ""}`} title={label || `Already assigned to ${owner}`}><b>{Ic.check}</b>{label || (isCurrent ? "Current project" : owner)}</span>}
+          {label && <span className="media-pick-assigned is-current" title={label}><b>{Ic.check}</b>{label}</span>}
         </span>
         <span className="media-pick-name">{item.filename}</span>
-        {replacementImage && !unavailable && <span className="media-pick-action">Αντικατάσταση με αυτή</span>}
+        {replacementImage && !unavailable && <span className="media-pick-action">{alreadySelected ? "Ανταλλαγή θέσης" : "Αντικατάσταση με αυτή"}</span>}
       </button>
     );
   };
@@ -5522,7 +5533,7 @@ function MediaPicker({ currentProjectId, currentProjectName, initialProjectFilte
           {replacementImage && <div className="media-picker-replacement">
             <MediaPreview src={replacementImage.src} alt="Τρέχουσα εικόνα προς αντικατάσταση" />
             <div><strong>Τρέχουσα εικόνα{currentProjectName ? ` · ${currentProjectName}` : ""}</strong>
-              <p>Πάτησε μια άλλη εικόνα παρακάτω για άμεση αντικατάσταση στην ίδια θέση.</p>
+              <p>Πάτησε μια άλλη εικόνα για αντικατάσταση στην ίδια θέση. Αν είναι ήδη επιλεγμένη στη σελίδα, οι δύο εικόνες ανταλλάσσουν θέσεις.</p>
               {allowUpload && <p>Η «Νέα εικόνα στην ομάδα» ανεβάζει αρχείο στο έργο, ώστε να μπορείς να το επιλέξεις.</p>}
             </div>
           </div>}

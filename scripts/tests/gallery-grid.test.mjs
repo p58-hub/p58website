@@ -96,9 +96,41 @@ test('fractional packing fills an exact row without rounding drift or false coll
   assert.deepEqual(plain(context.projectGalleryLayout(packed)), plain(packed.map(image => image.grid)));
 });
 const dashboardSource = fs.readFileSync('dashboard.jsx', 'utf8');
-const appendFunctions = parse(dashboardSource, { sourceType: 'script', plugins: ['jsx'] }).program.body.filter(node => node.type === 'FunctionDeclaration' && ['appendProjectGalleryImage', 'projectGalleryHasMedia'].includes(node.id.name));
+const appendFunctions = parse(dashboardSource, { sourceType: 'script', plugins: ['jsx'] }).program.body.filter(node => node.type === 'FunctionDeclaration' && ['appendProjectGalleryImage', 'replaceProjectGalleryImage', 'projectGalleryHasMedia'].includes(node.id.name));
 context.window = { compactProjectGalleryLayout: context.compactProjectGalleryLayout, packGalleryGrid: context.packGalleryGrid, projectGalleryLayout: context.projectGalleryLayout };
 vm.runInContext(appendFunctions.map(node => dashboardSource.slice(node.start, node.end)).join('\n'), context);
+
+test('replacing with a selected image exchanges content without duplicating it or moving slot geometry', () => {
+  const project = { id: 'project', gallery: [
+    { src: '/a.jpg', tag: 'A', tag_gr: 'Α', span: 'gal-6', grid: { x: 1, y: 1, w: 6, h: 4 } },
+    { src: '/b.jpg', tag: 'B edited', tag_gr: 'Β', scale: 25, grid: { x: 7, y: 1, w: 3, h: 6 } },
+    { src: '/c.jpg', tag: 'C' },
+  ] };
+  const before = plain(project);
+  const result = context.replaceProjectGalleryImage(project, 0, { url: '/b.jpg', caption: 'Library caption' });
+  assert.deepEqual(plain(result.gallery.map(image => image.src)), ['/b.jpg', '/a.jpg', '/c.jpg']);
+  assert.equal(new Set(result.gallery.map(image => image.src)).size, 3);
+  assert.equal(result.gallery[0].tag, 'B edited');
+  assert.equal(result.gallery[1].tag_gr, 'Α');
+  assert.equal(result.gallery[0].grid, project.gallery[0].grid);
+  assert.equal(result.gallery[1].grid, project.gallery[1].grid);
+  assert.equal(result.gallery[0].span, 'gal-6');
+  assert.equal(result.gallery[1].scale, 25);
+  assert.equal(result.gallery[2], project.gallery[2]);
+  assert.deepEqual(plain(context.replaceProjectGalleryImage(result, 0, { url: '/a.jpg' })), before);
+  assert.deepEqual(project, before);
+});
+
+test('replacing with unused media updates only the requested slot and rejects invalid selections', () => {
+  const project = { gallery: [{ src: '/a.jpg', tag: 'A', scale: 50 }, { src: '/b.jpg' }] };
+  for (const item of [null, {}, { url: '' }, { url: ' ' }, { url: '/a.jpg' }]) {
+    assert.equal(context.replaceProjectGalleryImage(project, 0, item), project);
+  }
+  assert.equal(context.replaceProjectGalleryImage(project, 9, { url: '/new.jpg' }), project);
+  const result = context.replaceProjectGalleryImage(project, 0, { url: '/new.jpg', caption: 'New', caption_gr: 'Νέα' });
+  assert.deepEqual(plain(result.gallery[0]), { src: '/new.jpg', tag: 'New', tag_gr: 'Νέα', scale: 50 });
+  assert.equal(result.gallery[1], project.gallery[1]);
+});
 
 test('gallery selection appends the chosen media and caption without creating empty entries', () => {
   const project = { id: 'one', gallery: [{ src: 'old.png', scale: 50 }] };

@@ -56,11 +56,25 @@ test('replacement upload belongs to the current project and waits for an explici
   for (const key of ['query', 'dateFrom', 'dateTo']) assert.equal(state[key], '');
   assert.equal(state.pending, 0);
   assert.equal(state.closed, 0);
-  choose({ url: '/current.jpg' }); choose({ url: '/already-used.jpg' });
+  choose({ url: '/current.jpg' });
   assert.equal(state.picked.length, 0);
   choose(state.items[0]);
   assert.equal(state.picked[0].url, '/new.png');
   assert.equal(state.closed, 1);
+});
+
+test('replacement allows an already selected image for exchange, but adding prevents duplicates', () => {
+  const replacement = harness();
+  replacement.choose({ url: '/already-used.jpg' });
+  assert.equal(replacement.state.picked[0].url, '/already-used.jpg');
+  assert.equal(replacement.state.closed, 1);
+  const adding = harness();
+  adding.globals.replacementImage = undefined;
+  adding.choose({ url: '/already-used.jpg' });
+  assert.equal(adding.state.picked.length, 0);
+  assert.equal(adding.state.closed, 0);
+  adding.choose({ url: '/new.jpg' });
+  assert.equal(adding.state.picked[0].url, '/new.jpg');
 });
 
 test('failed replacement upload preserves the gallery and releases the dialog for retry', async () => {
