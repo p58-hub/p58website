@@ -2907,6 +2907,7 @@ const normaliseStatus = (value) => {
 };
 function appendProjectGalleryImage(project, item) {
   if (!item || typeof item.url !== "string" || !item.url.trim()) return project;
+  if (projectGalleryHasMedia(project, item)) return project;
   const gallery = [...project.gallery, { src: item.url, tag: item.caption || "", tag_gr: item.caption_gr || "", span: "gal-6" }];
   const layout = project.galleryLayout === "grid" ? window.compactProjectGalleryLayout(gallery) : null;
   return { ...project, gallery: layout ? gallery.map((image, i) => ({ ...image, grid: layout[i] })) : gallery };
@@ -3086,6 +3087,21 @@ function ProjectAddressField({ project, onChange }) {
   </div>;
 }
 
+// Keep the saved array (and its order controls) aligned with the visible canvas.
+function galleryInVisualOrder(gallery, ratios, gap) {
+  const layout = window.projectGalleryImageLayout(gallery, ratios, gap);
+  return gallery.map((image, i) => ({ ...image, grid: layout[i] }))
+    .sort((a, b) => a.grid.y - b.grid.y || a.grid.x - b.grid.x);
+}
+
+function galleryDragScrollSpeed(y, top, bottom) {
+  const edge = Math.min(72, (bottom - top) / 3);
+  if (edge <= 0) return 0;
+  if (y < top + edge) return -18 * Math.min(1, Math.max(0, (top + edge - y) / edge));
+  if (y > bottom - edge) return 18 * Math.min(1, Math.max(0, (y - bottom + edge) / edge));
+  return 0;
+}
+
 function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories = DEFAULT_CATEGORIES, onManageCategories, defaultProjectBadge, onSave, onPublish, onDraft, draftState, pending, onClose, uploadsActive, publishBusy }) {
   const [p, setP] = useState(() => project ? JSON.parse(JSON.stringify(project)) : ({
     id: newId("pj"),
@@ -3135,7 +3151,7 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
     if (!galleryInsertSlot) { setP(project => appendProjectGalleryImage(project, item)); return; }
     if (!item?.url) return;
     const slot = galleryInsertSlot;
-    const insert = ratio => setP(project => ({ ...project, gallery: window.insertGalleryImageInSlot(project.gallery,
+    const insert = ratio => setP(project => projectGalleryHasMedia(project, item) ? project : ({ ...project, gallery: window.insertGalleryImageInSlot(project.gallery,
       { src: item.url, tag: item.caption || "", tag_gr: item.caption_gr || "", span: "gal-6" },
       slot, { ...galleryRatios, [item.url]: ratio }, window.projectGalleryGap(project)) }));
     // Library thumbnails are normally cached, so dimensions are available at
@@ -3162,11 +3178,11 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
 
   const [dragIndex, setDragIndex] = useState(null);
   const [overIndex, setOverIndex] = useState(null);
-  const dragOrigin = useRef(null);
+  const dragGesture = useRef(null);
+  const dragFrame = useRef(null);
+  const dragTick = useRef(null);
   const [dropBox, setDropBox] = useState(null);
-  // Items only become draggable while the handle is held, so the text
-  // inputs inside a row stay selectable.
-  const [handleHeld, setHandleHeld] = useState(null);
+  useEffect(() => () => { cancelAnimationFrame(dragFrame.current); dragGesture.current = null; }, []);
   const resizeGesture = useRef(null);
   const [resizeDraft, setResizeDraft] = useState(null);
   const exactGalleryGrid = galleryView === "grid" && p.galleryLayout === "grid";
@@ -3205,7 +3221,7 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
     onPointerDown: event => {
       if (event.button !== 0) return;
       event.preventDefault(); event.stopPropagation();
-      setHandleHeld(null);
+      endDrag();
       const grid = event.currentTarget.closest(".gal-grid-exact");
       const gap = grid.clientWidth * window.projectGalleryGap(p) / 100;
       resizeGesture.current = { i, x: event.clientX, y: event.clientY, box: cardLayout[i], step: (grid.clientWidth + gap) / 12 };
@@ -3246,65 +3262,54 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
     return { ...x, gallery };
   });
 
-  const endDrag = () => { setDragIndex(null); setOverIndex(null); setHandleHeld(null); setDropBox(null); dragOrigin.current = null; };
-  const emptyDropBox = event => {
-    if (!exactGalleryGrid || dragIndex === null) return null;
-    const targetCard = event.target.closest(".gal-card");
-    if (targetCard && Number(targetCard.dataset.galleryIndex) !== dragIndex) return null;
-    const grid = event.currentTarget;
-    const rect = grid.getBoundingClientRect();
-    const gap = grid.clientWidth * window.projectGalleryGap(p) / 100;
-    const step = (grid.clientWidth + gap) / 12;
-    const origin = dragOrigin.current || { x: 0, y: 0 };
-    const box = window.galleryImageBox({ ...cardLayout[dragIndex],
-      x: Math.max(1, 1 + (event.clientX - rect.left - origin.x) / step - galleryCenterOffset),
-      y: Math.max(1, 1 + (event.clientY - rect.top - origin.y) / step),
-    }, galleryRatios[p.gallery[dragIndex].src], galleryGap);
-    return cardLayout.some((other, i) => i !== dragIndex && window.galleryImageOverlaps(box, other)) ? null : box;
+  const endDrag = () => {
+    cancelAnimationFrame(dragFrame.current);
+    dragGesture.current = null;
+    setDragIndex(null); setOverIndex(null); setDropBox(null);
   };
-  const gridDropProps = exactGalleryGrid ? {
-    onDragOver: event => {
-      if (dragIndex === null) return;
-      event.preventDefault();
-      const box = emptyDropBox(event);
-      event.dataTransfer.dropEffect = box ? "move" : "none";
-      setOverIndex(null); setDropBox(box);
-    },
-    onDrop: event => {
-      event.preventDefault();
-      const box = emptyDropBox(event);
-      if (box) setP(current => ({ ...current, gallery: window.placeGalleryImage(current.gallery, dragIndex, box, galleryRatios, galleryGap) }));
-      endDrag();
-    },
-    onDragLeave: event => { if (!event.currentTarget.contains(event.relatedTarget)) setDropBox(null); },
-  } : {};
-
-  const dragProps = (i) => ({
+  const placeGallery = (index, box) => setP(current => {
+    const gallery = window.placeGalleryImage(current.gallery, index, box, galleryRatios, galleryGap);
+    return gallery === current.gallery ? current : { ...current, gallery: galleryInVisualOrder(gallery, galleryRatios, galleryGap) };
+  });
+  const updateDragTarget = () => {
+    const gesture = dragGesture.current;
+    if (!gesture || !gesture.moved) return;
+    const { files, x, y, i } = gesture;
+    gesture.target = null; gesture.box = null;
+    const viewport = gesture.scroller.getBoundingClientRect();
+    const hit = y >= viewport.top && y <= viewport.bottom ? document.elementFromPoint(x, y) : null;
+    const card = hit?.closest('[data-gallery-index]');
+    if (card && files.contains(card) && Number(card.dataset.galleryIndex) !== i) {
+      gesture.target = Number(card.dataset.galleryIndex);
+    } else if (exactGalleryGrid) {
+      const grid = files.querySelector('.gal-grid-exact');
+      const rect = grid.getBoundingClientRect();
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y >= viewport.top && y <= viewport.bottom) {
+        const step = (rect.width + rect.width * galleryGap / 100) / 12;
+        const box = window.galleryImageBox({ ...cardLayout[i],
+          x: 1 + (x - rect.left) / step - gesture.offsetX - galleryCenterOffset,
+          y: Math.max(1, 1 + (y - rect.top) / step - gesture.offsetY),
+        }, galleryRatios[p.gallery[i].src], galleryGap);
+        if (!cardLayout.some((other, index) => index !== i && window.galleryImageOverlaps(box, other))) gesture.box = box;
+      }
+    }
+    setOverIndex(gesture.target);
+    setDropBox(current => JSON.stringify(current) === JSON.stringify(gesture.box) ? current : gesture.box);
+  };
+  dragTick.current = time => {
+    const gesture = dragGesture.current;
+    if (!gesture) return;
+    const elapsed = Math.min(32, gesture.time ? time - gesture.time : 16.67);
+    gesture.time = time;
+    if (gesture.moved) {
+      const rect = gesture.scroller.getBoundingClientRect();
+      gesture.scroller.scrollTop += galleryDragScrollSpeed(gesture.y, rect.top, rect.bottom) * elapsed / 16.67;
+      updateDragTarget();
+    }
+    dragFrame.current = requestAnimationFrame(time => dragTick.current(time));
+  };
+  const dragProps = i => ({
     "data-gallery-index": i,
-    draggable: handleHeld === i,
-    onDragStart: (e) => {
-      const rect = e.currentTarget.getBoundingClientRect();
-      dragOrigin.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-      setDragIndex(i);
-      e.dataTransfer.effectAllowed = "move";
-      // Firefox needs data set for a drag to start at all.
-      try { e.dataTransfer.setData("text/plain", String(i)); } catch (err) { /* ignore */ }
-    },
-    onDragOver: (e) => {
-      if (dragIndex === null) return;
-      // A short move can end over the source card; let the grid place it spatially.
-      if (exactGalleryGrid && dragIndex === i) return;
-      e.preventDefault(); e.stopPropagation(); setDropBox(null);
-      e.dataTransfer.dropEffect = "move";
-      if (overIndex !== i) setOverIndex(i);
-    },
-    onDrop: (e) => {
-      if (exactGalleryGrid && dragIndex === i) return;
-      e.preventDefault(); e.stopPropagation();
-      moveGallery(dragIndex, i);
-      endDrag();
-    },
-    onDragEnd: endDrag,
     className: [
       galleryView === "grid" ? "gal-card" : "gallery-item",
       dragIndex === i ? "is-dragging" : "",
@@ -3319,11 +3324,52 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
     type: "button",
     title: exactGalleryGrid ? "Σύρε για μετακίνηση · βέλη για μικρά βήματα" : "Σύρε για αλλαγή σειράς · βέλη πληκτρολογίου",
     "aria-label": `Μετακίνηση εικόνας ${i + 1} από ${p.gallery.length}`,
-    onMouseDown: () => setHandleHeld(i),
-    onMouseUp: () => setHandleHeld(null),
-    onTouchStart: () => setHandleHeld(i),
-    onTouchEnd: () => setHandleHeld(null),
+    onPointerDown: event => {
+      if (event.button !== 0 || dragGesture.current) return;
+      event.preventDefault();
+      const handle = event.currentTarget;
+      const files = handle.closest('.gal-files');
+      const scroller = handle.closest('.sheet-body');
+      const card = handle.closest('[data-gallery-index]');
+      const rect = card.getBoundingClientRect();
+      const grid = files.querySelector('.gal-grid-exact');
+      const step = grid ? grid.clientWidth * (1 + galleryGap / 100) / 12 : 1;
+      dragGesture.current = { i, files, scroller, x: event.clientX, y: event.clientY,
+        startX: event.clientX, startY: event.clientY, moved: false,
+        offsetX: (event.clientX - rect.left) / step, offsetY: (event.clientY - rect.top) / step };
+      handle.focus({ preventScroll: true });
+      handle.setPointerCapture(event.pointerId);
+      setDragIndex(i);
+      // Anchor the source vertically when the overview becomes smaller.
+      dragFrame.current = requestAnimationFrame(time => {
+        if (!dragGesture.current) return;
+        scroller.scrollTop += card.getBoundingClientRect().top - rect.top;
+        dragTick.current(time);
+      });
+    },
+    onPointerMove: event => {
+      const gesture = dragGesture.current;
+      if (!gesture || gesture.i !== i) return;
+      gesture.x = event.clientX; gesture.y = event.clientY;
+      gesture.moved ||= Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) > 4;
+      updateDragTarget();
+    },
+    onPointerUp: event => {
+      const gesture = dragGesture.current;
+      if (!gesture || gesture.i !== i) return;
+      gesture.x = event.clientX; gesture.y = event.clientY;
+      updateDragTarget();
+      if (gesture.moved) {
+        if (gesture.target !== null) moveGallery(i, gesture.target);
+        else if (gesture.box) placeGallery(i, gesture.box);
+      }
+      endDrag();
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    },
+    onPointerCancel: endDrag,
+    onLostPointerCapture: endDrag,
     onKeyDown: (e) => {
+      if (e.key === "Escape" && dragGesture.current) { e.preventDefault(); e.stopPropagation(); endDrag(); return; }
       const direction = { ArrowUp: -1, ArrowLeft: -1, ArrowDown: 1, ArrowRight: 1 }[e.key];
       if (!direction) return;
       e.preventDefault();
@@ -3331,7 +3377,7 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
         const [dx, dy] = { ArrowLeft: [-0.1, 0], ArrowRight: [0.1, 0], ArrowUp: [0, -0.1], ArrowDown: [0, 0.1] }[e.key];
         const box = cardLayout[i];
         const next = { ...box, x: Math.max(1, box.x + dx), y: Math.max(1, box.y + dy) };
-        setP(current => ({ ...current, gallery: window.placeGalleryImage(current.gallery, i, next, galleryRatios, galleryGap) }));
+        placeGallery(i, next);
         return;
       }
       const target = i + direction;
@@ -3389,7 +3435,10 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
   const publish = () => publishReady && onPublish(finished());
 
   useEffect(() => {
-    const k = (e) => { if (e.key === "Escape" && !homeSelectionOpen && !e.defaultPrevented) close(); };
+    const k = (e) => {
+      if (e.key === "Escape" && dragGesture.current) { e.preventDefault(); endDrag(); return; }
+      if (e.key === "Escape" && !homeSelectionOpen && !e.defaultPrevented) close();
+    };
     document.addEventListener("keydown", k);
     return () => document.removeEventListener("keydown", k);
   }, [p, uploadsActive, changed, homeSelectionOpen]);
@@ -3646,8 +3695,9 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
               </div>
             </div>
 
-            {addingGallery && <MediaPicker currentProjectId={p.id} allowUpload onPick={addGallery} onClose={() => { setAddingGallery(false); setGalleryInsertSlot(null); }} />}
-            {replacingGallery !== null && <MediaPicker currentProjectId={p.id}
+            {addingGallery && <MediaPicker currentProjectId={p.id} selectedUrls={p.gallery.map(image => image.src)} allowUpload onPick={addGallery} onClose={() => { setAddingGallery(false); setGalleryInsertSlot(null); }} />}
+            {replacingGallery !== null && <MediaPicker currentProjectId={p.id} currentProjectName={p.name} initialProjectFilter={p.id}
+              replacementImage={p.gallery[replacingGallery]} allowUpload
               onPick={item => setGallery(replacingGallery, "src", item.url)}
               onClose={() => setReplacingGallery(null)} />}
             <div className="gallery-layout-mode">
@@ -3676,11 +3726,11 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
             ) : null}
 
             {p.gallery.length > 1 && (
-              <div className="gal-hint">{p.galleryLayout === "grid" ? "Σύρε τη λαβή για μετακίνηση ή αλλαγή σειράς. Τα κατακόρυφα κενά κλείνουν αυτόματα." : "Σύρε τη λαβή για αλλαγή σειράς. Η ίδια σειρά εμφανίζεται στην ιστοσελίδα."}</div>
+              <div className="gal-hint">{p.galleryLayout === "grid" ? "Κράτησε τη λαβή για μικρογραφίες και μετακίνηση. Πλησίασε πάνω ή κάτω για κύλιση. Η σειρά ενημερώνεται αυτόματα." : "Σύρε τη λαβή για αλλαγή σειράς. Η ίδια σειρά εμφανίζεται στην ιστοσελίδα."}</div>
             )}
 
-            <div className={`gal-files ${exactGalleryGrid ? "gal-files-scroll" : ""}`}><div className={exactGalleryGrid ? "gallery-layout-container" : ""}>
-            <div {...gridDropProps} className={galleryView === "grid" ? `gal-grid ${exactGalleryGrid ? "gallery-layout-canvas gal-grid-exact" : ""}` : ""}
+            <div className={`gal-files ${exactGalleryGrid ? "gal-files-scroll" : ""} ${dragIndex !== null ? "is-moving" : ""}`}><div className={exactGalleryGrid ? "gallery-layout-container" : ""}>
+            <div className={galleryView === "grid" ? `gal-grid ${exactGalleryGrid ? "gallery-layout-canvas gal-grid-exact" : ""}` : ""}
               style={exactGalleryGrid ? { "--gallery-center": galleryCenterOffset, "--gallery-gap": `${window.projectGalleryGap(p)}cqw`, ...window.galleryImageCanvasStyle(cardLayout.length ? cardLayout : galleryEmptySlots) } : undefined}>
               {p.gallery.map((g, i) => (
                 galleryView === "grid" ? (
@@ -3701,7 +3751,6 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
                         <option value="custom" disabled>Προσαρμοσμένο</option>
                         {GALLERY_GRID_PRESETS.map(preset => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
                       </select>}
-                      <button className="remove" onClick={() => removeGallery(i)} title="Αφαίρεση">{Ic.trash}</button>
                     </div>
                     <GalleryThumb value={g.src} index={i}>
                       {exactGalleryGrid && <button {...resizeProps(i)}>
@@ -3713,6 +3762,7 @@ function ProjectSheet({ project, homeProjects = [], onHomeSelection, categories 
                     <ImageCropButton src={g.src} onChange={value => setGallery(i, "src", value)} uploadKey={p.id} compact />
                     <button type="button" className="gal-library-btn" title="Αλλαγή εικόνας από τη βιβλιοθήκη"
                       aria-label={`Αλλαγή εικόνας ${i + 1} από τη βιβλιοθήκη`} onClick={() => setReplacingGallery(i)}>{Ic.grid}</button>
+                    <button type="button" className="remove gal-delete-btn" onClick={() => removeGallery(i)} title="Αφαίρεση" aria-label={`Αφαίρεση εικόνας ${i + 1}`}>{Ic.trash}</button>
                     </div>
                     {p.galleryLayout !== "grid" && <><GalleryScaleSelect image={g} index={i} onChange={value => setGallery(i, "scale", value)} />
                     <GalleryScalePreview image={g} index={i} /></>}
@@ -5322,14 +5372,45 @@ function MediaLibrary({ projects, data, onReplaceData, onExport, onToast }) {
 
 /* Modal used by ImageInput so the editors can reuse an image that is
    already in the library instead of uploading a second copy of it. */
-function MediaPicker({ currentProjectId, onPick, onClose, allowUpload = false }) {
+function MediaPicker({ currentProjectId, currentProjectName, initialProjectFilter = "all", selectedUrls = [], replacementImage, onPick, onClose, allowUpload = false }) {
   const dialogRef = useRef(null);
+  const selected = useMemo(() => new Set(selectedUrls), [selectedUrls]);
   const fileRef = useRef(null);
+  const uploadedItems = useRef([]);
   const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const [uploadNotice, setUploadNotice] = useState("");
   const busyRef = useRef(false);
   busyRef.current = uploading;
   const requestClose = () => { if (!busyRef.current) onClose(); };
   const upload = async event => {
+    if (busyRef.current) return;
+    if (replacementImage) {
+      const file = event.target.files?.[0];
+      event.target.value = "";
+      if (!file) return;
+      busyRef.current = true; setUploading(true); setUploadError(""); setUploadNotice("");
+      uploadRegistry.begin(currentProjectId, 1);
+      try {
+        const shrunk = await downscaleImage(file);
+        const body = await mediaApi.upload({ filename: file.name, dataUrl: shrunk.dataUrl,
+          width: shrunk.width, height: shrunk.height, kind: "image", projectId: currentProjectId });
+        const item = body.item.projectId === currentProjectId ? body.item : await ensureProjectMediaAssignment(body.item, currentProjectId);
+        uploadedItems.current = [item, ...uploadedItems.current.filter(entry => entry.id !== item.id)];
+        setItems(current => [item, ...current.filter(entry => entry.id !== item.id)]);
+        setStatus("ready"); setError(null);
+        setQuery(""); setDateFrom(""); setDateTo("");
+        setProjectFilter(currentProjectId); setGroupView(currentProjectId);
+        setCollapsed(current => ({ ...current, [currentProjectId]: false }));
+        setUploadNotice("Η εικόνα προστέθηκε στην ομάδα του έργου. Πάτησέ τη για να αντικαταστήσεις την τρέχουσα εικόνα.");
+      } catch (error) {
+        setUploadError(`Δεν ολοκληρώθηκε η προσθήκη στην ομάδα του έργου. ${error.message}`);
+      } finally {
+        uploadRegistry.step(currentProjectId);
+        busyRef.current = false; setUploading(false);
+      }
+      return;
+    }
     let url;
     await readImageFile(event, value => { url = value; }, setUploading, currentProjectId);
     if (url) { onPick({ url }); onClose(); }
@@ -5339,27 +5420,31 @@ function MediaPicker({ currentProjectId, onPick, onClose, allowUpload = false })
   const [status, setStatus] = useState(initialItems.length ? "ready" : "loading");
   const [error, setError] = useState(null);
   const [query, setQuery] = useState("");
-  const [projectFilter, setProjectFilter] = useState("all");
+  const [projectFilter, setProjectFilter] = useState(initialProjectFilter);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [groupView, setGroupView] = useState("all");
+  const [groupView, setGroupView] = useState(initialProjectFilter);
   const [collapsed, setCollapsed] = useState({});
   const projects = useMemo(() => {
     const saved = (load().projects || []).slice();
     if (currentProjectId && !saved.some((project) => project.id === currentProjectId)) {
-      saved.unshift({ id: currentProjectId, name: "Current project" });
+      saved.unshift({ id: currentProjectId, name: currentProjectName || "Current project" });
     }
-    return saved;
-  }, [currentProjectId]);
+    return saved.map(project => project.id === currentProjectId && currentProjectName ? { ...project, name: currentProjectName } : project);
+  }, [currentProjectId, currentProjectName]);
 
   useEffect(() => {
     mediaApi
       .list(true)
-      .then((body) => { setItems((body && body.items) || []); setStatus("ready"); })
+      .then((body) => {
+        const uploaded = uploadedItems.current;
+        setItems([...uploaded, ...((body && body.items) || []).filter(item => !uploaded.some(added => added.id === item.id))]);
+        setStatus("ready");
+      })
       .catch((err) => {
         // A cached index is still useful when a background refresh is slow or
         // temporarily unavailable. Only block the picker when nothing can be shown.
-        if (!initialItems.length) { setError(err); setStatus("error"); }
+        if (!initialItems.length && !uploadedItems.current.length) { setError(err); setStatus("error"); }
       });
   }, []);
 
@@ -5394,17 +5479,23 @@ function MediaPicker({ currentProjectId, onPick, onClose, allowUpload = false })
   ].filter(Boolean);
   const visibleGroupKeys = groupNav.map((group) => group.key);
   const activeGroupView = groupView === "all" || visibleGroupKeys.includes(groupView) ? groupView : "all";
-  const choose = (item) => { if (!uploading) { onPick(item); onClose(); } };
+  const pickerTitle = replacementImage ? "Αντικατάσταση εικόνας" : allowUpload ? "Προσθήκη εικόνας" : "Βιβλιοθήκη εικόνων";
+  const choose = (item) => { if (!busyRef.current && !selected.has(item.url) && item.url !== replacementImage?.src) { onPick(item); onClose(); } };
   const renderTile = (item) => {
     const owner = item.projectId && projectNames.get(item.projectId);
     const isCurrent = owner && item.projectId === currentProjectId;
+    const alreadySelected = selected.has(item.url);
+    const isReplacementSource = Boolean(replacementImage && item.url === replacementImage.src);
+    const unavailable = alreadySelected || isReplacementSource;
+    const label = isReplacementSource ? "Τρέχουσα εικόνα" : alreadySelected ? "Ήδη στη συλλογή" : null;
     return (
-      <button key={item.id} type="button" className={`media-pick${owner ? " is-assigned" : ""}`} onClick={() => choose(item)} disabled={uploading} title={item.filename}>
+      <button key={item.id} type="button" className={`media-pick${owner ? " is-assigned" : ""}${unavailable ? " is-selected" : ""}`} onClick={() => choose(item)} disabled={uploading || unavailable} title={label ? `${item.filename} — ${label}` : item.filename}>
         <span className="media-pick-preview">
           <MediaPreview src={item.url} alt={item.caption || item.filename} lazy />
-          {owner && <span className={`media-pick-assigned${isCurrent ? " is-current" : ""}`} title={`Already assigned to ${owner}`}><b>{Ic.check}</b>{isCurrent ? "Current project" : owner}</span>}
+          {(label || owner) && <span className={`media-pick-assigned${isCurrent || label ? " is-current" : ""}`} title={label || `Already assigned to ${owner}`}><b>{Ic.check}</b>{label || (isCurrent ? "Current project" : owner)}</span>}
         </span>
         <span className="media-pick-name">{item.filename}</span>
+        {replacementImage && !unavailable && <span className="media-pick-action">Αντικατάσταση με αυτή</span>}
       </button>
     );
   };
@@ -5420,21 +5511,32 @@ function MediaPicker({ currentProjectId, onPick, onClose, allowUpload = false })
 
   return ReactDOM.createPortal(
     <div className="sheet-wrap media-picker-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) requestClose(); }}>
-      <div className="sheet media-picker" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={allowUpload ? "Προσθήκη εικόνας" : "Βιβλιοθήκη εικόνων"} aria-busy={uploading} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="sheet media-picker" ref={dialogRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={pickerTitle} aria-busy={uploading} onMouseDown={(e) => e.stopPropagation()}>
         <div className="sheet-head">
           <div>
             <div className="eyebrow">/ Media library</div>
-            <h2>{allowUpload ? "Προσθήκη εικόνας" : "Choose an image"}</h2>
+            <h2>{pickerTitle}</h2>
           </div>
           <div className="controls">
+            {replacementImage && allowUpload && <button className="btn primary" type="button" disabled={uploading} onClick={() => fileRef.current?.click()}>{Ic.plus}{uploading ? "Ανέβασμα…" : "Νέα εικόνα στην ομάδα"}</button>}
             <button className="btn ghost" type="button" onClick={requestClose} disabled={uploading} aria-label="Κλείσιμο βιβλιοθήκης">{Ic.close}</button>
           </div>
         </div>
 
         <div className="sheet-body">
-          {allowUpload && <div className="media-picker-upload">
+          {allowUpload && <input ref={fileRef} type="file" accept="image/*,video/mp4" onChange={upload} hidden />}
+          {replacementImage && <div className="media-picker-replacement">
+            <MediaPreview src={replacementImage.src} alt="Τρέχουσα εικόνα προς αντικατάσταση" />
+            <div><strong>Τρέχουσα εικόνα{currentProjectName ? ` · ${currentProjectName}` : ""}</strong>
+              <p>Πάτησε μια άλλη εικόνα παρακάτω για άμεση αντικατάσταση στην ίδια θέση.</p>
+              {allowUpload && <p>Η «Νέα εικόνα στην ομάδα» ανεβάζει αρχείο στο έργο, ώστε να μπορείς να το επιλέξεις.</p>}
+            </div>
+          </div>}
+          {replacementImage && uploading && <p role="status">Η εικόνα ανεβαίνει στην ομάδα του έργου…</p>}
+          {uploadError && <p className="media-note media-note-warn" role="alert">{uploadError}</p>}
+          {uploadNotice && <p className="media-note" role="status">{uploadNotice}</p>}
+          {allowUpload && !replacementImage && <div className="media-picker-upload">
             <p>Επίλεξε από τη βιβλιοθήκη ή ανέβασε μια νέα εικόνα.</p>
-            <input ref={fileRef} type="file" accept="image/*,video/mp4" onChange={upload} hidden />
             <button className="btn primary" type="button" disabled={uploading} onClick={() => fileRef.current?.click()}>{Ic.plus}{uploading ? "Ανέβασμα…" : "Ανέβασμα νέας εικόνας"}</button>
             {uploading && <span role="status">Η εικόνα ανεβαίνει. Περίμενε να ολοκληρωθεί.</span>}
           </div>}
@@ -5445,7 +5547,11 @@ function MediaPicker({ currentProjectId, onPick, onClose, allowUpload = false })
             <Fragment>
               <div className="media-bar media-picker-bar">
                 <input className="media-search" type="search" value={query} placeholder="Search by filename or caption" onChange={(e) => setQuery(e.target.value)} />
-                <select className="media-filter" value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}>
+                <select className="media-filter" aria-label="Φίλτρο έργου" value={projectFilter} onChange={(e) => {
+                  const project = e.target.value;
+                  setProjectFilter(project); setGroupView(project);
+                  setCollapsed(current => ({ ...current, [project]: false }));
+                }}>
                   <option value="all">Όλα τα έργα</option>
                   <option value="backlog">Backlog</option>
                   {projects.map((project) => <option key={project.id} value={project.id}>{project.name || project.id}</option>)}

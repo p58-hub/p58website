@@ -96,9 +96,9 @@ test('fractional packing fills an exact row without rounding drift or false coll
   assert.deepEqual(plain(context.projectGalleryLayout(packed)), plain(packed.map(image => image.grid)));
 });
 const dashboardSource = fs.readFileSync('dashboard.jsx', 'utf8');
-const append = parse(dashboardSource, { sourceType: 'script', plugins: ['jsx'] }).program.body.find(node => node.type === 'FunctionDeclaration' && node.id.name === 'appendProjectGalleryImage');
+const appendFunctions = parse(dashboardSource, { sourceType: 'script', plugins: ['jsx'] }).program.body.filter(node => node.type === 'FunctionDeclaration' && ['appendProjectGalleryImage', 'projectGalleryHasMedia'].includes(node.id.name));
 context.window = { compactProjectGalleryLayout: context.compactProjectGalleryLayout, packGalleryGrid: context.packGalleryGrid, projectGalleryLayout: context.projectGalleryLayout };
-vm.runInContext(dashboardSource.slice(append.start, append.end), context);
+vm.runInContext(appendFunctions.map(node => dashboardSource.slice(node.start, node.end)).join('\n'), context);
 
 test('gallery selection appends the chosen media and caption without creating empty entries', () => {
   const project = { id: 'one', gallery: [{ src: 'old.png', scale: 50 }] };
@@ -117,6 +117,20 @@ test('uploaded media joins the grid in a free slot with the existing image sizes
   assert.equal(result.gallery[0].grid.w, 6);
   assert.equal(result.gallery[0].grid.h, 3);
   assert.equal(context.galleryGridOverlaps(result.gallery[0].grid, result.gallery[1].grid), false);
+});
+
+test('adding an existing gallery image is a no-op even when its library assignment differs', () => {
+  for (const galleryLayout of ['grid', 'vertical']) {
+    const project = { id: 'current', galleryLayout, gallery: [{ src: 'same.png', tag: 'Keep caption', grid: { x: 1, y: 1, w: 6, h: 3 } }] };
+    for (const projectId of ['current', 'other', null]) {
+      assert.equal(context.appendProjectGalleryImage(project, { url: 'same.png', projectId, caption: 'Different caption' }), project);
+    }
+    const next = context.appendProjectGalleryImage(project, { url: 'unused.png', projectId: 'current' });
+    assert.equal(next.gallery.length, 2);
+    assert.equal(context.appendProjectGalleryImage(next, { url: 'unused.png' }), next);
+    const removed = { ...next, gallery: next.gallery.filter(image => image.src !== 'same.png') };
+    assert.equal(context.appendProjectGalleryImage(removed, { url: 'same.png' }).gallery.length, 2);
+  }
 });
 
 test('custom gallery positions survive draft serialization and public normalization', () => {
@@ -350,4 +364,46 @@ test('auto layouts offer distinct compact arrangements without cropping or chang
   assert.deepEqual(gallery,before);
   assert.deepEqual(plain(context.galleryAutoLayouts([],ratios)),[]);
   assert.deepEqual(plain(context.galleryAutoLayouts(gallery.slice(0,1),ratios)),[]);
+});
+
+// Exercise the editor's saved order separately from its transient drag scale.
+for (const name of ['galleryInVisualOrder', 'galleryDragScrollSpeed']) {
+  const node = parse(dashboardSource, { sourceType: 'script', plugins: ['jsx'] }).program.body
+    .find(node => node.type === 'FunctionDeclaration' && node.id.name === name);
+  vm.runInContext(dashboardSource.slice(node.start, node.end), context);
+}
+context.window.projectGalleryImageLayout = context.projectGalleryImageLayout;
+
+test('spatial moves synchronize saved order without changing geometry, captions or duplicate media', () => {
+  const gallery = [
+    { src: 'same', tag: 'First copy', grid: { x: 1, y: 1, w: 4, h: 4 } },
+    { src: 'portrait', tag: 'Second', grid: { x: 5, y: 1, w: 4, h: 6 } },
+    { src: 'same', tag: 'Last copy', tag_gr: 'Τρίτη', grid: { x: 1, y: 10, w: 4, h: 4 } },
+  ];
+  const ratios = { same: 1, portrait: 2/3 };
+  const before = plain(gallery);
+  const moved = context.placeGalleryImage(gallery, 2, { x: 9, y: 1, w: 4, h: 4 }, ratios, .6);
+  const reordered = context.galleryInVisualOrder(moved, ratios, .6);
+  assert.deepEqual(plain(reordered.map(image => image.tag)), ['First copy', 'Second', 'Last copy']);
+  const movedAgain = context.placeGalleryImage(reordered, 0, { x: 9, y: 8, w: 4, h: 4 }, ratios, .6);
+  const result = plain(context.galleryInVisualOrder(movedAgain, ratios, .6));
+  assert.deepEqual(result.map(image => image.tag), ['Second', 'Last copy', 'First copy']);
+  assert.equal(result[1].tag_gr, 'Τρίτη');
+  const layoutBeforeSort = plain(context.projectGalleryImageLayout(movedAgain, ratios, .6));
+  for (const image of result) {
+    const i = movedAgain.findIndex(entry => entry.tag === image.tag);
+    assert.deepEqual(image.grid, layoutBeforeSort[i]);
+  }
+  assert.deepEqual(plain(context.galleryInVisualOrder(result, ratios, .6)), result);
+  assert.deepEqual(gallery, before);
+});
+
+test('drag scrolling accelerates near each edge, stays still in the middle and caps outside', () => {
+  assert.equal(context.galleryDragScrollSpeed(400, 200, 800), 0);
+  assert.ok(context.galleryDragScrollSpeed(210, 200, 800) < -10);
+  assert.ok(context.galleryDragScrollSpeed(790, 200, 800) > 10);
+  assert.equal(context.galleryDragScrollSpeed(-500, 200, 800), -18);
+  assert.equal(context.galleryDragScrollSpeed(1500, 200, 800), 18);
+  assert.equal(context.galleryDragScrollSpeed(100, 200, 200), 0);
+  assert.equal(context.galleryDragScrollSpeed(225, 200, 250), 0);
 });
