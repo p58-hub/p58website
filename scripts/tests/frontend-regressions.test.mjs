@@ -9,6 +9,43 @@ function functions(file, names) {
   return ast.program.body.filter(node => node.type === 'FunctionDeclaration' && names.includes(node.id.name)).map(node => source.slice(node.start,node.end)).join('\n');
 }
 
+test('mobile project views default to cards and keep their selection separate from desktop', () => {
+  const saved = new Map();
+  const context = vm.createContext({ sessionStorage: { getItem: key => saved.get(key) } });
+  vm.runInContext(functions('pages.jsx', ['readProjectsDisplayMode']), context);
+  assert.equal(context.readProjectsDisplayMode(true), 'card');
+  assert.equal(context.readProjectsDisplayMode(false), 'list');
+  saved.set('p58-projects-display', 'list');
+  saved.set('p58-projects-display-mobile', 'map');
+  assert.equal(context.readProjectsDisplayMode(true), 'map');
+  assert.equal(context.readProjectsDisplayMode(false), 'list');
+  saved.set('p58-projects-display-mobile', 'list');
+  assert.equal(context.readProjectsDisplayMode(true), 'list');
+  saved.set('p58-projects-display-mobile', 'invalid');
+  assert.equal(context.readProjectsDisplayMode(true), 'card');
+  context.sessionStorage.getItem = () => { throw new Error('Storage unavailable'); };
+  assert.equal(context.readProjectsDisplayMode(true), 'card');
+});
+
+test('portfolio map reserves visible space above mobile panels and beside desktop panels', () => {
+  let mobile = true;
+  const context = vm.createContext({ window: { matchMedia: () => ({ matches: mobile }) } });
+  vm.runInContext(functions('brand-pages.jsx', ['projectMapVisiblePadding']), context);
+  const panel = { getBoundingClientRect: () => ({ top: 370, width: 300 }) };
+  const container = { getBoundingClientRect: () => ({ bottom: 800 }), closest: () => ({ querySelector: () => panel }) };
+  const mobilePadding = context.projectMapVisiblePadding(container);
+  assert.equal(mobilePadding.paddingBottomRight[0], 24);
+  assert.equal(mobilePadding.paddingBottomRight[1], 446);
+  assert.equal(mobilePadding.paddingTopLeft[1], 55);
+  mobile = false;
+  const desktopPadding = context.projectMapVisiblePadding(container);
+  assert.equal(desktopPadding.paddingBottomRight[0], 345);
+  assert.equal(desktopPadding.paddingBottomRight[1], 100);
+  container.closest = () => null;
+  assert.equal(context.projectMapVisiblePadding(container, true).padding[0], 18);
+  assert.equal(context.projectMapVisiblePadding(container).padding[0], 45);
+});
+
 test('project logo clear, reload, replace and reset preserve the intended badge', () => {
   const source = fs.readFileSync('dashboard.jsx', 'utf8');
   const ast = parse(source, {sourceType:'script',plugins:['jsx']});

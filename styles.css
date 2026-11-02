@@ -6294,6 +6294,7 @@ body.projects-contact-active .projects-view-dock { visibility: hidden; pointer-e
   .projects-page--cards .projects-category-heading h2 { font-size: 32px; }
   .projects-page--cards .projects-category-heading > span { color: var(--ink-3); }
   .projects-page--cards .projects-category-content { padding: 0 0 90px; background: transparent; border-radius: 0; }
+}
   .project-collection-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; }
   .project-collection-tile { display: block; min-width: 0; overflow: hidden; border-radius: 14px; background: #fff; color: var(--ink); }
   .project-collection-tile-photo { aspect-ratio: 1; overflow: hidden; background: var(--paper-2); }
@@ -6304,7 +6305,6 @@ body.projects-contact-active .projects-view-dock { visibility: hidden; pointer-e
   .project-collection-tile p { margin: 0; font: 12px/1.5 var(--sans); color: var(--ink-3); }
   .project-collection-tile-copy > svg { position: absolute; right: 14px; top: 18px; width: 15px; height: 15px; }
   .project-collection-tile:focus-visible { outline: 2px solid var(--ink); outline-offset: 4px; }
-}
 @media (prefers-reduced-motion: reduce) {
   .project-collection-tile-photo > :is(img, video) { transition: none; }
 }
@@ -6534,6 +6534,40 @@ body:has(.brand-hero) .nav { position: fixed; }
   .projects-map-selected-copy { padding: 10px; }
   .projects-map-selected h3 { font-size: 18px; }
   .projects-map-selected p { display: none; }
+}
+
+/* Mobile project browsing keeps view controls clear of the site navigation. */
+@media (max-width: 720px) {
+  .projects-view-dock { bottom: calc(env(safe-area-inset-bottom, 0px) + 84px); max-width: calc(100vw - 24px); gap: 2px; padding: 4px; }
+  .projects-view-dock button { min-height: 44px; padding: 10px 14px; gap: 6px; font-size: 11px; }
+  .projects-view-dock svg { width: 16px; height: 16px; }
+  .projects-page--cards .projects-sheet { padding-bottom: 150px; }
+  .projects-page--cards .projects-category-content { margin: 0 var(--gutter); padding: 0 0 24px; background: transparent; border-radius: 0; }
+  .projects-page--cards .projects-category-heading h2 { font-size: 28px; }
+  .project-collection-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .project-collection-tile-copy { padding: 12px 26px 14px 12px; }
+  .project-collection-tile h3 { font-size: 20px; }
+  .project-collection-tile p { font-size: 11px; }
+  .project-collection-tile-copy > svg { right: 9px; top: 14px; width: 13px; height: 13px; }
+  .projects-page--map .mobile-projects-sheet-head { display: none; }
+  .projects-page--map .projects-category-browser { scroll-margin-top: calc(68px + env(safe-area-inset-top, 0px)); }
+  .projects-page--map .projects-sheet { min-height: 0; }
+  .projects-map-view { height: calc(100dvh - 68px - env(safe-area-inset-top, 0px)); min-height: 480px; }
+  .projects-map-directory { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 148px); left: 12px; right: 12px; width: auto; height: min(280px, 38dvh); padding: 12px; }
+  .projects-map-directory h2 { font-size: 18px; margin-bottom: 8px; flex: none; }
+  .projects-map-selected { display: grid; grid-template-columns: 76px minmax(0, 1fr); margin-bottom: 8px; }
+  .projects-map-selected > :is(img, video) { width: 76px; height: 100%; object-fit: cover; }
+  .projects-map-selected-copy { padding: 10px; min-width: 0; }
+  .projects-map-selected .collection-eyebrow { font-size: 8px; }
+  .projects-map-selected h3 { font-size: 18px; margin: 5px 0; }
+  .projects-map-selected p { display: none; }
+  .projects-map-directory-list { overscroll-behavior-y: contain; }
+  .projects-map-directory button { padding: 10px 6px; min-height: 44px; }
+  .projects-map-directory strong { font-size: 14px; }
+  .projects-map-directory small { font-size: 10px; }
+  .projects-map-view .brand-map .leaflet-left.leaflet-bottom { top: 12px; bottom: auto; }
+  .projects-map-view .brand-map .leaflet-right.leaflet-bottom { top: 12px; bottom: auto; max-width: calc(100% - 80px); }
+  .projects-map-view .leaflet-control-attribution { font-size: 9px; }
 }
 
 /* Existing brand artwork sits inside an SVG map marker. */

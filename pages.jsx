@@ -991,15 +991,21 @@ function MobileCategoryPicker({ categories, activeId, onPick }) {
 }
 
 /* ================== PROJECTS — unified list with type filter ================== */
+function readProjectsDisplayMode(isMobile) {
+  const fallback = isMobile ? "card" : "list";
+  try {
+    const mode = sessionStorage.getItem(isMobile ? "p58-projects-display-mobile" : "p58-projects-display");
+    return ["card", "list", "map"].includes(mode) ? mode : fallback;
+  } catch { return fallback; }
+}
 function ProjectsPage({ go, type, brand, sort, view, transition }) {
   const pick = window.usePick();
   const t = window.useT();
   const isMobile = useHomeMobile();
-  const [displayMode, setDisplayMode] = useS(() => {
-    try { const mode = sessionStorage.getItem("p58-projects-display"); return ["card", "map"].includes(mode) ? mode : "list"; } catch { return "list"; }
-  });
-  const cards = !isMobile && displayMode === "card";
-  const mapView = !isMobile && displayMode === "map";
+  const [displayMode, setDisplayMode] = useS(() => readProjectsDisplayMode(isMobile));
+  useE(() => setDisplayMode(readProjectsDisplayMode(isMobile)), [isMobile]);
+  const cards = displayMode === "card";
+  const mapView = displayMode === "map";
   const browserRef = useR(null);
   const [browserVisible, setBrowserVisible] = useS(false);
   useE(() => {
@@ -1012,7 +1018,7 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
     if (mode === "list") {
       setCollapsedCategories(Object.fromEntries(categoryGroups.map(category => [category.id, true])));
     }
-    try { sessionStorage.setItem("p58-projects-display", mode); } catch {}
+    try { sessionStorage.setItem(isMobile ? "p58-projects-display-mobile" : "p58-projects-display", mode); } catch {}
     requestAnimationFrame(() => (mode === "map" ? browserRef.current : document.getElementById(`projects-category-${activeCategory}`))?.scrollIntoView({ block: "start", behavior: "instant" }));
   };
   // `type` is a dashboard category id — anything the dashboard publishes is a
@@ -1081,7 +1087,7 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
     }, { rootMargin: "-22% 0px -62% 0px", threshold: [0, 0.01, 0.2] });
     sections.forEach((section) => observer.observe(section));
     return () => observer.disconnect();
-  }, [normalisedType, categoryGroups.map((category) => `${category.id}:${category.projects.length}`).join("|")]);
+  }, [normalisedType, displayMode, categoryGroups.map((category) => `${category.id}:${category.projects.length}`).join("|")]);
 
   useE(() => {
     const sections = Array.from(document.querySelectorAll(".projects-subcategory-section[data-subcategory-key]"));
@@ -1096,7 +1102,7 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
     }, { rootMargin: "-26% 0px -58% 0px", threshold: [0, 0.01, 0.2] });
     sections.forEach((section) => observer.observe(section));
     return () => observer.disconnect();
-  }, [normalisedType, categoryGroups.map((category) => `${category.id}:${category.subcategories.length}`).join("|")]);
+  }, [normalisedType, displayMode, categoryGroups.map((category) => `${category.id}:${category.subcategories.length}`).join("|")]);
 
   useE(() => {
     if (!normalisedType || normalisedBrand) return undefined;
@@ -1149,7 +1155,7 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
   };
   return (
     <div className={`projects-page page-enter ${cards ? "projects-page--cards" : ""} ${mapView ? "projects-page--map" : ""} ${transition === "category-open" ? "category-page-enter" : ""}`} key={`${normalisedType || "all"}:${normalisedBrand || "all"}:${order}`}>
-      {!isMobile && browserVisible && ReactDOM.createPortal(<div className="projects-view-dock" role="group" aria-label={pick({label:"Project view",label_gr:"Προβολή έργων"},"label")}>
+      {browserVisible && ReactDOM.createPortal(<div className="projects-view-dock" role="group" aria-label={pick({label:"Project view",label_gr:"Προβολή έργων"},"label")}>
         <button type="button" aria-pressed={cards} onClick={() => chooseDisplay("card")}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>Card</button>
         <button type="button" aria-pressed={!cards && !mapView} onClick={() => chooseDisplay("list")}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="M8 5h13M8 12h13M8 19h13M3 5h1M3 12h1M3 19h1" /></svg>List</button>
         <button type="button" aria-pressed={mapView} onClick={() => chooseDisplay("map")}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Zm6-3v15m6-12v15" /></svg>{t("brand_map")}</button>

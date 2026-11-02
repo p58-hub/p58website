@@ -263,6 +263,15 @@ function bindMapTrackpadZoom(map) {
     touchEvents.forEach(type => container.removeEventListener(type, touch));
   };
 }
+function projectMapVisiblePadding(container, preview = false) {
+  const directory = container.closest(".projects-map-view")?.querySelector(".projects-map-directory");
+  if (!directory) return { padding: preview ? [18,18] : [45,45] };
+  const mapBounds = container.getBoundingClientRect();
+  const panelBounds = directory.getBoundingClientRect();
+  return window.matchMedia("(max-width: 720px)").matches
+    ? { paddingTopLeft:[24,55], paddingBottomRight:[24,Math.max(24,mapBounds.bottom - panelBounds.top + 16)] }
+    : { paddingTopLeft:[45,45], paddingBottomRight:[panelBounds.width + 45,100] };
+}
 function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick, children, preview = false }) {
   const t = window.useT();
   const ref = React.useRef(null);
@@ -301,9 +310,7 @@ function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick
       marker.getElement()?.addEventListener("focus", () => onSelect(project.id, false));
       markersRef.current.set(project.id,marker);
     });
-    const directory = ref.current.closest(".projects-map-view")?.querySelector(".projects-map-directory");
-    const padding = directory ? { paddingTopLeft:[45,45], paddingBottomRight:[directory.getBoundingClientRect().width + 45,100] } : { padding: preview ? [18,18] : [45,45] };
-    if (points.length) map.fitBounds(points, { ...padding, maxZoom:13 });
+    if (points.length) map.fitBounds(points, { ...projectMapVisiblePadding(ref.current, preview), maxZoom:13 });
     const observer = new ResizeObserver(() => {
       map.invalidateSize();
       if (preview && points.length) map.fitBounds(points, { padding:[18,18], maxZoom:13, animate:false });
@@ -314,7 +321,10 @@ function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick
   React.useEffect(() => {
     markersRef.current.forEach((marker,id) => marker.getElement()?.classList.toggle("selected", id === selectedId));
     const marker = markersRef.current.get(selectedId);
-    if (marker && panToSelection) mapRef.current?.panTo(marker.getLatLng());
+    if (marker && panToSelection) {
+      if (ref.current?.closest(".projects-map-view")) mapRef.current?.panInside(marker.getLatLng(), projectMapVisiblePadding(ref.current));
+      else mapRef.current?.panTo(marker.getLatLng());
+    }
   }, [selectedId, panToSelection, projects, pick]);
   React.useEffect(() => {
     const card = detailRef.current;
