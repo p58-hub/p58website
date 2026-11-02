@@ -352,12 +352,58 @@ function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick
   </div>;
 }
 
+function bindMapListEdgeScroll(list) {
+  let frame = null;
+  let speed = 0;
+  let previousTime = 0;
+  const stop = () => {
+    if (frame !== null) cancelAnimationFrame(frame);
+    frame = null;
+    speed = 0;
+  };
+  const step = time => {
+    frame = null;
+    const elapsed = Math.min(50, Math.max(0, time - previousTime));
+    previousTime = time;
+    const before = list.scrollTop;
+    const limit = Math.max(0, list.scrollHeight - list.clientHeight);
+    list.scrollTop = Math.max(0, Math.min(limit, before + speed * elapsed / 1000));
+    if (speed && list.scrollTop !== before) frame = requestAnimationFrame(step);
+  };
+  const move = event => {
+    if (event.pointerType !== "mouse" || event.buttons) { stop(); return; }
+    const bounds = list.getBoundingClientRect();
+    const y = event.clientY - bounds.top;
+    const edge = Math.min(44, bounds.height / 4);
+    if (!edge || y < 0 || y > bounds.height) { stop(); return; }
+    speed = y < edge ? -220 * (1 - y / edge) : y > bounds.height - edge ? 220 * (1 - (bounds.height - y) / edge) : 0;
+    if (!speed) { stop(); return; }
+    if (frame === null) {
+      previousTime = performance.now();
+      frame = requestAnimationFrame(step);
+    }
+  };
+  // Native wheel, touch, keyboard and scrollbar input take over until the mouse moves again.
+  const listeners = { pointerenter: move, pointermove: move, pointerleave: stop, pointerdown: stop, wheel: stop, keydown: stop };
+  Object.entries(listeners).forEach(([type, handler]) => list.addEventListener(type, handler, { passive: true }));
+  window.addEventListener("blur", stop);
+  return () => {
+    stop();
+    Object.entries(listeners).forEach(([type, handler]) => list.removeEventListener(type, handler));
+    window.removeEventListener("blur", stop);
+  };
+}
+
 // The portfolio map uses individual projects, including each brand location.
 function ProjectsLocationMap({ projects, go, from }) {
   const pick = window.usePick();
   const t = window.useT();
   const [selectedId, setSelectedId] = React.useState(null);
   const [panToSelection, setPanToSelection] = React.useState(false);
+  const listRef = React.useRef(null);
+  React.useEffect(() => {
+    if (listRef.current) return bindMapListEdgeScroll(listRef.current);
+  }, [projects.length]);
   const select = React.useCallback((id, pan = true) => {
     setSelectedId(id);
     setPanToSelection(pan);
@@ -376,7 +422,7 @@ function ProjectsLocationMap({ projects, go, from }) {
           <a className="projects-map-open" href={pathFromRoute({name:"project",id:selected.slug || selected.id})} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); go({name:"project",id:selected.slug || selected.id,from}); }}>{t("brand_view_project")}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></a>
         </div>
       </article>
-      <div className="projects-map-directory-list">
+      <div ref={listRef} className="projects-map-directory-list">
       {projects.map((project,index) => <button type="button" key={project.id} aria-pressed={selected.id === project.id} onMouseEnter={() => select(project.id)} onFocus={() => select(project.id)} onClick={() => select(project.id)}><span>{String(index + 1).padStart(2,"0")}</span><div><strong>{pick(project,"name")}</strong><small>{project.brand || pick(project,"location")}</small>{!brandProjectPoint(project) && <small>{pick({label:"Location pending",label_gr:"Εκκρεμεί τοποθεσία"},"label")}</small>}</div></button>)}
       </div>
     </aside>
