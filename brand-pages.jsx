@@ -62,13 +62,34 @@ function CollectionCard({ entry, go, from }) {
   </a>;
 }
 
-function CategoryProjectPreview({ category, go, from }) {
+function ProjectCollectionTile({ entry, go, from }) {
+  const pick = window.usePick();
+  const t = window.useT();
+  const isBrand = entry.kind === "brand";
+  const project = isBrand ? entry.projects[0] : entry.project;
+  const route = isBrand ? { name: "brand", id: entry.id } : { name: "project", id: project.slug || project.id, from };
+  const count = isBrand ? (entry.brandStoreCount ?? entry.projects.length) : null;
+  return <a className="project-collection-tile" href={pathFromRoute(route)} onClick={event => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault(); go(route);
+  }}>
+    <div className="project-collection-tile-photo"><SiteMedia src={isBrand ? entry.brandCover || project.hero : project.hero} alt="" lazy /></div>
+    <div className="project-collection-tile-copy">
+      <h3>{isBrand ? pick(entry,"label") : pick(project,"name")}</h3>
+      <p>{isBrand ? `${count} ${t(count === 1 ? "brand_location" : "brand_locations")}` : pick(project,"location")}</p>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg>
+    </div>
+  </a>;
+}
+
+function CategoryProjectPreview({ category, go, from, cards = false }) {
   const t = window.useT();
   const pick = window.usePick();
   const [expanded, setExpanded] = React.useState(false);
   const entries = projectCollectionEntries(category.projects, category);
   const preview = !expanded && entries.length > 2;
   const listId = `category-preview-${category.id}`;
+  if (cards) return <div className="project-collection-grid">{entries.map(entry => <ProjectCollectionTile key={`${entry.kind}:${entry.id}`} entry={entry} go={go} from={from} />)}</div>;
   return <div className="category-project-preview">
     <div id={listId} className="collection-list">
       {(expanded ? entries : entries.slice(0, 2)).map(entry => <CollectionCard key={`${entry.kind}:${entry.id}`} entry={entry} go={go} from={from} />)}
@@ -105,6 +126,47 @@ function brandProjectPoint(project) {
   return area ? { point: area[1], approximate: true } : null;
 }
 
+function projectMapIdentity(project) {
+  const label = String(project.brand || "").trim();
+  const category = window.siteCategory(window.projectCategoryId(project));
+  const brand = category?.subcategories?.find(item => String(item.label || "").trim().toLowerCase() === label.toLowerCase());
+  const palette = window.normaliseBrandPresentation(brand || { label });
+  // Never inherit the site-wide badge: it may belong to a different brand.
+  const logo = project.icon === null ? "" : project.icon || brand?.brandLogo || brand?.icon ||
+    (label.toLowerCase() === "protein garden" ? "assets/proteingarden/Protein Garden New logo_final-03.png" : "");
+  return { logo, label: label || project.name || "", color: palette.mapColor };
+}
+
+function projectMapMarker(project, preview) {
+  const identity = projectMapIdentity(project);
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 48 48");
+  svg.setAttribute("aria-hidden", "true");
+  svg.classList.add("project-marker-logo");
+  svg.style.setProperty("--marker-color", identity.color);
+  const circle = document.createElementNS(ns, "circle");
+  circle.setAttribute("cx", "24"); circle.setAttribute("cy", "24"); circle.setAttribute("r", "21");
+  svg.append(circle);
+  const fallback = () => {
+    const text = document.createElementNS(ns, "text");
+    text.setAttribute("x", "24"); text.setAttribute("y", "25");
+    text.textContent = identity.label.length > 8 ? identity.label.split(/\s+/).map(word => word[0]).join("").slice(0, 3) : identity.label;
+    svg.append(text);
+  };
+  if (identity.logo) {
+    const image = document.createElementNS(ns, "image");
+    image.setAttribute("href", identity.logo);
+    image.setAttribute("x", "6"); image.setAttribute("y", "6");
+    image.setAttribute("width", "36"); image.setAttribute("height", "36");
+    image.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    image.addEventListener("error", () => { image.remove(); fallback(); }, {once:true});
+    svg.append(image);
+  } else fallback();
+  const size = preview ? 26 : 48;
+  return window.L.divIcon({className:"brand-map-marker brand-map-marker--logo",html:svg,iconSize:[size,size],iconAnchor:[size/2,size/2]});
+}
+
 function brandMapColorMatrix(dark, light) {
   const channel = (hex, index) => parseInt(hex.slice(index, index + 2), 16) / 255;
   return [1, 3, 5].map(index => {
@@ -119,39 +181,51 @@ function brandMapCardPosition(card, bounds) {
   const top = Math.max(bounds.top, bounds.bottom - card.height);
   return { left, top };
 }
-function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick, color, background, children }) {
+function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick, children, preview = false }) {
   const t = window.useT();
-  const filterId = React.useId().replace(/:/g, "");
   const ref = React.useRef(null);
   const mapRef = React.useRef(null);
   const markersRef = React.useRef(new Map());
   const detailRef = React.useRef(null);
   const [cardPosition, setCardPosition] = React.useState(null);
-  const [failed, setFailed] = React.useState(!window.L);
+  const [failed, setFailed] = React.useState(!window.L?.maplibreGL);
   React.useEffect(() => {
     if (!window.L || !ref.current) return;
-    const map = window.L.map(ref.current, { scrollWheelZoom: false, zoomControl: false }).setView([37.97,23.73],11);
+    const map = window.L.map(ref.current, { scrollWheelZoom: false, zoomAnimation: false, zoomControl: false, attributionControl: !preview, dragging: !preview, touchZoom: !preview, doubleClickZoom: !preview, boxZoom: !preview, keyboard: !preview, minZoom: 2, maxZoom: 19 }).setView([37.97,23.73],11);
     mapRef.current = map;
-    window.L.control.zoom({ position: "bottomleft" }).addTo(map);
-    const tiles = window.L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(map);
-    tiles.on("tileerror", () => setFailed(true));
+    if (!preview) window.L.control.zoom({ position: "bottomleft" }).addTo(map);
+    setFailed(false);
+    try {
+      const tiles = window.L.maplibreGL({
+        style: window.p58MapStyle({ preview }),
+        interactive: false,
+        attributionControl: false,
+      }).addTo(map);
+      if (!preview) map.attributionControl?.addAttribution(window.P58_MAP_ATTRIBUTION);
+      const vectorMap = tiles.getMaplibreMap();
+      vectorMap.on("error", () => setFailed(true));
+      vectorMap.on("idle", () => { if (vectorMap.areTilesLoaded()) setFailed(false); });
+    } catch { setFailed(true); }
     const points = [];
-    projects.forEach((project, index) => {
+    projects.forEach(project => {
       const position = brandProjectPoint(project);
       if (!position) return;
       points.push(position.point);
-      const marker = window.L.marker(position.point, { title:pick(project,"name"), icon:window.L.divIcon({className:"brand-map-marker",html:`<span>${String(index + 1).padStart(2,"0")}</span>`,iconSize:[36,36],iconAnchor:[18,18]}) }).addTo(map);
+      const marker = window.L.marker(position.point, { interactive: !preview, keyboard: !preview, title:[project.brand, pick(project,"name")].filter(Boolean).join(" · "), icon:projectMapMarker(project, preview) }).addTo(map);
       marker.on("click", () => onSelect(project.id));
       // Preview without moving the map underneath the pointer.
       marker.on("mouseover", () => onSelect(project.id, false));
       marker.getElement()?.addEventListener("focus", () => onSelect(project.id, false));
       markersRef.current.set(project.id,marker);
     });
-    if (points.length) map.fitBounds(points, { padding:[45,45], maxZoom:13 });
-    const observer = new ResizeObserver(() => map.invalidateSize());
+    if (points.length) map.fitBounds(points, { padding: preview ? [18,18] : [45,45], maxZoom:13 });
+    const observer = new ResizeObserver(() => {
+      map.invalidateSize();
+      if (preview && points.length) map.fitBounds(points, { padding:[18,18], maxZoom:13, animate:false });
+    });
     observer.observe(ref.current);
-    return () => { observer.disconnect(); map.remove(); mapRef.current = null; markersRef.current.clear(); };
-  }, [projects, pick, onSelect]);
+    return () => { observer.disconnect(); map.stop(); map.remove(); mapRef.current = null; markersRef.current.clear(); };
+  }, [projects, pick, onSelect, preview]);
   React.useEffect(() => {
     markersRef.current.forEach((marker,id) => marker.getElement()?.classList.toggle("selected", id === selectedId));
     const marker = markersRef.current.get(selectedId);
@@ -195,12 +269,40 @@ function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick
       window.visualViewport?.removeEventListener('resize', schedule); window.visualViewport?.removeEventListener('scroll', schedule);
     };
   }, [selectedId, projects, pick]);
-  return <div className="brand-map-wrap" style={{"--brand-map-filter":`url(#${filterId})`}}>
-    <svg width="0" height="0" aria-hidden="true" style={{position:"absolute"}}><defs><filter id={filterId} colorInterpolationFilters="sRGB"><feColorMatrix type="matrix" values={brandMapColorMatrix(color,background)} /></filter></defs></svg>
+  return <div className="brand-map-wrap" style={{"--brand-map-filter":"none"}}>
     <div ref={ref} className="brand-map" role="region" aria-label={t("brand_map_of_project_areas")} />
-    <div ref={detailRef} className="brand-map-detail" style={cardPosition}>{children}</div>
+    {!preview && <div ref={detailRef} className="brand-map-detail" style={cardPosition}>{children}</div>}
     {failed && <p className="brand-map-error"><span data-p58-text={"brand_the_map_could_not_load_all_locations_are_available_in_list_view"}>{t("brand_the_map_could_not_load_all_locations_are_available_in_list_view")}</span></p>}
   </div>;
+}
+
+// The portfolio map uses individual projects, including each brand location.
+function ProjectsLocationMap({ projects, go, from }) {
+  const pick = window.usePick();
+  const t = window.useT();
+  const [selectedId, setSelectedId] = React.useState(null);
+  const [panToSelection, setPanToSelection] = React.useState(false);
+  const select = React.useCallback((id, pan = true) => {
+    setSelectedId(id);
+    setPanToSelection(pan);
+  }, []);
+  const selected = projects.find(project => project.id === selectedId) || projects[0];
+  if (!selected) return null;
+  return <section className="projects-map-view" aria-label={t("brand_map_of_project_areas")}>
+    <div className="projects-map-canvas">
+      <BrandLocationMap projects={projects} selectedId={selected.id} panToSelection={panToSelection} onSelect={select} pick={pick} color="#aaa79f" background="#f4f4f2">
+        <SiteMedia src={selected.hero} alt={pick(selected,"name")} lazy />
+        <div className="brand-map-detail-copy"><span className="collection-eyebrow">{selected.brand || pick(selected,"location")}</span><h3>{pick(selected,"name")}</h3><p>{pick(selected,"location")}</p>
+          <a className="projects-map-open" href={pathFromRoute({name:"project",id:selected.slug || selected.id})} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); go({name:"project",id:selected.slug || selected.id,from}); }}>{t("brand_view_project")}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></a>
+        </div>
+      </BrandLocationMap>
+    </div>
+    <aside className="projects-map-directory" aria-label={t("projects")}>
+      <h2>{t("projects")} <span>{projects.length}</span></h2>
+      <p className="brand-map-note">{t("brand_markers_indicate_neighbourhoods_not_exact_store_addresses_locatio")}</p>
+      {projects.map((project,index) => <button type="button" key={project.id} aria-pressed={selected.id === project.id} onClick={() => select(project.id)}><span>{String(index + 1).padStart(2,"0")}</span><div><strong>{pick(project,"name")}</strong><small>{project.brand || pick(project,"location")}</small>{!brandProjectPoint(project) && <small>{pick({label:"Location pending",label_gr:"Εκκρεμεί τοποθεσία"},"label")}</small>}</div></button>)}
+    </aside>
+  </section>;
 }
 
 function BrandMotionImage({ src, alt }) {
@@ -281,7 +383,7 @@ function BrandPage({ id, go }) {
   const t = window.useT();
   const pick = window.usePick();
   const brand = React.useMemo(() => publishedBrand(id), [id]);
-  const [view, setView] = React.useState("map");
+  const [view, setView] = React.useState("list");
   const [selectedId, setSelectedId] = React.useState(null);
   const [panToSelection, setPanToSelection] = React.useState(false);
   const selectLocation = React.useCallback((projectId, pan = true) => {
@@ -291,6 +393,23 @@ function BrandPage({ id, go }) {
   const [conceptModalOpen, setConceptModalOpen] = React.useState(false);
   const [fullscreen, setFullscreen] = React.useState(false);
   const locationsRef = React.useRef(null);
+  const listRef = React.useRef(null);
+  const [locationsVisible, setLocationsVisible] = React.useState(false);
+  React.useEffect(() => {
+    setLocationsVisible(false);
+    const target = view === "list" ? listRef.current : locationsRef.current;
+    if (!target) return;
+    const observer = new IntersectionObserver(([entry]) => setLocationsVisible(entry.isIntersecting), {
+      rootMargin: "-25% 0px -25% 0px",
+    });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [view, id]);
+  React.useEffect(() => {
+    if (view !== "map") return;
+    locationsRef.current?.scrollIntoView({ block: "start" });
+    locationsRef.current?.focus({ preventScroll: true });
+  }, [view]);
   React.useEffect(() => {
     const update = () => {
       const active = document.fullscreenElement === locationsRef.current;
@@ -300,6 +419,14 @@ function BrandPage({ id, go }) {
     document.addEventListener("fullscreenchange", update);
     return () => document.removeEventListener("fullscreenchange", update);
   }, []);
+  const showList = async () => {
+    if (document.fullscreenElement === locationsRef.current) await document.exitFullscreen();
+    setView("list");
+    requestAnimationFrame(() => {
+      locationsRef.current?.scrollIntoView({ block: "start" });
+      locationsRef.current?.focus({ preventScroll: true });
+    });
+  };
   const toggleFullscreen = async () => {
     try {
       if (document.fullscreenElement) await document.exitFullscreen();
@@ -331,7 +458,7 @@ function BrandPage({ id, go }) {
       <header className="brand-locations-head"><div><span className="collection-eyebrow"><span data-p58-text={"brand_explore_the_collection"}>{t("brand_explore_the_collection")}</span></span><h2><span data-p58-text={"brand_places_spaces"}>{t("brand_places_spaces")}</span></h2></div>
         <div className="brand-view-toggle" aria-label={t("brand_location_view")}>
           <button aria-pressed={view === "map"} onClick={() => setView("map")}>◎ <span data-p58-text={"brand_map"}>{t("brand_map")}</span></button>
-          {!fullscreen && <button aria-pressed={view === "list"} onClick={() => setView("list")}>☰ <span data-p58-text={"brand_list"}>{t("brand_list")}</span></button>}
+          {!fullscreen && <button aria-pressed={view === "list"} onClick={showList}>☰ <span data-p58-text={"brand_list"}>{t("brand_list")}</span></button>}
           {document.fullscreenEnabled && <button onClick={toggleFullscreen} aria-label={t(fullscreen ? "brand_exit_fullscreen" : "brand_fullscreen_map")}>{fullscreen ? "↙" : "⛶"}</button>}
         </div>
       </header>
@@ -340,10 +467,20 @@ function BrandPage({ id, go }) {
           <SiteMedia src={selected.hero} alt={pick(selected,"name")} lazy /><div className="brand-map-detail-copy"><span className="collection-eyebrow"><span data-p58-text={window.siteContentKey("project",selected.id,"location")}>{pick(selected,"location")}</span></span><h3><span data-p58-text={window.siteContentKey("project",selected.id,"name")}>{pick(selected,"name")}</span></h3>{selected.address && <p>{selected.address}</p>}<p><span data-p58-text={window.siteContentKey("project",selected.id,"summary")}>{pick(selected,"summary")}</span></p><button onClick={() => openProject(selected)}><span data-p58-text={"brand_view_project"}>{t("brand_view_project")}</span> ↗</button></div>
           </BrandLocationMap>
         </div>
-      </> : <div className="brand-location-list">{brand.projects.map((project,index) => <a key={project.id} href={pathFromRoute({name:"project",id:project.slug || project.id})} onClick={event => {if (event.metaKey || event.ctrlKey) return; event.preventDefault(); openProject(project);}}><span className="collection-eyebrow">{String(index+1).padStart(2,"0")}</span><SiteMedia src={project.hero} alt="" lazy /><div><h3><span data-p58-text={window.siteContentKey("project",project.id,"name")}>{pick(project,"name")}</span></h3><p><span data-p58-text={window.siteContentKey("project",project.id,"location")}>{pick(project,"location")}</span></p>{project.address && <p>{project.address}</p>}</div><span aria-hidden="true">↗</span></a>)}</div>}
+      </> : <>
+        <div ref={listRef} className="brand-location-list">{brand.projects.map((project,index) => <a key={project.id} href={pathFromRoute({name:"project",id:project.slug || project.id})} onClick={event => {if (event.metaKey || event.ctrlKey) return; event.preventDefault(); openProject(project);}}><span className="collection-eyebrow">{String(index+1).padStart(2,"0")}</span><SiteMedia src={project.hero} alt="" lazy /><div><h3><span data-p58-text={window.siteContentKey("project",project.id,"name")}>{pick(project,"name")}</span></h3><p><span data-p58-text={window.siteContentKey("project",project.id,"location")}>{pick(project,"location")}</span></p>{project.address && <p>{project.address}</p>}</div><span aria-hidden="true">↗</span></a>)}</div>
+      </>}
+      {locationsVisible && ReactDOM.createPortal(<div className={`brand-map-preview ${view === "map" ? "brand-map-preview--list" : ""}`} style={{"--brand-color":brand.mapColor,"--brand-map-background":brand.mapBackground,"--brand-accent":brand.mapAccent}}>
+        {view === "list" ? <div aria-hidden="true"><BrandLocationMap preview projects={brand.projects} onSelect={selectLocation} pick={pick} color={brand.mapColor} background={brand.mapBackground} /></div> :
+          <div className="brand-list-preview-rows" aria-hidden="true">{brand.projects.slice(0, 3).map(project => <div key={project.id}><SiteMedia src={project.hero} alt="" lazy /><span>{pick(project,"name")}</span></div>)}</div>}
+        <button type="button" className="brand-map-preview-open" onClick={view === "list" ? () => setView("map") : showList}>
+          <span><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{view === "list" ? <path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Zm6-3v15m6-12v15" /> : <path d="M8 5h13M8 12h13M8 19h13M3 5h1M3 12h1M3 19h1" />}</svg>{t(view === "list" ? "brand_map" : "brand_list")}<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></span>
+        </button>
+        {view === "list" && <div className="brand-map-preview-credit"><a href="https://openfreemap.org/" target="_blank" rel="noopener noreferrer">OpenFreeMap</a> · <a href="https://openmaptiles.org/" target="_blank" rel="noopener noreferrer">© OpenMapTiles</a> · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© OpenStreetMap</a></div>}
+      </div>, fullscreen ? locationsRef.current : document.body)}
     </section>
     <div className="brand-map-support">        <p className="brand-map-note"><span data-p58-text={"brand_markers_indicate_neighbourhoods_not_exact_store_addresses_locatio"}>{t("brand_markers_indicate_neighbourhoods_not_exact_store_addresses_locatio")}</span></p>
     </div>
   </div>;
 }
-Object.assign(window,{CategoryIcon,CategoryProjectPreview,BrandPage,publishedBrand});
+Object.assign(window,{CategoryIcon,CategoryProjectPreview,BrandPage,publishedBrand,ProjectsLocationMap});

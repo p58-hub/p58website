@@ -407,7 +407,14 @@ function HomePage({ go }) {
         <div className="dhome-hero-veil" aria-hidden="true" />
         <a className="dhome-hero-project-link" href={`/projects/${encodeURIComponent(cur.slug || cur.id)}`} aria-label={`${t("project")}: ${pick(cur, "name")}`}
           draggable={false}
-          onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); go({ name:"project", id:cur.slug || cur.id, from:{name:"home"} }); }}
+          onClick={event => {
+            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            event.preventDefault();
+            // Mouse: open on the second click. Keep keyboard and touch activation direct.
+            if (event.detail === 0 || event.detail === 2 || event.nativeEvent.pointerType === "touch") {
+              go({ name:"project", id:cur.slug || cur.id, from:{name:"home"} });
+            }
+          }}
           onKeyDown={event => { if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') { event.preventDefault(); changeHero(event.key === 'ArrowRight' ? 1 : -1); } }} />
         {featured.length > 1 && [-1, 1].map(direction => <button
           key={direction}
@@ -987,6 +994,27 @@ function MobileCategoryPicker({ categories, activeId, onPick }) {
 function ProjectsPage({ go, type, brand, sort, view, transition }) {
   const pick = window.usePick();
   const t = window.useT();
+  const isMobile = useHomeMobile();
+  const [displayMode, setDisplayMode] = useS(() => {
+    try { const mode = sessionStorage.getItem("p58-projects-display"); return ["card", "map"].includes(mode) ? mode : "list"; } catch { return "list"; }
+  });
+  const cards = !isMobile && displayMode === "card";
+  const mapView = !isMobile && displayMode === "map";
+  const browserRef = useR(null);
+  const [browserVisible, setBrowserVisible] = useS(false);
+  useE(() => {
+    const observer = new IntersectionObserver(([entry]) => setBrowserVisible(entry.isIntersecting), { rootMargin: "-80px 0px -80px 0px" });
+    if (browserRef.current) observer.observe(browserRef.current);
+    return () => observer.disconnect();
+  }, [sort, type, brand]);
+  const chooseDisplay = mode => {
+    setDisplayMode(mode);
+    if (mode === "list") {
+      setCollapsedCategories(Object.fromEntries(categoryGroups.map(category => [category.id, true])));
+    }
+    try { sessionStorage.setItem("p58-projects-display", mode); } catch {}
+    requestAnimationFrame(() => (mode === "map" ? browserRef.current : document.getElementById(`projects-category-${activeCategory}`))?.scrollIntoView({ block: "start", behavior: "instant" }));
+  };
   // `type` is a dashboard category id — anything the dashboard publishes is a
   // valid filter here, not just the two the nav's category row happens to show.
   const categoryList = window.siteCategories().filter((category) =>
@@ -1022,7 +1050,8 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
   const firstCategoryId = categoryGroups.find((category) => category.projects.length)?.id || categoryGroups[0]?.id || null;
   const [activeCategory, setActiveCategory] = useS(normalisedType || firstCategoryId);
   const [activeSubcategory, setActiveSubcategory] = useS(null);
-  const [collapsedCategories, setCollapsedCategories] = useS({});
+  const [collapsedCategories, setCollapsedCategories] = useS(() =>
+    Object.fromEntries(categoryGroups.map(category => [category.id, true])));
   useE(() => {
     const className = "projects-contact-active";
     const headerClassName = "projects-contact-header-active";
@@ -1119,7 +1148,12 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
     ...(view === "all" ? { view: "all" } : {}),
   };
   return (
-    <div className={`projects-page page-enter ${transition === "category-open" ? "category-page-enter" : ""}`} key={`${normalisedType || "all"}:${normalisedBrand || "all"}:${order}`}>
+    <div className={`projects-page page-enter ${cards ? "projects-page--cards" : ""} ${mapView ? "projects-page--map" : ""} ${transition === "category-open" ? "category-page-enter" : ""}`} key={`${normalisedType || "all"}:${normalisedBrand || "all"}:${order}`}>
+      {!isMobile && browserVisible && ReactDOM.createPortal(<div className="projects-view-dock" role="group" aria-label={pick({label:"Project view",label_gr:"Προβολή έργων"},"label")}>
+        <button type="button" aria-pressed={cards} onClick={() => chooseDisplay("card")}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>Card</button>
+        <button type="button" aria-pressed={!cards && !mapView} onClick={() => chooseDisplay("list")}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="M8 5h13M8 12h13M8 19h13M3 5h1M3 12h1M3 19h1" /></svg>List</button>
+        <button type="button" aria-pressed={mapView} onClick={() => chooseDisplay("map")}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Zm6-3v15m6-12v15" /></svg>{t("brand_map")}</button>
+      </div>, document.body)}
       <div className="projects-sheet">
         <div className="mobile-projects-sheet-head">
           <MobileCategoryPicker
@@ -1128,18 +1162,19 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
             onPick={jumpToCategory} />
           <window.ProjectSort route={sheetRoute} go={go} />
         </div>
-        <div className="projects-category-browser">
+        <div ref={browserRef} className="projects-category-browser">
+          {mapView ? <ProjectsLocationMap projects={sortedProjects} go={go} from={sheetRoute} /> : <>
           <div className="projects-category-column">
             {categoryGroups.map((category) => (
               <section
                 key={category.id}
                 id={`projects-category-${category.id}`}
                 data-category-id={category.id}
-                className={`projects-category-section ${collapsedCategories[category.id] ? "is-collapsed" : ""}`}>
+                className={`projects-category-section ${!cards && collapsedCategories[category.id] ? "is-collapsed" : ""}`}>
                 <header className="projects-category-heading">
                   <SiteMedia className="projects-category-cover" src={category.cover || category.projects.find(project => project.hero)?.hero} alt="" lazy />
                   <CategoryIcon id={category.id} />
-                  <h2><button
+                  <h2>{cards ? <span>{pick(category,"label")}</span> : <button
                     className="projects-category-toggle"
                     type="button"
                     aria-expanded={!collapsedCategories[category.id]}
@@ -1147,13 +1182,13 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
                     onClick={() => setCollapsedCategories(current => ({ ...current, [category.id]: !current[category.id] }))}>
                     <span data-p58-text={window.siteContentKey("category",category.id,"label")}>{pick(category, "label")}</span>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
-                  </button></h2>
-                  <span>{category.projects.length} <span data-p58-text={"proj_word"}>{t("proj_word")}</span></span>
+                  </button>}</h2>
+                  <span>{cards ? projectCollectionEntries(category.projects, category).length : category.projects.length} <span data-p58-text={"proj_word"}>{t("proj_word")}</span></span>
                 </header>
-                <div className="projects-category-reveal" id={`projects-category-content-${category.id}`} aria-hidden={!!collapsedCategories[category.id]} inert={collapsedCategories[category.id] ? "" : undefined}>
+                <div className="projects-category-reveal" id={`projects-category-content-${category.id}`} aria-hidden={!cards && !!collapsedCategories[category.id]} inert={!cards && collapsedCategories[category.id] ? "" : undefined}>
                   <div className="projects-category-reveal-inner">
                     <div className="projects-category-content">
-                      <CategoryProjectPreview category={category} go={go} from={keepSort({ name: "projects", type: category.id })} />
+                      <CategoryProjectPreview category={category} go={go} cards={cards} from={keepSort({ name: "projects", type: category.id })} />
                     </div>
                   </div>
                 </div>
@@ -1195,6 +1230,7 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
               </div>
             ))}
           </aside>
+          </>}
         </div>
       </div>
       <section className="projects-contact-parallax" aria-label={t("contact")}>

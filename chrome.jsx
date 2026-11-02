@@ -45,12 +45,13 @@ function Nav({ route, go }) {
   const menuRef = useRef(null);
   const lastScrollYRef = useRef(0);
   const isProject = route.name === "project";
+  const isBrand = route.name === "brand";
+  const isDetail = isProject || isBrand;
 
-  // scroll detection — home: track atTop; project: show nav only while scrolling;
+  // Detail pages keep the header visible and reveal their title after the hero.
   // other vertical pages: hide on scroll down, show on scroll up
   useEffect(() => {
-    const isVertical = !isHome && !isProject;
-    if (isProject) {
+    if (isDetail) {
       document.body.classList.remove("nav-scroll-hide");
       const onScroll = () => setPastHero(window.scrollY > window.innerHeight * 0.6);
       onScroll();
@@ -91,7 +92,7 @@ function Nav({ route, go }) {
       window.removeEventListener("scroll", onScroll);
       document.body.classList.remove("nav-scroll-hide");
     };
-  }, [isHome, isProject, route.name]);
+  }, [isHome, isDetail, route.name, route.id]);
 
   // Header is always the full, standard nav now (no minimal "home-top" mode).
   const homeTop = false;
@@ -180,6 +181,7 @@ function Nav({ route, go }) {
 
   const visible = window.visibleProjects ? window.visibleProjects() : PROJECTS.filter((p) => p.visible !== false);
   const projectForRoute = route.name === "project" ? visible.find((p) => p.id === route.id || p.slug === route.id) : null;
+  const brandForRoute = isBrand ? window.publishedBrand(route.id) : null;
   const currentBrand = route.brand || (projectForRoute ? (projectForRoute.brandKey || (projectForRoute.brand === "Dinas" ? "dn" : "pg")) : null);
   const menuProject = projectForRoute || visible.find((p) => p.featured) || visible[0];
   const menuImages = site.menuImages || {};
@@ -188,7 +190,7 @@ function Nav({ route, go }) {
 
   // Project pages always keep the back control in the header. The centred
   // wordmark changes to the project name only after the hero has scrolled.
-  const showProjectBar = isProject && projectForRoute;
+  const showProjectBar = Boolean(projectForRoute || brandForRoute);
   const showCategoryBack = isProjects && Boolean(route.type || route.view === "all") && !isMobile;
   const showProjectTitle = showProjectBar && pastHero;
   // A project opened from a deep link has no referrer — the index is the useful
@@ -282,7 +284,7 @@ function Nav({ route, go }) {
         <div className="nav-center">
           {showProjectBar ? (
             showProjectTitle
-              ? <span className="nav-project-title">{pick(projectForRoute, "name")}</span>
+              ? <span className="nav-project-title">{brandForRoute ? pick(brandForRoute, "label") : pick(projectForRoute, "name")}</span>
               : (
                 <a className="nav-project-home" href="/" onClick={goToReception} aria-label="Project58 home">
                   <img className="nav-project-logo" src="assets/logo-black.svg" alt="Project58" />
