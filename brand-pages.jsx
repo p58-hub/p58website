@@ -181,6 +181,62 @@ function brandMapCardPosition(card, bounds) {
   const top = Math.max(bounds.top, bounds.bottom - card.height);
   return { left, top };
 }
+function bindMapTrackpadZoom(map) {
+  const container = map.getContainer();
+  let frame = null;
+  let targetZoom = null;
+  let anchor;
+  let gestureStartZoom = null;
+  let touches = 0;
+  const queueZoom = (zoom, event) => {
+    targetZoom = Math.max(map.getMinZoom(), Math.min(map.getMaxZoom(), zoom));
+    anchor = map.mouseEventToContainerPoint(event);
+    if (frame !== null) return;
+    frame = requestAnimationFrame(() => {
+      frame = null;
+      const zoom = targetZoom;
+      targetZoom = null;
+      map.stop();
+      map.setZoomAround(anchor, zoom, { animate: false });
+    });
+  };
+  const wheel = event => {
+    // Trackpad pinch arrives as Ctrl+wheel; ordinary scrolling stays with the page.
+    if (!event.ctrlKey) return;
+    event.preventDefault();
+    if (gestureStartZoom !== null || !Number.isFinite(event.deltaY)) return;
+    const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? container.clientHeight : 1;
+    queueZoom((targetZoom ?? map.getZoom()) - event.deltaY * unit / 100, event);
+  };
+  const touch = event => { touches = event.touches.length; };
+  const gestureStart = event => {
+    // Safari trackpads use GestureEvent. Let Leaflet handle actual touchscreen pinch.
+    if (touches) return;
+    event.preventDefault();
+    gestureStartZoom = targetZoom ?? map.getZoom();
+  };
+  const gestureChange = event => {
+    if (gestureStartZoom === null) return;
+    event.preventDefault();
+    if (Number.isFinite(event.scale) && event.scale > 0) {
+      queueZoom(gestureStartZoom + Math.log2(event.scale), event);
+    }
+  };
+  const gestureEnd = event => {
+    if (gestureStartZoom === null) return;
+    event.preventDefault();
+    gestureStartZoom = null;
+  };
+  const listeners = { wheel, gesturestart: gestureStart, gesturechange: gestureChange, gestureend: gestureEnd };
+  Object.entries(listeners).forEach(([type, handler]) => container.addEventListener(type, handler, { passive: false }));
+  const touchEvents = ['touchstart', 'touchend', 'touchcancel'];
+  touchEvents.forEach(type => container.addEventListener(type, touch, { passive: true }));
+  return () => {
+    if (frame !== null) cancelAnimationFrame(frame);
+    Object.entries(listeners).forEach(([type, handler]) => container.removeEventListener(type, handler));
+    touchEvents.forEach(type => container.removeEventListener(type, touch));
+  };
+}
 function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick, children, preview = false }) {
   const t = window.useT();
   const ref = React.useRef(null);
@@ -191,8 +247,9 @@ function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick
   const [failed, setFailed] = React.useState(!window.L?.maplibreGL);
   React.useEffect(() => {
     if (!window.L || !ref.current) return;
-    const map = window.L.map(ref.current, { scrollWheelZoom: false, zoomAnimation: false, zoomControl: false, attributionControl: !preview, dragging: !preview, touchZoom: !preview, doubleClickZoom: !preview, boxZoom: !preview, keyboard: !preview, minZoom: 2, maxZoom: 19 }).setView([37.97,23.73],11);
+    const map = window.L.map(ref.current, { scrollWheelZoom: false, zoomSnap: 0, zoomAnimation: false, zoomControl: false, attributionControl: !preview, dragging: !preview, touchZoom: !preview, doubleClickZoom: !preview, boxZoom: !preview, keyboard: !preview, minZoom: 2, maxZoom: 19 }).setView([37.97,23.73],11);
     mapRef.current = map;
+    const unbindTrackpadZoom = preview ? () => {} : bindMapTrackpadZoom(map);
     if (!preview) window.L.control.zoom({ position: "bottomleft" }).addTo(map);
     setFailed(false);
     try {
@@ -224,7 +281,7 @@ function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick
       if (preview && points.length) map.fitBounds(points, { padding:[18,18], maxZoom:13, animate:false });
     });
     observer.observe(ref.current);
-    return () => { observer.disconnect(); map.stop(); map.remove(); mapRef.current = null; markersRef.current.clear(); };
+    return () => { observer.disconnect(); unbindTrackpadZoom(); map.stop(); map.remove(); mapRef.current = null; markersRef.current.clear(); };
   }, [projects, pick, onSelect, preview]);
   React.useEffect(() => {
     markersRef.current.forEach((marker,id) => marker.getElement()?.classList.toggle("selected", id === selectedId));
