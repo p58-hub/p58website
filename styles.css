@@ -6529,9 +6529,11 @@ body:has(.brand-hero) .nav { position: fixed; }
 .projects-map-view :is(button, a):focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
 
 /* Existing brand artwork sits inside an SVG map marker. */
+.brand-map-marker--logo { opacity: .65; transition: opacity 160ms ease; }
+.brand-map-marker--logo.selected, .brand-map-marker--logo:focus-visible, .brand-map-preview .brand-map-marker--logo { opacity: 1; }
 .brand-map-marker--logo .project-marker-logo { display: block; width: 100%; height: 100%; overflow: visible; filter: drop-shadow(0 2px 4px #0003); }
-.project-marker-logo circle { fill: #fff; stroke: var(--marker-color); stroke-width: 1.5; }
+.project-marker-logo .project-marker-outline { fill: #fff; stroke: var(--marker-color); stroke-width: 1.5; }
 .project-marker-logo text { fill: var(--marker-color); font: 600 10px var(--sans); text-anchor: middle; dominant-baseline: middle; }
-.brand-map-marker--logo.selected .project-marker-logo circle { stroke-width: 3; }
+.brand-map-marker--logo.selected .project-marker-outline { stroke-width: 3; }
 .brand-map-marker--logo.selected .project-marker-logo { filter: drop-shadow(0 0 4px var(--marker-color)); }
-.brand-map-marker--logo:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 50%; }
+.brand-map-marker--logo:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 8px; }

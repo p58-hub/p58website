@@ -145,9 +145,10 @@ function projectMapMarker(project, preview) {
   svg.setAttribute("aria-hidden", "true");
   svg.classList.add("project-marker-logo");
   svg.style.setProperty("--marker-color", identity.color);
-  const circle = document.createElementNS(ns, "circle");
-  circle.setAttribute("cx", "24"); circle.setAttribute("cy", "24"); circle.setAttribute("r", "21");
-  svg.append(circle);
+  const outline = document.createElementNS(ns, "polygon");
+  outline.classList.add("project-marker-outline");
+  outline.setAttribute("points", "15.3,3 32.7,3 45,15.3 45,32.7 32.7,45 15.3,45 3,32.7 3,15.3");
+  svg.append(outline);
   const fallback = () => {
     const text = document.createElementNS(ns, "text");
     text.setAttribute("x", "24"); text.setAttribute("y", "25");
@@ -155,15 +156,24 @@ function projectMapMarker(project, preview) {
     svg.append(text);
   };
   if (identity.logo) {
+    const clipId = `project-marker-clip-${window.crypto.randomUUID()}`;
+    const defs = document.createElementNS(ns, "defs");
+    const clip = document.createElementNS(ns, "clipPath");
+    clip.setAttribute("id", clipId);
+    clip.setAttribute("clipPathUnits", "userSpaceOnUse");
+    const crop = document.createElementNS(ns, "polygon");
+    crop.setAttribute("points", "15.72,4 32.28,4 44,15.72 44,32.28 32.28,44 15.72,44 4,32.28 4,15.72");
+    clip.append(crop); defs.append(clip); svg.append(defs);
     const image = document.createElementNS(ns, "image");
     image.setAttribute("href", identity.logo);
-    image.setAttribute("x", "6"); image.setAttribute("y", "6");
-    image.setAttribute("width", "36"); image.setAttribute("height", "36");
-    image.setAttribute("preserveAspectRatio", "xMidYMid meet");
+    image.setAttribute("x", "4"); image.setAttribute("y", "4");
+    image.setAttribute("width", "40"); image.setAttribute("height", "40");
+    image.setAttribute("preserveAspectRatio", "xMidYMid slice");
+    image.setAttribute("clip-path", `url(#${clipId})`);
     image.addEventListener("error", () => { image.remove(); fallback(); }, {once:true});
     svg.append(image);
   } else fallback();
-  const size = preview ? 26 : 36;
+  const size = preview ? 26 : 42;
   return window.L.divIcon({className:"brand-map-marker brand-map-marker--logo",html:svg,iconSize:[size,size],iconAnchor:[size/2,size/2]});
 }
 
