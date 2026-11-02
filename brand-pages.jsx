@@ -357,7 +357,7 @@ function ProjectsLocationMap({ projects, go, from }) {
     <aside className="projects-map-directory" aria-label={t("projects")}>
       <h2>{t("projects")} <span>{projects.length}</span></h2>
       <p className="brand-map-note">{t("brand_markers_indicate_neighbourhoods_not_exact_store_addresses_locatio")}</p>
-      {projects.map((project,index) => <button type="button" key={project.id} aria-pressed={selected.id === project.id} onClick={() => select(project.id)}><span>{String(index + 1).padStart(2,"0")}</span><div><strong>{pick(project,"name")}</strong><small>{project.brand || pick(project,"location")}</small>{!brandProjectPoint(project) && <small>{pick({label:"Location pending",label_gr:"Εκκρεμεί τοποθεσία"},"label")}</small>}</div></button>)}
+      {projects.map((project,index) => <button type="button" key={project.id} aria-pressed={selected.id === project.id} onMouseEnter={() => select(project.id)} onFocus={() => select(project.id)} onClick={() => select(project.id)}><span>{String(index + 1).padStart(2,"0")}</span><div><strong>{pick(project,"name")}</strong><small>{project.brand || pick(project,"location")}</small>{!brandProjectPoint(project) && <small>{pick({label:"Location pending",label_gr:"Εκκρεμεί τοποθεσία"},"label")}</small>}</div></button>)}
     </aside>
   </section>;
 }
