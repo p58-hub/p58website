@@ -6506,10 +6506,11 @@ body:has(.brand-hero) .nav { position: fixed; }
 .brand-list-preview-rows span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; color: var(--brand-color); font: 10px var(--sans); }
 
 /* Portfolio map: every published location remains selectable in the directory. */
-.projects-page--map .projects-category-browser { display: block; padding: 24px var(--gutter) 100px; scroll-margin-top: 74px; }
-.projects-map-view { --brand-color: #333b36; --brand-map-background: var(--paper-2); --brand-accent: #e3d5a9; display: grid; grid-template-columns: minmax(0, 1fr) clamp(210px, 23vw, 300px); height: max(560px, calc(100dvh - 190px)); overflow: hidden; border-radius: 18px; background: #fff; }
-.projects-map-canvas { position: relative; min-width: 0; }
-.projects-map-directory { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; padding: 20px; }
+.projects-page--map .projects-sheet { padding-bottom: 0; }
+.projects-page--map .projects-category-browser { display: block; padding: 0; scroll-margin-top: 74px; }
+.projects-map-view { --brand-color: #333b36; --brand-map-background: var(--paper-2); --brand-accent: #e3d5a9; position: relative; height: calc(100dvh - 74px); min-height: 480px; overflow: hidden; }
+.projects-map-canvas { position: absolute; inset: 0; }
+.projects-map-directory { position: absolute; z-index: 2; top: 20px; right: 20px; bottom: 100px; width: clamp(210px, 23vw, 300px); display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; padding: 20px; border: 1px solid var(--rule); border-radius: 18px; background: #fffffff2; box-shadow: 0 8px 32px #0002; backdrop-filter: blur(12px); }
 .projects-map-directory-list { flex: 1; min-height: 0; overflow-y: auto; }
 .projects-map-directory h2 { display: flex; justify-content: space-between; margin: 0 0 12px; font: 500 22px var(--sans); }
 .projects-map-directory h2 span { color: var(--ink-3); }
@@ -6527,6 +6528,13 @@ body:has(.brand-hero) .nav { position: fixed; }
 .projects-map-open { display: inline-flex; align-items: center; gap: 10px; font: 11px var(--mono); color: var(--ink); }
 .projects-map-open svg { width: 16px; height: 16px; }
 .projects-map-view :is(button, a):focus-visible { outline: 2px solid var(--ink); outline-offset: -2px; }
+@media (max-height: 700px) {
+  .projects-map-directory { top: 12px; bottom: 88px; padding: 14px; }
+  .projects-map-selected > :is(img, video) { height: 72px; }
+  .projects-map-selected-copy { padding: 10px; }
+  .projects-map-selected h3 { font-size: 18px; }
+  .projects-map-selected p { display: none; }
+}
 
 /* Existing brand artwork sits inside an SVG map marker. */
 .brand-map-marker--logo { opacity: .65; transition: opacity 160ms ease; }

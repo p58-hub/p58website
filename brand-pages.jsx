@@ -127,12 +127,19 @@ function brandProjectPoint(project) {
 }
 
 function projectMapHexagon(radius) {
-  const element = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+  const element = document.createElementNS("http://www.w3.org/2000/svg", "path");
   const points = Array.from({ length: 6 }, (_, index) => {
     const angle = -Math.PI / 2 + index * Math.PI / 3;
-    return `${24 + Math.cos(angle) * radius},${24 + Math.sin(angle) * radius}`;
+    return [24 + Math.cos(angle) * radius, 24 + Math.sin(angle) * radius];
   });
-  element.setAttribute("points", points.join(" "));
+  const path = points.map((point, index) => {
+    const previous = points[(index + 5) % 6];
+    const next = points[(index + 1) % 6];
+    const before = point.map((value, axis) => value + (previous[axis] - value) * .12);
+    const after = point.map((value, axis) => value + (next[axis] - value) * .12);
+    return `${index ? "L" : "M"}${before.join(",")} Q${point.join(",")} ${after.join(",")}`;
+  }).join(" ");
+  element.setAttribute("d", `${path} Z`);
   return element;
 }
 
@@ -294,7 +301,9 @@ function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick
       marker.getElement()?.addEventListener("focus", () => onSelect(project.id, false));
       markersRef.current.set(project.id,marker);
     });
-    if (points.length) map.fitBounds(points, { padding: preview ? [18,18] : [45,45], maxZoom:13 });
+    const directory = ref.current.closest(".projects-map-view")?.querySelector(".projects-map-directory");
+    const padding = directory ? { paddingTopLeft:[45,45], paddingBottomRight:[directory.getBoundingClientRect().width + 45,100] } : { padding: preview ? [18,18] : [45,45] };
+    if (points.length) map.fitBounds(points, { ...padding, maxZoom:13 });
     const observer = new ResizeObserver(() => {
       map.invalidateSize();
       if (preview && points.length) map.fitBounds(points, { padding:[18,18], maxZoom:13, animate:false });
