@@ -126,9 +126,20 @@ function brandProjectPoint(project) {
   return area ? { point: area[1], approximate: true } : null;
 }
 
+function projectMapHexagon(radius) {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", "polygon");
+  const points = Array.from({ length: 6 }, (_, index) => {
+    const angle = -Math.PI / 2 + index * Math.PI / 3;
+    return `${24 + Math.cos(angle) * radius},${24 + Math.sin(angle) * radius}`;
+  });
+  element.setAttribute("points", points.join(" "));
+  return element;
+}
+
 function projectMapIdentity(project) {
   const label = String(project.brand || "").trim();
-  const category = window.siteCategory(window.projectCategoryId(project));
+  const categoryId = window.projectCategoryId(project);
+  const category = window.siteCategory(categoryId);
   const brand = category?.subcategories?.find(item => String(item.label || "").trim().toLowerCase() === label.toLowerCase());
   const palette = window.normaliseBrandPresentation(brand || { label });
   // Never inherit the site-wide badge: it may belong to a different brand.
@@ -145,9 +156,8 @@ function projectMapMarker(project, preview) {
   svg.setAttribute("aria-hidden", "true");
   svg.classList.add("project-marker-logo");
   svg.style.setProperty("--marker-color", identity.color);
-  const outline = document.createElementNS(ns, "polygon");
+  const outline = projectMapHexagon(21);
   outline.classList.add("project-marker-outline");
-  outline.setAttribute("points", "15.3,3 32.7,3 45,15.3 45,32.7 32.7,45 15.3,45 3,32.7 3,15.3");
   svg.append(outline);
   const fallback = () => {
     const text = document.createElementNS(ns, "text");
@@ -161,8 +171,7 @@ function projectMapMarker(project, preview) {
     const clip = document.createElementNS(ns, "clipPath");
     clip.setAttribute("id", clipId);
     clip.setAttribute("clipPathUnits", "userSpaceOnUse");
-    const crop = document.createElementNS(ns, "polygon");
-    crop.setAttribute("points", "15.72,4 32.28,4 44,15.72 44,32.28 32.28,44 15.72,44 4,32.28 4,15.72");
+    const crop = projectMapHexagon(20);
     clip.append(crop); defs.append(clip); svg.append(defs);
     const image = document.createElementNS(ns, "image");
     image.setAttribute("href", identity.logo);
