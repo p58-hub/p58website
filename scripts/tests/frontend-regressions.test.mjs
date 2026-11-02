@@ -20,14 +20,14 @@ test('mobile project views default to cards and keep their selection separate fr
   assert.equal(context.readProjectsDisplayMode(true), 'map');
   assert.equal(context.readProjectsDisplayMode(false), 'list');
   saved.set('p58-projects-display-mobile', 'list');
-  assert.equal(context.readProjectsDisplayMode(true), 'list');
+  assert.equal(context.readProjectsDisplayMode(true), 'card');
   saved.set('p58-projects-display-mobile', 'invalid');
   assert.equal(context.readProjectsDisplayMode(true), 'card');
   context.sessionStorage.getItem = () => { throw new Error('Storage unavailable'); };
   assert.equal(context.readProjectsDisplayMode(true), 'card');
 });
 
-test('portfolio map reserves visible space above mobile panels and beside desktop panels', () => {
+test('portfolio map reserves mobile navigation space without a list, and desktop sidebar space', () => {
   let mobile = true;
   const context = vm.createContext({ window: { matchMedia: () => ({ matches: mobile }) } });
   vm.runInContext(functions('brand-pages.jsx', ['projectMapVisiblePadding']), context);
@@ -35,8 +35,10 @@ test('portfolio map reserves visible space above mobile panels and beside deskto
   const container = { getBoundingClientRect: () => ({ bottom: 800 }), closest: () => ({ querySelector: () => panel }) };
   const mobilePadding = context.projectMapVisiblePadding(container);
   assert.equal(mobilePadding.paddingBottomRight[0], 24);
-  assert.equal(mobilePadding.paddingBottomRight[1], 446);
+  assert.equal(mobilePadding.paddingBottomRight[1], 154);
   assert.equal(mobilePadding.paddingTopLeft[1], 55);
+  container.ownerDocument = { querySelector: () => ({ getBoundingClientRect: () => ({ top: 620 }) }) };
+  assert.equal(context.projectMapVisiblePadding(container).paddingBottomRight[1], 192);
   mobile = false;
   const desktopPadding = context.projectMapVisiblePadding(container);
   assert.equal(desktopPadding.paddingBottomRight[0], 345);
@@ -44,6 +46,30 @@ test('portfolio map reserves visible space above mobile panels and beside deskto
   container.closest = () => null;
   assert.equal(context.projectMapVisiblePadding(container, true).padding[0], 18);
   assert.equal(context.projectMapVisiblePadding(container).padding[0], 45);
+});
+
+test('project popup anchors to its marker and dismisses selection only when its own popup closes', () => {
+  const listeners = new Map();
+  let closes = 0;
+  let options;
+  const popup = { setLatLng(point) { this.point = point; return this; }, setContent(host) { this.host = host; return this; }, openOn(map) { this.map = map; return this; } };
+  const map = { on: (type, fn) => listeners.set(type, fn), off: type => listeners.delete(type), closePopup: popup => listeners.get('popupclose')?.({ popup }) };
+  const context = vm.createContext({ window: { L: { popup: settings => { options = settings; return popup; } } } });
+  vm.runInContext(functions('brand-pages.jsx', ['openProjectPointPopup']), context);
+  const host = {};
+  const point = [37.98, 23.73];
+  const result = context.openProjectPointPopup(map, point, host, { paddingTopLeft: [24,55], paddingBottomRight: [24,154] }, () => closes++);
+  assert.equal(popup.point, point);
+  assert.equal(popup.host, host);
+  assert.equal(options.maxWidth, 224);
+  assert.equal(options.closeOnClick, true);
+  listeners.get('popupclose')({ popup: {} });
+  assert.equal(closes, 0);
+  listeners.get('popupclose')({ popup });
+  assert.equal(closes, 1);
+  result.dispose();
+  assert.equal(closes, 1);
+  assert.equal(listeners.size, 0);
 });
 
 test('project logo clear, reload, replace and reset preserve the intended badge', () => {

@@ -995,7 +995,7 @@ function readProjectsDisplayMode(isMobile) {
   const fallback = isMobile ? "card" : "list";
   try {
     const mode = sessionStorage.getItem(isMobile ? "p58-projects-display-mobile" : "p58-projects-display");
-    return ["card", "list", "map"].includes(mode) ? mode : fallback;
+    return (isMobile ? ["card", "map"] : ["card", "list", "map"]).includes(mode) ? mode : fallback;
   } catch { return fallback; }
 }
 function ProjectsPage({ go, type, brand, sort, view, transition }) {
@@ -1157,7 +1157,7 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
     <div className={`projects-page page-enter ${cards ? "projects-page--cards" : ""} ${mapView ? "projects-page--map" : ""} ${transition === "category-open" ? "category-page-enter" : ""}`} key={`${normalisedType || "all"}:${normalisedBrand || "all"}:${order}`}>
       {browserVisible && ReactDOM.createPortal(<div className="projects-view-dock" role="group" aria-label={pick({label:"Project view",label_gr:"Προβολή έργων"},"label")}>
         <button type="button" aria-pressed={cards} onClick={() => chooseDisplay("card")}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>Card</button>
-        <button type="button" aria-pressed={!cards && !mapView} onClick={() => chooseDisplay("list")}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="M8 5h13M8 12h13M8 19h13M3 5h1M3 12h1M3 19h1" /></svg>List</button>
+        {!isMobile && <button type="button" aria-pressed={!cards && !mapView} onClick={() => chooseDisplay("list")}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="M8 5h13M8 12h13M8 19h13M3 5h1M3 12h1M3 19h1" /></svg>List</button>}
         <button type="button" aria-pressed={mapView} onClick={() => chooseDisplay("map")}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Zm6-3v15m6-12v15" /></svg>{t("brand_map")}</button>
       </div>, document.body)}
       <div className="projects-sheet">

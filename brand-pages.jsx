@@ -264,20 +264,31 @@ function bindMapTrackpadZoom(map) {
   };
 }
 function projectMapVisiblePadding(container, preview = false) {
-  const directory = container.closest(".projects-map-view")?.querySelector(".projects-map-directory");
-  if (!directory) return { padding: preview ? [18,18] : [45,45] };
-  const mapBounds = container.getBoundingClientRect();
-  const panelBounds = directory.getBoundingClientRect();
-  return window.matchMedia("(max-width: 720px)").matches
-    ? { paddingTopLeft:[24,55], paddingBottomRight:[24,Math.max(24,mapBounds.bottom - panelBounds.top + 16)] }
-    : { paddingTopLeft:[45,45], paddingBottomRight:[panelBounds.width + 45,100] };
+  const portfolio = container.closest(".projects-map-view");
+  if (!portfolio) return { padding: preview ? [18,18] : [45,45] };
+  if (window.matchMedia("(max-width: 720px)").matches) {
+    const dock = container.ownerDocument?.querySelector(".projects-view-dock")?.getBoundingClientRect();
+    const bottom = dock ? Math.max(24, container.getBoundingClientRect().bottom - dock.top + 12) : 154;
+    return { paddingTopLeft:[24,55], paddingBottomRight:[24,bottom] };
+  }
+  const directory = portfolio.querySelector(".projects-map-directory");
+  return { paddingTopLeft:[45,45], paddingBottomRight:[(directory?.getBoundingClientRect().width || 0) + 45,100] };
 }
-function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick, children, preview = false }) {
+function openProjectPointPopup(map, latlng, host, padding, onClose) {
+  const popup = window.L.popup({ className:"project-point-popup", minWidth:224, maxWidth:224, closeButton:false, closeOnClick:true, offset:[0,-20], autoPanPaddingTopLeft:padding.paddingTopLeft, autoPanPaddingBottomRight:padding.paddingBottomRight })
+    .setLatLng(latlng).setContent(host).openOn(map);
+  const closed = event => { if (event.popup === popup) onClose(); };
+  map.on("popupclose", closed);
+  return { popup, dispose: () => { map.off("popupclose", closed); map.closePopup(popup); } };
+}
+function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick, children, preview = false, pointCard = false, onDismiss }) {
   const t = window.useT();
   const ref = React.useRef(null);
   const mapRef = React.useRef(null);
   const markersRef = React.useRef(new Map());
   const detailRef = React.useRef(null);
+  const popupRef = React.useRef(null);
+  const [popupHost, setPopupHost] = React.useState(null);
   const [cardPosition, setCardPosition] = React.useState(null);
   const [failed, setFailed] = React.useState(!window.L?.maplibreGL);
   React.useEffect(() => {
@@ -306,29 +317,45 @@ function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick
       const marker = window.L.marker(position.point, { interactive: !preview, keyboard: !preview, title:[project.brand, pick(project,"name")].filter(Boolean).join(" · "), icon:projectMapMarker(project, preview) }).addTo(map);
       marker.on("click", () => onSelect(project.id));
       // Preview without moving the map underneath the pointer.
-      marker.on("mouseover", () => onSelect(project.id, false));
-      marker.getElement()?.addEventListener("focus", () => onSelect(project.id, false));
+      if (!pointCard) {
+        marker.on("mouseover", () => onSelect(project.id, false));
+        marker.getElement()?.addEventListener("focus", () => onSelect(project.id, false));
+      }
       markersRef.current.set(project.id,marker);
     });
     if (points.length) map.fitBounds(points, { ...projectMapVisiblePadding(ref.current, preview), maxZoom:13 });
     const observer = new ResizeObserver(() => {
       map.invalidateSize();
+      popupRef.current?.update();
       if (preview && points.length) map.fitBounds(points, { padding:[18,18], maxZoom:13, animate:false });
     });
     observer.observe(ref.current);
-    return () => { observer.disconnect(); unbindTrackpadZoom(); map.stop(); map.remove(); mapRef.current = null; markersRef.current.clear(); };
-  }, [projects, pick, onSelect, preview]);
+    return () => { observer.disconnect(); unbindTrackpadZoom(); mapRef.current = null; map.stop(); map.remove(); markersRef.current.clear(); };
+  }, [projects, pick, onSelect, preview, pointCard]);
   React.useEffect(() => {
     markersRef.current.forEach((marker,id) => marker.getElement()?.classList.toggle("selected", id === selectedId));
     const marker = markersRef.current.get(selectedId);
-    if (marker && panToSelection) {
+    if (marker && panToSelection && !pointCard) {
       if (ref.current?.closest(".projects-map-view")) mapRef.current?.panInside(marker.getLatLng(), projectMapVisiblePadding(ref.current));
       else mapRef.current?.panTo(marker.getLatLng());
     }
-  }, [selectedId, panToSelection, projects, pick]);
+  }, [selectedId, panToSelection, projects, pick, pointCard]);
+  React.useEffect(() => {
+    const map = mapRef.current;
+    const marker = markersRef.current.get(selectedId);
+    if (!pointCard || !map || !marker) { setPopupHost(null); return; }
+    const host = document.createElement("div");
+    const { popup, dispose } = openProjectPointPopup(map, marker.getLatLng(), host, projectMapVisiblePadding(ref.current), () => {
+      if (mapRef.current === map) onDismiss?.();
+    });
+    popupRef.current = popup;
+    setPopupHost(host);
+    return () => { popupRef.current = null; dispose(); };
+  }, [selectedId, pointCard, projects, pick, onDismiss]);
+  React.useLayoutEffect(() => { if (pointCard && popupHost) popupRef.current?.update(); }, [pointCard, popupHost, children]);
   React.useEffect(() => {
     const card = detailRef.current;
-    if (!ref.current || !card) return;
+    if (pointCard || !ref.current || !card) return;
     let frame;
     const update = () => {
       if (!window.matchMedia('(max-width: 720px)').matches) { setCardPosition(null); return; }
@@ -363,11 +390,11 @@ function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick
       window.removeEventListener('scroll', schedule, true); window.removeEventListener('resize', schedule);
       window.visualViewport?.removeEventListener('resize', schedule); window.visualViewport?.removeEventListener('scroll', schedule);
     };
-  }, [selectedId, projects, pick]);
+  }, [selectedId, projects, pick, pointCard]);
   return <div className="brand-map-wrap" style={{"--brand-map-filter":"none"}}>
     <div ref={ref} className="brand-map" role="region" aria-label={t("brand_map_of_project_areas")} />
-    {!preview && children && <div ref={detailRef} className="brand-map-detail" style={cardPosition}>{children}</div>}
-    {failed && <p className="brand-map-error"><span data-p58-text={"brand_the_map_could_not_load_all_locations_are_available_in_list_view"}>{t("brand_the_map_could_not_load_all_locations_are_available_in_list_view")}</span></p>}
+    {!preview && children && (pointCard ? popupHost && ReactDOM.createPortal(children, popupHost) : <div ref={detailRef} className="brand-map-detail" style={cardPosition}>{children}</div>)}
+    {failed && <p className="brand-map-error">{pointCard ? pick({label:"The map could not load. Browse projects in Card view.",label_gr:"Ο χάρτης δεν φορτώθηκε. Δες τα έργα από την προβολή Card."},"label") : <span data-p58-text={"brand_the_map_could_not_load_all_locations_are_available_in_list_view"}>{t("brand_the_map_could_not_load_all_locations_are_available_in_list_view")}</span>}</p>}
   </div>;
 }
 
@@ -417,34 +444,41 @@ function bindMapListEdgeScroll(list) {
 function ProjectsLocationMap({ projects, go, from }) {
   const pick = window.usePick();
   const t = window.useT();
+  const isMobile = useHomeMobile();
   const [selectedId, setSelectedId] = React.useState(null);
   const [panToSelection, setPanToSelection] = React.useState(false);
   const listRef = React.useRef(null);
   React.useEffect(() => {
     if (listRef.current) return bindMapListEdgeScroll(listRef.current);
-  }, [projects.length]);
+  }, [projects.length, isMobile]);
   const select = React.useCallback((id, pan = true) => {
     setSelectedId(id);
     setPanToSelection(pan);
   }, []);
-  const selected = projects.find(project => project.id === selectedId) || projects[0];
-  if (!selected) return null;
-  return <section className="projects-map-view" aria-label={t("brand_map_of_project_areas")}>
-    <div className="projects-map-canvas">
-      <BrandLocationMap projects={projects} selectedId={selected.id} panToSelection={panToSelection} onSelect={select} pick={pick} />
-    </div>
-    <aside className="projects-map-directory" aria-label={t("projects")}>
-      <h2>{t("projects")} <span>{projects.length}</span></h2>
-      <article className="projects-map-selected">
+  const dismiss = React.useCallback(() => { setSelectedId(null); setPanToSelection(false); }, []);
+  React.useEffect(dismiss, [isMobile, dismiss]);
+  const selected = projects.find(project => project.id === selectedId) || (isMobile ? null : projects[0]);
+  if (!projects.length) return null;
+  const selectedCard = selected ? (
+      <article className={isMobile ? "projects-map-pin-card" : "projects-map-selected"}>
+        {isMobile && <button type="button" className="projects-map-pin-close" aria-label={pick({label:"Close",label_gr:"Κλείσιμο"},"label")} onClick={dismiss}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button>}
         <SiteMedia src={selected.hero} alt={pick(selected,"name")} lazy />
         <div className="projects-map-selected-copy"><span className="collection-eyebrow">{selected.brand || pick(selected,"location")}</span><h3>{pick(selected,"name")}</h3><p>{pick(selected,"location")}</p>
           <a className="projects-map-open" href={pathFromRoute({name:"project",id:selected.slug || selected.id})} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); go({name:"project",id:selected.slug || selected.id,from}); }}>{t("brand_view_project")}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></a>
         </div>
       </article>
+  ) : null;
+  return <section className="projects-map-view" aria-label={t("brand_map_of_project_areas")}>
+    <div className="projects-map-canvas">
+      <BrandLocationMap projects={projects} selectedId={selected?.id} panToSelection={panToSelection} onSelect={select} pick={pick} pointCard={isMobile} onDismiss={dismiss}>{isMobile ? selectedCard : null}</BrandLocationMap>
+    </div>
+    {!isMobile && <aside className="projects-map-directory" aria-label={t("projects")}>
+      <h2>{t("projects")} <span>{projects.length}</span></h2>
+      {selectedCard}
       <div ref={listRef} className="projects-map-directory-list">
       {projects.map((project,index) => <button type="button" key={project.id} aria-pressed={selected.id === project.id} onMouseEnter={() => select(project.id)} onFocus={() => select(project.id)} onClick={() => select(project.id)}><span>{String(index + 1).padStart(2,"0")}</span><div><strong>{pick(project,"name")}</strong><small>{project.brand || pick(project,"location")}</small>{!brandProjectPoint(project) && <small>{pick({label:"Location pending",label_gr:"Εκκρεμεί τοποθεσία"},"label")}</small>}</div></button>)}
       </div>
-    </aside>
+    </aside>}
   </section>;
 }
 
