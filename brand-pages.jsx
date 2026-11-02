@@ -163,7 +163,7 @@ function projectMapMarker(project, preview) {
     image.addEventListener("error", () => { image.remove(); fallback(); }, {once:true});
     svg.append(image);
   } else fallback();
-  const size = preview ? 26 : 48;
+  const size = preview ? 26 : 36;
   return window.L.divIcon({className:"brand-map-marker brand-map-marker--logo",html:svg,iconSize:[size,size],iconAnchor:[size/2,size/2]});
 }
 
