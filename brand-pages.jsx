@@ -33,6 +33,13 @@ function publishedBrand(id) {
   return projectCollectionEntries(projects, category).find(entry => entry.kind === "brand" && entry.id === id) || null;
 }
 
+// Resolve the cover from the same collection on every page, even when a
+// filtered or sorted project list supplies the card's entry.
+function brandCoverImage(brand) {
+  const shared = (brand?.id && publishedBrand(brand.id)) || brand;
+  return shared?.brandCover || shared?.projects?.find(project => project.visible !== false)?.hero || "";
+}
+
 function CategoryIcon({ id }) {
   const paths = {
     retail: "M3 10h18l-2-6H5l-2 6Zm1 0v11h16V10M9 21v-7h6v7M3 10c0 4 6 4 6 0 0 4 6 4 6 0 0 4 6 4 6 0",
@@ -47,7 +54,6 @@ function CollectionCard({ entry, go, from }) {
   const t = window.useT();
   const pick = window.usePick();
   if (entry.kind === "project") return <ProjListRow project={entry.project} go={go} from={from} />;
-  const project = entry.projects[0];
   const storeCount = entry.brandStoreCount ?? entry.projects.length;
   return <a className="collection-card" href={pathFromRoute({ name: "brand", id: entry.id })} onClick={event => {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -58,7 +64,7 @@ function CollectionCard({ entry, go, from }) {
       <h3 data-p58-text={window.siteContentKey("brand",entry.id,"label")}>{pick(entry,"label")}</h3>
       <span><span className="collection-store-count" style={{fontSize:`${entry.brandStoreCountSize ?? 18}px`}}>{storeCount} <span data-p58-text={storeCount === 1 ? "brand_location" : "brand_locations"}>{t(storeCount === 1 ? "brand_location" : "brand_locations")}</span></span> · <span data-p58-text={"brand_explore_the_brand"}>{t("brand_explore_the_brand")}</span> ↗</span>
     </div>
-    <SiteMedia src={entry.brandCover || project.hero} alt={entry.label} lazy />
+    <SiteMedia src={brandCoverImage(entry)} alt={entry.label} lazy />
   </a>;
 }
 
@@ -73,7 +79,7 @@ function ProjectCollectionTile({ entry, go, from }) {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault(); go(route);
   }}>
-    <div className="project-collection-tile-photo"><SiteMedia src={isBrand ? entry.brandCover || project.hero : project.hero} alt="" lazy /></div>
+    <div className="project-collection-tile-photo"><SiteMedia src={isBrand ? brandCoverImage(entry) : project.hero} alt="" lazy /></div>
     <div className="project-collection-tile-copy">
       <h3>{isBrand ? pick(entry,"label") : pick(project,"name")}</h3>
       <p>{isBrand ? `${count} ${t(count === 1 ? "brand_location" : "brand_locations")}` : pick(project,"location")}</p>
@@ -617,7 +623,7 @@ function BrandPage({ id, go }) {
   return <div className="brand-page page-enter" style={{"--brand-color":brand.mapColor,"--brand-map-background":brand.mapBackground,"--brand-accent":brand.mapAccent}}>
     {conceptModalOpen && <BrandConceptModal brand={brand} concept={concept} pick={pick} onClose={() => setConceptModalOpen(false)} />}
     <header className="brand-hero">
-      <SiteMedia src={brand.brandCover || brand.projects[0].hero} alt="" className="brand-cover" />
+      <SiteMedia src={brandCoverImage(brand)} alt="" className="brand-cover" />
       <BrandHeroTitle brand={brand} />
     </header>
     <section className="brand-story" aria-label={t("brand_about_the_brand")}>

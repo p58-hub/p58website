@@ -360,8 +360,6 @@ function HomePage({ go }) {
   // categories are named.
   const catOf = (p) => pick(window.siteCategory(window.projectCategoryId(p)) || {}, "label");
 
-  const pgLead = publicProjects().find((p) => BRAND_KEY(p) === "pg") || cur;
-  const dnLead = publicProjects().find((p) => BRAND_KEY(p) === "dn") || cur;
   const storedSite = window.readP58Store ? window.readP58Store()?.site : null;
   const homeV2 = window.normaliseSiteSettings(storedSite || window.DEFAULT_SITE_SETTINGS).homeV2;
   const bannerAction = (banner) => {
@@ -379,7 +377,7 @@ function HomePage({ go }) {
     .filter((banner) => banner.visible !== false && ["protein-garden", "dinas"].includes(banner.id))
     .map((banner) => ({
       ...banner,
-      image: banner.image || (banner.id === "protein-garden" ? pgLead?.hero : banner.id === "dinas" ? dnLead?.hero : ""),
+      image: brandCoverImage(publishedBrand(banner.id)),
       action: bannerAction(banner),
     }))
     .sort((a, b) => {

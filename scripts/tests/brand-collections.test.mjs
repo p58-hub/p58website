@@ -11,6 +11,24 @@ const context=vm.createContext({encodeURIComponent,URLSearchParams,ALIAS:{},ROUT
 vm.runInContext(declarations('data.jsx',['normaliseBrandSections','normaliseBrandInstagram','normaliseBrandPresentation','brandConceptCopy','brandStorySections','brandStoryImages','brandStoryIntro'])+'\nwindow.normaliseBrandPresentation=normaliseBrandPresentation;',context);
 vm.runInContext(declarations('brand-pages.jsx',['projectCollectionEntries','brandProjectPoint','brandMapColorMatrix','brandMapCardPosition'])+'\n'+declarations('app.jsx',['pathFromRoute','routeFromLocation','resolveRoute']),context);
 const retail={id:'retail',subcategories:[{id:'protein-garden',label:'Protein Garden'}]};
+test('brand covers stay consistent across homepage, filtered cards and the brand page',()=>{
+ const category={id:'retail',subcategories:[{id:'protein-garden',label:'Protein Garden',brandCover:'shared-cover.jpg'}]};
+ const projects=[{id:'hidden',brand:'Protein Garden',hero:'hidden.jpg',visible:false},{id:'first',brand:'Protein Garden',hero:'first.jpg'},{id:'second',brand:'Protein Garden',hero:'second.jpg'}];
+ const ctx=vm.createContext({encodeURIComponent,window:{
+  normaliseBrandPresentation:context.normaliseBrandPresentation,
+  siteCategory:()=>category,visibleProjects:()=>projects,projectCategoryId:()=> 'retail',
+ }});
+ vm.runInContext(declarations('brand-pages.jsx',['projectCollectionEntries','publishedBrand','brandCoverImage']),ctx);
+ const filtered={id:'protein-garden',brandCover:'stale-cover.jpg',projects:[projects[2]]};
+ assert.equal(ctx.brandCoverImage(filtered),'shared-cover.jpg');
+ assert.equal(ctx.brandCoverImage(ctx.publishedBrand('protein-garden')),'shared-cover.jpg');
+ category.subcategories[0].brandCover='';
+ assert.equal(ctx.brandCoverImage(filtered),'first.jpg');
+ assert.equal(ctx.brandCoverImage(ctx.publishedBrand('protein-garden')),'first.jpg');
+ category.subcategories[0].brandCover='updated-cover.jpg';
+ assert.equal(ctx.brandCoverImage(filtered),'updated-cover.jpg');
+ assert.equal(ctx.brandCoverImage(null),'');
+});
 test('retail chains appear once; independent and hidden projects stay separate',()=>{
  const projects=[{id:'a',brand:'Protein Garden'},{id:'b',brand:'Protein Garden'},{id:'c',brand:'Independent'},{id:'d',brand:'Other',visible:false},{id:'e'}];
  const entries=context.projectCollectionEntries(projects,retail);

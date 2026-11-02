@@ -2740,7 +2740,9 @@ function HomeV2Settings({ homeV2, onSave }) {
                   </Field>
                 </div>
                 <div className="field-group cols-1">
-                  <Field label="Εικόνα φόντου" hint="Optional. Existing Protein Garden and DINAS cards fall back to their current project hero."><ImageInput value={banner.image || ""} onChange={(value) => updateBanner(banner.id, { image: value })} placeholder="Banner background image" /></Field>
+                  {["protein-garden", "dinas"].includes(banner.id) ? (
+                    <p className="muted">Η εικόνα χρησιμοποιεί το κοινό εξώφυλλο του brand. Άλλαξέ το από Έργα → Κατηγορίες → Λιανική → {banner.id === "protein-garden" ? "Protein Garden" : "Dinas"} → Εμφάνιση → Γενική εικόνα brand. Η ίδια εικόνα εμφανίζεται στην αρχική, στα Projects και στο εξώφυλλο του brand.</p>
+                  ) : <Field label="Εικόνα φόντου"><ImageInput value={banner.image || ""} onChange={(value) => updateBanner(banner.id, { image: value })} placeholder="Banner background image" /></Field>}
                 </div>
               </article>
             ))}
@@ -4179,7 +4181,7 @@ function BrandSettings({ s, projectCount, onChange, validCount }) {
       <p className="brand-settings-intro">{descriptions[tab]}</p>
       {tab === "appearance" && <div className="brand-settings-fields">
                 <Field label="Λογότυπο · SVG ή PNG" hint="Το σήμα του brand. Εμφανίζεται στη θέση του ονόματος, πάνω στη φωτογραφία εξωφύλλου. Προτίμησε SVG ή PNG με διαφάνεια."><ImageInput value={s.brandLogo || ""} onChange={value => onChange("brandLogo", value)} accept="image/svg+xml,.svg,image/png,.png" uploadLabel="Ανέβασμα λογοτύπου" placeholder="SVG λογότυπο brand" /></Field>
-                <Field label="Γενική εικόνα brand" hint="Χρησιμοποιείται στην κάρτα του brand στα Projects και στο εξώφυλλο της σελίδας του. Επίλεξε από τη Βιβλιοθήκη ή ανέβασε εικόνα. Αν μείνει κενή, χρησιμοποιείται η φωτογραφία του πρώτου έργου."><ImageInput value={s.brandCover || ""} onChange={value => onChange("brandCover", value)} accept="image/*" /></Field>
+                <Field label="Γενική εικόνα brand" hint="Κοινό εξώφυλλο: χρησιμοποιείται στην αρχική, στις κάρτες του brand στα Projects και στο εξώφυλλο της σελίδας του. Επίλεξε από τη Βιβλιοθήκη ή ανέβασε εικόνα. Αν μείνει κενή, χρησιμοποιείται παντού η φωτογραφία του ίδιου πρώτου δημοσιευμένου έργου."><ImageInput value={s.brandCover || ""} onChange={value => onChange("brandCover", value)} accept="image/*" /></Field>
       </div>}
       {tab === "texts" && <div className="brand-settings-fields">
                 <div className="field-group">
