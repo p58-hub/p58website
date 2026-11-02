@@ -328,7 +328,7 @@ function BrandLocationMap({ projects, selectedId, panToSelection, onSelect, pick
   }, [selectedId, projects, pick]);
   return <div className="brand-map-wrap" style={{"--brand-map-filter":"none"}}>
     <div ref={ref} className="brand-map" role="region" aria-label={t("brand_map_of_project_areas")} />
-    {!preview && <div ref={detailRef} className="brand-map-detail" style={cardPosition}>{children}</div>}
+    {!preview && children && <div ref={detailRef} className="brand-map-detail" style={cardPosition}>{children}</div>}
     {failed && <p className="brand-map-error"><span data-p58-text={"brand_the_map_could_not_load_all_locations_are_available_in_list_view"}>{t("brand_the_map_could_not_load_all_locations_are_available_in_list_view")}</span></p>}
   </div>;
 }
@@ -347,17 +347,19 @@ function ProjectsLocationMap({ projects, go, from }) {
   if (!selected) return null;
   return <section className="projects-map-view" aria-label={t("brand_map_of_project_areas")}>
     <div className="projects-map-canvas">
-      <BrandLocationMap projects={projects} selectedId={selected.id} panToSelection={panToSelection} onSelect={select} pick={pick} color="#aaa79f" background="#f4f4f2">
-        <SiteMedia src={selected.hero} alt={pick(selected,"name")} lazy />
-        <div className="brand-map-detail-copy"><span className="collection-eyebrow">{selected.brand || pick(selected,"location")}</span><h3>{pick(selected,"name")}</h3><p>{pick(selected,"location")}</p>
-          <a className="projects-map-open" href={pathFromRoute({name:"project",id:selected.slug || selected.id})} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); go({name:"project",id:selected.slug || selected.id,from}); }}>{t("brand_view_project")}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></a>
-        </div>
-      </BrandLocationMap>
+      <BrandLocationMap projects={projects} selectedId={selected.id} panToSelection={panToSelection} onSelect={select} pick={pick} />
     </div>
     <aside className="projects-map-directory" aria-label={t("projects")}>
       <h2>{t("projects")} <span>{projects.length}</span></h2>
-      <p className="brand-map-note">{t("brand_markers_indicate_neighbourhoods_not_exact_store_addresses_locatio")}</p>
+      <article className="projects-map-selected">
+        <SiteMedia src={selected.hero} alt={pick(selected,"name")} lazy />
+        <div className="projects-map-selected-copy"><span className="collection-eyebrow">{selected.brand || pick(selected,"location")}</span><h3>{pick(selected,"name")}</h3><p>{pick(selected,"location")}</p>
+          <a className="projects-map-open" href={pathFromRoute({name:"project",id:selected.slug || selected.id})} onClick={event => { if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); go({name:"project",id:selected.slug || selected.id,from}); }}>{t("brand_view_project")}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" /></svg></a>
+        </div>
+      </article>
+      <div className="projects-map-directory-list">
       {projects.map((project,index) => <button type="button" key={project.id} aria-pressed={selected.id === project.id} onMouseEnter={() => select(project.id)} onFocus={() => select(project.id)} onClick={() => select(project.id)}><span>{String(index + 1).padStart(2,"0")}</span><div><strong>{pick(project,"name")}</strong><small>{project.brand || pick(project,"location")}</small>{!brandProjectPoint(project) && <small>{pick({label:"Location pending",label_gr:"Εκκρεμεί τοποθεσία"},"label")}</small>}</div></button>)}
+      </div>
     </aside>
   </section>;
 }
