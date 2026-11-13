@@ -475,6 +475,7 @@ function ProjectsLocationMap({ projects, go, from }) {
       </article>
   ) : null;
   return <section className="projects-map-view" aria-label={t("brand_map_of_project_areas")}>
+    {isMobile && <h2 className="sr-only">{t("projects")}</h2>}
     <div className="projects-map-canvas">
       <BrandLocationMap projects={projects} selectedId={selected?.id} panToSelection={panToSelection} onSelect={select} pick={pick} pointCard={isMobile} onDismiss={dismiss}>{isMobile ? selectedCard : null}</BrandLocationMap>
     </div>
@@ -558,7 +559,7 @@ function BrandHeroTitle({ brand }) {
   const logo = brand.brandLogo || brand.icon || (brand.id === "protein-garden" ? "assets/proteingarden/Protein Garden New logo_final-03.png" : "");
   const [failedLogo, setFailedLogo] = React.useState(null);
   return <h1>{logo && failedLogo !== logo
-    ? <img className="brand-hero-logo" src={logo} alt={brand.label} onError={() => setFailedLogo(logo)} />
+    ? <><img className="brand-hero-logo" src={logo} alt="" onError={() => setFailedLogo(logo)} /><span className="sr-only" data-p58-text={window.siteContentKey("brand",brand.id,"label")}>{pick(brand,"label")}</span></>
     : <span data-p58-text={window.siteContentKey("brand",brand.id,"label")}>{pick(brand,"label")}</span>}</h1>;
 }
 

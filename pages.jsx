@@ -444,6 +444,7 @@ function HomePage({ go }) {
       </section>
 
       <section className="home-selected" ref={selectedSectionRef} aria-label={t("home_selected_title")}>
+        <h2 className="sr-only">{t("home_selected_title")}</h2>
         <div className="home-selected-grid">
           {window.homeSelectedProjects(publicProjects(), window.readP58Store()?.site).map((project) => (
             <button key={project.id} className="home-selected-card" onClick={() => go({ name: "project", id: project.slug || project.id, from: { name: "home" } })}>
@@ -468,6 +469,7 @@ function HomePage({ go }) {
       </section>
 
       {homeV2.enabled && banners.length ? <section className="dhome-work home-scalable" aria-label={t("home_scalable_title")}>
+        <h2 className="sr-only">{t("home_scalable_title")}</h2>
         <div className="home-scalable-layout">
           <div className="home-scalable-statement" tabIndex={0}>
             <span className="dhome-kicker" data-p58-text="home_scalable_kicker">{t("home_scalable_kicker")}</span>
@@ -478,10 +480,10 @@ function HomePage({ go }) {
               <button key={banner.id} className="home-brand-card" onClick={banner.action}>
                 {banner.image ? <SiteMedia src={banner.image} alt="" lazy /> : null}
                 <span className="home-brand-shade" aria-hidden="true" />
-                <span className="home-brand-copy">
+                <div className="home-brand-copy">
                   <span className="dhome-kicker"><span data-p58-text={window.siteContentKey("banner",banner.id,"eyebrow")}>{pick(banner, "eyebrow")}</span></span>
-                  <strong><span data-p58-text={window.siteContentKey("banner",banner.id,"title")}>{pick(banner, "title")}</span></strong>
-                </span>
+                  <h3 className="home-brand-title"><span data-p58-text={window.siteContentKey("banner",banner.id,"title")}>{pick(banner, "title")}</span></h3>
+                </div>
                 <span className="ui-arrow-up-right" aria-hidden="true" />
               </button>
             ))}
@@ -632,9 +634,10 @@ function InteriorsPage({ go, brand, sort }) {
   t("interiors_eyebrow");
   return (
     <div className="page-enter" key={`${(sub && sub.id) || "all"}:${order}`}>
+      <h1 className="sr-only">{title || t("retail")}</h1>
       <div className="proj-list">
         {filtered.map((p, i) =>
-        <ProjListRow key={p.id} project={p} go={go} idx={i + 1} />
+        <ProjListRow key={p.id} project={p} go={go} idx={i + 1} headingLevel={2} />
         )}
       </div>
     </div>);
@@ -1153,6 +1156,7 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
   };
   return (
     <div className={`projects-page page-enter ${cards ? "projects-page--cards" : ""} ${mapView ? "projects-page--map" : ""} ${transition === "category-open" ? "category-page-enter" : ""}`} key={`${normalisedType || "all"}:${normalisedBrand || "all"}:${order}`}>
+      <h1 className="sr-only">{t("projects")}</h1>
       {browserVisible && ReactDOM.createPortal(<div className="projects-view-dock" role="group" aria-label={pick({label:"Project view",label_gr:"Προβολή έργων"},"label")}>
         <button type="button" aria-pressed={cards} onClick={() => chooseDisplay("card")}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>Card</button>
         {!isMobile && <button type="button" aria-pressed={!cards && !mapView} onClick={() => chooseDisplay("list")}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" aria-hidden="true"><path d="M8 5h13M8 12h13M8 19h13M3 5h1M3 12h1M3 19h1" /></svg>List</button>}
@@ -1239,14 +1243,15 @@ function ProjectsPage({ go, type, brand, sort, view, transition }) {
       </div>
       <section className="projects-contact-parallax" aria-label={t("contact")}>
         <div className="projects-contact-parallax-inner">
-          <window.ContactPage go={go} />
+          <window.ContactPage go={go} embedded />
         </div>
       </section>
     </div>
   );
 }
 
-function ProjListRow({ project, go, idx, from }) {
+function ProjListRow({ project, go, idx, from, headingLevel = 3 }) {
+  const Heading = headingLevel === 2 ? "h2" : "h3";
   const pick = window.usePick();
   const t = window.useT();
   const site = useSiteSettings();
@@ -1270,6 +1275,7 @@ function ProjListRow({ project, go, idx, from }) {
       role="link" tabIndex={0}
       onKeyDown={event => { if (event.key === "Enter") go({ name: "project", id: project.slug || project.id, ...(from ? { from } : {}) }); }}
       onClick={() => go({ name: "project", id: project.slug || project.id, ...(from ? { from } : {}) })}>
+      <Heading className="sr-only">{pick(project, "name")}</Heading>
       <div className="proj-list-info">
         {project.icon !== null && (visibleIconSrc
           ? <img className="proj-list-icon proj-list-icon--img" src={visibleIconSrc} alt={project.brand} onError={() => { if (visibleIconSrc === iconSrc) setIconFailed(true); }} />
@@ -1300,9 +1306,10 @@ function ArchitecturePage({ go, sort }) {
   }).sort(window.PROJECT_SORTS[order].compare(pick));
   return (
     <div className="page-enter" key={`architecture:${order}`}>
+      <h1 className="sr-only">{pick(window.siteCategory("residential") || { label: "Residential", label_gr: "Κατοικίες" }, "label")}</h1>
       <div className="proj-list">
         {filtered.map((p, i) =>
-          <ProjListRow key={p.id} project={p} go={go} idx={i + 1} />
+          <ProjListRow key={p.id} project={p} go={go} idx={i + 1} headingLevel={2} />
         )}
         {filtered.length === 0 && (
           <div className="proj-list-empty">

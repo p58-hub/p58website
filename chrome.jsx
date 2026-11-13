@@ -886,7 +886,7 @@ function Footer({ go }) {
         </div>
         <div className="foot-col foot-col-split">
           <div>
-            <h4><span data-p58-text={window.siteContentKey("contact","footer","location_label")}>{contactCopy("location_label")}</span></h4>
+            <h2 className="foot-location-title"><span data-p58-text={window.siteContentKey("contact","footer","location_label")}>{contactCopy("location_label")}</span></h2>
             <p><ContactItem href={contact.address_url}><span data-p58-text={window.siteContentKey("contact","footer","address")}>{contactCopy("address")}</span></ContactItem></p>
             <p style={{ marginTop: 8 }}><ContactItem href={contact.phone_url}><span data-p58-text={window.siteContentKey("contact","footer","phone")}>{contactCopy("phone")}</span></ContactItem></p>
           </div>
@@ -905,7 +905,9 @@ function Footer({ go }) {
 }
 
 /* ===== Contact page — same content/design as the footer, as its own destination ===== */
-function ContactPage({ go }) {
+function ContactPage({ go, embedded = false }) {
+  const Title = embedded ? "h2" : "h1";
+  const LocationTitle = embedded ? "h3" : "h2";
   const t = window.useT();
   const { lang } = window.useLang();
   const site = useSiteSettings();
@@ -915,14 +917,14 @@ function ContactPage({ go }) {
     <div className="contact-page page-enter">
       <div className="foot-top foot-top-2col" style={{ padding: "0px", textAlign: "left" }}>
         <div className="foot-big">
-          <span data-p58-text={"foot_big"}>{t("foot_big")}</span> <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }} data-p58-text="foot_big_em">{t("foot_big_em")}</em>
+          <Title className="contact-page-title"><span data-p58-text={"foot_big"}>{t("foot_big")}</span> <em style={{ fontSize: "clamp(48px, 7vw, 90px)" }} data-p58-text="foot_big_em">{t("foot_big_em")}</em></Title>
           <div className="foot-cta foot-cta-center">
             <button className="foot-start-btn" onClick={() => go({ name: "start" })}><span data-p58-text={"foot_meet"}>{t("foot_meet")}</span><span className="ar">→</span></button>
           </div>
         </div>
         <div className="foot-col foot-col-split">
           <div>
-            <h4><span data-p58-text={window.siteContentKey("contact","footer","location_label")}>{contactCopy("location_label")}</span></h4>
+            <LocationTitle className="foot-location-title"><span data-p58-text={window.siteContentKey("contact","footer","location_label")}>{contactCopy("location_label")}</span></LocationTitle>
             <p><ContactItem href={contact.address_url}><span data-p58-text={window.siteContentKey("contact","footer","address")}>{contactCopy("address")}</span></ContactItem></p>
             <p style={{ marginTop: 8 }}><ContactItem href={contact.phone_url}><span data-p58-text={window.siteContentKey("contact","footer","phone")}>{contactCopy("phone")}</span></ContactItem></p>
           </div>
@@ -1067,7 +1069,7 @@ function StartProjectPage({ go }) {
   const body = done ? (
     <div className="inquiry-done">
       <div className="inquiry-done-mark">✓</div>
-      <h2 data-p58-text="inquiry_success_title">{t("inquiry_success_title")}</h2>
+      <h1 data-p58-text="inquiry_success_title">{t("inquiry_success_title")}</h1>
       <p data-p58-text="inquiry_success_body">{t("inquiry_success_body")}</p>
       {phone ? (
         <p className="inquiry-call"><span data-p58-text={"inquiry_call"}>{t("inquiry_call")}</span> <a href={phoneUrl}>{phone}</a>.</p>
@@ -1077,7 +1079,7 @@ function StartProjectPage({ go }) {
   ) : intro ? (
     <div className="inquiry-intro">
       <div className="inquiry-step-kind" data-p58-text="inquiry_intro_kicker">{t("inquiry_intro_kicker")}</div>
-      <h2 className="inquiry-title" data-p58-text="inquiry_intro_title">{t("inquiry_intro_title")}</h2>
+      <h1 className="inquiry-title" data-p58-text="inquiry_intro_title">{t("inquiry_intro_title")}</h1>
       <p className="inquiry-intro-body" data-p58-text="inquiry_intro_body">{t("inquiry_intro_body")}</p>
       <div className="inquiry-nav">
         <span />
@@ -1090,7 +1092,7 @@ function StartProjectPage({ go }) {
         {steps.map((s, i) => <span key={i} className={`inquiry-dot ${i === step ? "on" : ""} ${i < step ? "done" : ""}`} />)}
       </div>
       <div className="inquiry-step-kind"><span data-p58-text={"inquiry_step"}>{t("inquiry_step")}</span> {step + 1} <span data-p58-text={"inquiry_of"}>{t("inquiry_of")}</span> {steps.length}</div>
-      <h2 className="inquiry-title" data-p58-text={activeStep ? window.siteContentKey("form-group",activeStep.id,"title") : "inquiry_title"}>{activeStep ? activeStep.title : t("inquiry_title")}</h2>
+      <h1 className="inquiry-title" data-p58-text={activeStep ? window.siteContentKey("form-group",activeStep.id,"title") : "inquiry_title"}>{activeStep ? activeStep.title : t("inquiry_title")}</h1>
       <div className="inquiry-fields inquiry-dynamic-fields">{activeStep ? activeStep.questions.map(renderQuestion) : <p data-p58-text="inquiry_empty">{t("inquiry_empty")}</p>}</div>
 
       <div className="inquiry-nav">
