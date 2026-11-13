@@ -9,7 +9,9 @@
     "secret": "node scripts/hash-password.mjs --secret",
     "test": "node --experimental-test-module-mocks --test scripts/tests/*.test.mjs",
     "check": "node scripts/check-syntax.mjs",
-    "migrate:firebase": "node scripts/migrate-firebase.mjs"
+    "migrate:firebase": "node scripts/migrate-firebase.mjs",
+    "build": "node scripts/build-site.mjs",
+    "pretest": "npm run build"
   },
   "dependencies": {
     "@google-cloud/firestore": "^9.3.1",
@@ -17,12 +19,15 @@
     "@vercel/functions": "^3.9.3",
     "@vercel/oidc": "^4.0.1",
     "firebase-admin": "^14.5.0",
-    "google-auth-library": "^11.3.1"
+    "google-auth-library": "^11.3.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "engines": {
     "node": ">=22"
   },
   "devDependencies": {
-    "@babel/parser": "^8.0.7"
+    "@babel/parser": "^8.0.7",
+    "esbuild": "^0.28.2"
   }
 }

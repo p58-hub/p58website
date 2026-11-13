@@ -1,0 +1,41 @@
+/* Shared, bilingual editorial copy. Published project descriptions remain authoritative. */
+(function (root) {
+  root.P58_EDITORIAL = {
+    en: {
+      servicesTitle: 'Architecture for homes and businesses',
+      servicesIntro: 'Project58 is an architecture and design practice based in Athens. Our work connects residential spaces, commercial interiors and the identity of the businesses that use them.',
+      residentialTitle: 'Residential architecture',
+      residentialBody: 'The way a home is organised shapes everyday life. We approach residential design through the relationship between rooms, movement, natural light and materials, with the needs of the people who live there at the centre.',
+      retailTitle: 'Retail and commercial interiors',
+      retailBody: 'A commercial space brings people, products and a brand together. Our approach considers the arrival, circulation and use of the interior as a connected experience, from the street frontage to the details encountered inside.',
+      systemsTitle: 'Design across multiple locations',
+      systemsBody: 'For Protein Garden and Dinas, a shared design language connects different locations. Materials, spatial elements and brand identity form a flexible framework that responds to the character and constraints of each space.',
+      processTitle: 'A project begins with a conversation',
+      processBody: 'The starting point is the space and what you need it to become. Tell us about its location, current use, your priorities and the stage of your project so that our first conversation has a clear focus.',
+      projectsIntro: 'Explore residential and commercial projects by Project58. Each project brings together its location, use and design approach, alongside photographs and key information about the space.',
+      peopleIntro: 'Meet the people behind Project58, an Athens-based architecture and design practice working on residential and commercial spaces.',
+      servicesLink: 'Our approach & services',
+      notFoundTitle: 'Page not found',
+      notFoundBody: 'This page is unavailable or the project is no longer published.',
+      homeLink: 'Back to home',
+    },
+    gr: {
+      servicesTitle: 'Αρχιτεκτονική για κατοικίες και επαγγελματικούς χώρους',
+      servicesIntro: 'Το Project58 είναι ένα γραφείο αρχιτεκτονικής και σχεδιασμού με έδρα την Αθήνα. Το έργο μας συνδέει την κατοικία, τους επαγγελματικούς χώρους και την ταυτότητα των επιχειρήσεων που στεγάζονται σε αυτούς.',
+      residentialTitle: 'Αρχιτεκτονική κατοικίας',
+      residentialBody: 'Η οργάνωση μιας κατοικίας διαμορφώνει την καθημερινή ζωή. Προσεγγίζουμε τον σχεδιασμό μέσα από τη σχέση των δωματίων, την κίνηση, το φυσικό φως και τα υλικά, με επίκεντρο τις ανάγκες των ανθρώπων που κατοικούν στον χώρο.',
+      retailTitle: 'Καταστήματα και επαγγελματικοί χώροι',
+      retailBody: 'Ένας επαγγελματικός χώρος φέρνει κοντά τους ανθρώπους, τα προϊόντα και την ταυτότητα μιας επιχείρησης. Αντιμετωπίζουμε την άφιξη, την κυκλοφορία και τη χρήση του εσωτερικού ως μια ενιαία εμπειρία, από την όψη στον δρόμο μέχρι τις λεπτομέρειες μέσα στον χώρο.',
+      systemsTitle: 'Σχεδιασμός για πολλαπλά καταστήματα',
+      systemsBody: 'Στα έργα για το Protein Garden και το Dinas, μια κοινή σχεδιαστική γλώσσα συνδέει διαφορετικές τοποθεσίες. Υλικά, χωρικά στοιχεία και εταιρική ταυτότητα δημιουργούν ένα ευέλικτο πλαίσιο, που προσαρμόζεται στον χαρακτήρα και στους περιορισμούς κάθε χώρου.',
+      processTitle: 'Κάθε έργο ξεκινά με μια συζήτηση',
+      processBody: 'Αφετηρία είναι ο χώρος και αυτό που θέλετε να γίνει. Μιλήστε μας για την τοποθεσία, τη σημερινή του χρήση, τις προτεραιότητές σας και το στάδιο στο οποίο βρίσκεται το έργο, ώστε η πρώτη μας συζήτηση να έχει σαφή κατεύθυνση.',
+      projectsIntro: 'Εξερευνήστε έργα κατοικίας και επαγγελματικών χώρων του Project58. Κάθε έργο παρουσιάζεται μέσα από την τοποθεσία, τη χρήση και τη σχεδιαστική του προσέγγιση, μαζί με φωτογραφίες και βασικά στοιχεία του χώρου.',
+      peopleIntro: 'Γνωρίστε τους ανθρώπους του Project58, ενός γραφείου αρχιτεκτονικής και σχεδιασμού με έδρα την Αθήνα και αντικείμενο την κατοικία και τους επαγγελματικούς χώρους.',
+      servicesLink: 'Προσέγγιση & υπηρεσίες',
+      notFoundTitle: 'Η σελίδα δεν βρέθηκε',
+      notFoundBody: 'Αυτή η σελίδα δεν είναι διαθέσιμη ή το έργο δεν είναι πλέον δημοσιευμένο.',
+      homeLink: 'Επιστροφή στην αρχική',
+    },
+  };
+})(typeof window === 'undefined' ? globalThis : window);

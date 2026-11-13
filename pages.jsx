@@ -7,7 +7,7 @@ function SiteMedia({ src, alt, className, lazy }) {
   if (window.isVideoSrc(src)) {
     return <video className={className} src={src} muted loop playsInline autoPlay preload="metadata" aria-label={alt || undefined} />;
   }
-  return <img className={className} src={src} alt={alt || ""} loading={lazy ? "lazy" : undefined} />;
+  return <img className={className} src={src} alt={alt || ""} loading={lazy ? "lazy" : undefined} decoding="async" />;
 }
 const BRAND_KEY = (p) => p.brandKey || (p.id.startsWith("pg-") ? "pg" : "dn");
 
@@ -112,10 +112,20 @@ function startHomeIdleScroll(hero, settings = {}) {
 
 function HomeHeroTitle({ text }) {
   const ref = useR(null);
+  const words = String(text).trim().split(/\s+/);
+  const fixedLines = /^designing\s+a\s+world\s+of\s+possibilities[.!…]?$/i.test(String(text).trim())
+    ? [words.slice(0, 1), words.slice(1, 4), words.slice(4)] : null;
   React.useLayoutEffect(() => {
     const title = ref.current;
     if (!title) return;
     const measure = () => {
+      title.parentElement.style.removeProperty('--hero-fit-font');
+      if (fixedLines) {
+        const size = parseFloat(getComputedStyle(title).fontSize);
+        const available = title.clientWidth;
+        const widest = Math.max(...[...title.querySelectorAll('.home-hero-line')].map(line => line.scrollWidth));
+        if (available > 0 && widest > available) title.parentElement.style.setProperty('--hero-fit-font', `${size * (available - 1) / widest}px`);
+      }
       let previousTop = null, line = -1;
       title.querySelectorAll('.home-hero-word').forEach(word => {
         if (previousTop === null || Math.abs(word.offsetTop - previousTop) > 2) { line++; previousTop = word.offsetTop; }
@@ -124,18 +134,23 @@ function HomeHeroTitle({ text }) {
     };
     measure();
     const observer = new ResizeObserver(measure);
-    observer.observe(title);
+    observer.observe(title.parentElement);
+    const typographyObserver = new MutationObserver(measure);
+    typographyObserver.observe(title, {attributes:true, attributeFilter:['style']});
     let live = true;
     document.fonts?.ready.then(() => { if (live) measure(); });
-    return () => { live = false; observer.disconnect(); };
+    return () => { live = false; observer.disconnect(); typographyObserver.disconnect(); title.parentElement?.style.removeProperty("--hero-fit-font"); };
   }, [text]);
-  return <h1 ref={ref} data-p58-text="home_hero_title">{String(text).split(/(\s+)/).map((word,index) => /\s/.test(word) ? word : <span className="home-hero-word" key={index}>{word}</span>)}</h1>;
+  return <h1 ref={ref} className={fixedLines ? 'home-hero-title--three-lines' : undefined} data-p58-text="home_hero_title">{fixedLines
+    ? fixedLines.map((line, index) => <React.Fragment key={index}>{index > 0 && ' '}<span className="home-hero-line">{line.map((word, i) => <React.Fragment key={i}>{i > 0 && ' '}<span className="home-hero-word">{word}</span></React.Fragment>)}</span></React.Fragment>)
+    : String(text).split(/(\s+)/).map((word,index) => /\s/.test(word) ? word : <span className="home-hero-word" key={index}>{word}</span>)}</h1>;
 }
 
 function HomePage({ go }) {
   const t = window.useT();
   const pick = window.usePick();
   const isMobile = useHomeMobile();
+  const editorial = window.P58_EDITORIAL?.[window.useLang().lang];
   const selectedSectionRef = useR(null);
   useE(() => {
     const section = selectedSectionRef.current;
@@ -441,6 +456,7 @@ function HomePage({ go }) {
 
       <section className="dhome-statement dhome-statement--practice">
         <h2 data-p58-text="home_practice_title">{t("home_practice_title")}</h2>
+        <button className="editorial-service-link" onClick={() => go({name:"services"})}>{editorial?.servicesLink}<span className="ui-arrow-up-right" aria-hidden="true" /></button>
       </section>
 
       <section className="home-selected" ref={selectedSectionRef} aria-label={t("home_selected_title")}>
@@ -1485,7 +1501,7 @@ function ProjectPage({ id, go, from, transitionDirection }) {
       <div key={i} className="pd-page-gallery-row" style={p.galleryLayout === "grid"
         ? window.galleryImageStyle(box)
         : { width: `${window.projectGalleryScale(g)}%` }}>
-          <SiteMedia src={g.src} alt={pick(g, "tag")} lazy />
+          <SiteMedia src={g.src} alt={pick(g, "tag") || `${pick(p, "name")} — ${i + 1}`} lazy />
           {g.src && !window.isVideoSrc(g.src) ? <button type="button" className="pd-gallery-enlarge"
             aria-label={`${t("gallery_enlarge")}: ${pick(g, "tag") || `${pick(p, "name")} ${i + 1}`}`}
             onClick={() => setEnlargedImage(g)} /> : null}
@@ -1763,3 +1779,19 @@ function AgencyFooter() {
 }
 
 Object.assign(window, { SiteMedia, ProjListRow, HomePage, AllProjectsGrid, Tile, ProjectsPage, InteriorsPage, ArchitecturePage, AgencyPage, AgencyFooter, ProjectPage });
+
+
+function ServicesPage({ go }) {
+  const { lang } = window.useLang();
+  const copy = window.P58_EDITORIAL[lang];
+  return <div className="services-page page-enter">
+    <header className="services-intro"><p className="eyebrow">Project58 / {lang === 'gr' ? 'Προσέγγιση & υπηρεσίες' : 'Approach & services'}</p><h1>{copy.servicesTitle}</h1><p>{copy.servicesIntro}</p></header>
+    <div className="services-sections">{['residential','retail','systems','process'].map((key,index) => <section key={key}><span className="eyebrow">0{index+1}</span><div><h2>{copy[key+'Title']}</h2><p>{copy[key+'Body']}</p></div></section>)}</div>
+    <div className="services-actions"><button className="btn" onClick={() => go({name:'projects'})}>{lang === 'gr' ? 'Δείτε τα έργα' : 'Explore our projects'}</button><button className="btn" onClick={() => go({name:'start'})}>{lang === 'gr' ? 'Μιλήστε μας για το έργο σας' : 'Tell us about your project'}</button></div>
+  </div>;
+}
+function NotFoundPage({ go }) {
+  const copy = window.P58_EDITORIAL[window.useLang().lang];
+  return <div className="services-page"><header className="services-intro"><h1>{copy.notFoundTitle}</h1><p>{copy.notFoundBody}</p><button className="btn" onClick={() => go({name:'home'})}>{copy.homeLink}</button></header></div>;
+}
+Object.assign(window, {ServicesPage, NotFoundPage});

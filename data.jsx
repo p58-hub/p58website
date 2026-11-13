@@ -962,7 +962,7 @@ function sortByOrder(items) {
 /* Published content is authoritative; bundled data is the offline fallback.
    The app waits for P58_CONTENT_READY before its initial render. Browser
    drafts only appear through explicit preview links. */
-let REMOTE_CONTENT = null;
+let REMOTE_CONTENT = window.P58_INITIAL_CONTENT || null;
 
 // Browser drafts are private editing state. Only explicit preview links may
 // overlay published content; a storage event must never publish a draft.
@@ -1031,13 +1031,13 @@ function applyP58ContentFromStore() {
   try {
     const source = readP58Store();
     applySiteFavicon(source.site || {});
-    if (Array.isArray(source.projects) && source.projects.length) {
+    if (Array.isArray(source.projects)) {
       PROJECTS.splice(0, PROJECTS.length, ...sortByOrder(source.projects.map(normaliseProject)));
     }
-    if (Array.isArray(source.news) && source.news.length) {
+    if (Array.isArray(source.news)) {
       NEWS.splice(0, NEWS.length, ...sortByOrder(source.news.map((n, order) => ({ order, ...n }))));
     }
-    if (Array.isArray(source.team) && source.team.length) {
+    if (Array.isArray(source.team)) {
       const team = sortByOrder(source.team.map((m, order) => {
         const greekDefaults = TEAM_GR[order] || {};
         return {
@@ -1611,6 +1611,6 @@ const PROJECT_SORTS = {
 // Apply what we have synchronously so anything reading PROJECTS at import
 // time still sees a populated array, then start the fetch that supersedes it.
 applyP58ContentFromStore();
-const P58_CONTENT_READY = loadRemoteContent();
+const P58_CONTENT_READY = window.P58_INITIAL_CONTENT ? Promise.resolve(true) : loadRemoteContent();
 
 Object.assign(window, { HOME_SELECTED_MAX, homeSelectedProjects, normaliseBrandSections, brandStoryIntro, brandStoryImages, brandStorySections, brandConceptCopy, normaliseBrandInstagram, normaliseBrandPresentation, P58_STORE_KEY, P58_CONTENT_READY, loadRemoteContent, DEFAULT_SITE_SETTINGS, DEFAULT_HOME_V2_BANNERS, DEFAULT_INQUIRY_FORM, INQUIRY_FORM_GROUPS, normaliseHomeV2, normaliseInquiryForm, normaliseSiteSettings, applySiteFavicon, projectSlugFromFields, applyP58ContentFromStore, readP58Store, PROJECT_SORTS, PROJECT_SORT_DEFAULT, projectIconFor, isProjectVisible, visibleProjects, isVideoSrc, DEFAULT_CATEGORIES, normaliseCategories, siteCategories, siteCategory, siteSubcategories, siteSubcategory, projectCategoryId });

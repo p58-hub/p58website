@@ -9,7 +9,7 @@ function declarations(file,names) {
 }
 const context=vm.createContext({encodeURIComponent,URLSearchParams,ALIAS:{},ROUTES:['home','projects'],BRAND_MAP_AREAS:[],BRAND_STORIES:{},URL,window:{}});
 vm.runInContext(declarations('data.jsx',['normaliseBrandSections','normaliseBrandInstagram','normaliseBrandPresentation','brandConceptCopy','brandStorySections','brandStoryImages','brandStoryIntro'])+'\nwindow.normaliseBrandPresentation=normaliseBrandPresentation;',context);
-vm.runInContext(declarations('brand-pages.jsx',['projectCollectionEntries','brandProjectPoint','brandMapColorMatrix','brandMapCardPosition'])+'\n'+declarations('app.jsx',['pathFromRoute','routeFromLocation','resolveRoute']),context);
+vm.runInContext(declarations('brand-pages.jsx',['projectCollectionEntries','brandProjectPoint','brandMapColorMatrix','brandMapCardPosition'])+'\n'+declarations('app.jsx',['unlocalizedPathFromRoute','pathFromRoute','routeFromLocation','resolveRoute']),context);
 const retail={id:'retail',subcategories:[{id:'protein-garden',label:'Protein Garden'}]};
 test('brand covers stay consistent across homepage, filtered cards and the brand page',()=>{
  const category={id:'retail',subcategories:[{id:'protein-garden',label:'Protein Garden',brandCover:'shared-cover.jpg'}]};

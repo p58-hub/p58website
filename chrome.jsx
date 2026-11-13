@@ -795,7 +795,7 @@ function MobileTabBar({ route, go, onContact, onMore, introHidden = false }) {
       className={`mobile-tab-bar ${introHidden ? "mobile-tab-bar--intro-hidden" : ""}`}
       aria-label={t("primary_navigation")}
       aria-hidden={introHidden ? "true" : undefined}
-      inert={introHidden ? true : undefined}>
+      inert={introHidden ? "" : undefined}>
       <button className={`mobile-tab ${isHome ? "on" : ""}`} type="button" aria-label={t("home")} aria-current={isHome ? "page" : undefined} onClick={() => go({ name: "home" })}>
         <TabHomeIcon on={isHome} />
         <span data-p58-text="home">{t("home")}</span>

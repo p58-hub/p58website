@@ -16,17 +16,32 @@ function LangProvider({ children }) {
   const [lang, setLangState] = React.useState(() => {
     try {
       const previewLang = new URLSearchParams(location.search).get("previewLang");
-      return previewLang === "gr" || previewLang === "en" ? previewLang : localStorage.getItem(I18N_KEY) || "en";
+      return previewLang === "gr" || previewLang === "en" ? previewLang : window.P58SEO?.language(location.pathname) || localStorage.getItem(I18N_KEY) || "en";
     } catch (e) { return "en"; }
   });
   const setLang = React.useCallback((l) => {
     setLangState(l);
     try { localStorage.setItem(I18N_KEY, l); } catch (e) {}
     document.documentElement.lang = l === "gr" ? "el" : "en";
+    window.P58_LANG = l;
+    if (window.P58SEO && !new URLSearchParams(location.search).has('visualTextEditor')) {
+      history.replaceState(null, '', window.P58SEO.localPath(location.pathname, l) + location.search + location.hash);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
   }, []);
   React.useEffect(() => {
     document.documentElement.lang = lang === "gr" ? "el" : "en";
   }, [lang]);
+  React.useEffect(() => {
+    const syncLanguage = () => {
+      if (new URLSearchParams(location.search).has('previewLang')) return;
+      const next = window.P58SEO?.language(location.pathname);
+      if (next) setLangState(next);
+    };
+    window.addEventListener('popstate', syncLanguage);
+    return () => window.removeEventListener('popstate', syncLanguage);
+  }, []);
+  window.P58_LANG = lang;
   return (
     <LangContext.Provider value={{ lang, setLang }}>
       {children}

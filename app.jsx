@@ -9,7 +9,7 @@ const ALIAS = {
   "news": "agency",
   "people": "agency",
 };
-const ROUTES = ["home", "projects", "architecture", "interiors", "agency", "start", "contact"];
+const ROUTES = ["home", "projects", "architecture", "interiors", "agency", "start", "contact", "services"];
 
 function routeFromLegacyHash(h) {
   const [name, id] = h.split("/");
@@ -31,7 +31,7 @@ function routeFromLocation() {
   const legacyHash = (location.hash || "").replace(/^#/, "");
   if (legacyHash) return routeFromLegacyHash(legacyHash);
 
-  const parts = location.pathname.split("/").filter(Boolean).map(decodeURIComponent);
+  const parts = (window.P58SEO ? window.P58SEO.stripLocale(location.pathname) : location.pathname).split("/").filter(Boolean).map(decodeURIComponent);
   const params = new URLSearchParams(location.search);
   if (parts[0] === "projects" && parts[1] === "brands" && parts[2]) return { name: "brand", id: parts[2] };
   if (parts[0] === "projects" && parts[1]) return { name: "project", id: parts[1] };
@@ -59,10 +59,10 @@ function routeFromLocation() {
     const sort = params.get("sort");
     return { name: parts[0], ...(sort ? { sort } : {}) };
   }
-  return { name: "home" };
+  return { name: parts.length ? "notfound" : "home" };
 }
 
-function pathFromRoute(r) {
+function unlocalizedPathFromRoute(r) {
   const name = ALIAS[r.name] || r.name;
   if (name === "home") return "/";
   if (name === "brand") return `/projects/brands/${encodeURIComponent(r.id)}`;
@@ -78,6 +78,11 @@ function pathFromRoute(r) {
   return `/${name}${query ? `?${query}` : ""}`;
 }
 
+function pathFromRoute(r) {
+  const path = unlocalizedPathFromRoute(r);
+  return window.P58SEO ? window.P58SEO.localPath(path, window.P58_LANG || "en") : path;
+}
+
 function routeKey(r) {
   return pathFromRoute(r || routeFromLocation());
 }
@@ -89,11 +94,13 @@ function resolveRoute(r) {
 
 // Only the first home entrance in this browser session receives the reveal.
 function shouldPlaySiteIntro(route) {
+  if (window.P58_SERVER_RENDER || window.P58_INITIAL_CONTENT) return false;
   if (route.name !== 'home' || window.matchMedia('(prefers-reduced-motion: reduce)').matches || window.p58IntroSeen) return false;
   try { return sessionStorage.getItem('p58-intro-seen') !== '1'; } catch { return true; }
 }
 
 function App() {
+  const { lang } = window.useLang();
   const [route, setRoute] = aUseState(() => resolveRoute(routeFromLocation()));
   const routeRef = aUseRef(route);
   // true while the index on screen is only standing in for the home landing,
@@ -266,44 +273,11 @@ function App() {
     return () => clearTimeout(timer);
   }, [route.name, contentVersion]);
 
-  // A hidden project must not remain reachable through an old bookmark or a
-  // previously shared URL. Replace that route with the public project index.
   aUseEffect(() => {
-    if (route.name !== "project") return;
-    const exists = PROJECTS.some((p) => p.visible !== false && (p.id === route.id || p.slug === route.id));
-    if (exists) return;
-    const next = { name: "projects" };
-    history.replaceState({ route: pathFromRoute(next) }, "", pathFromRoute(next));
-    setRoute(next);
-  }, [route.name, route.id, contentVersion]);
-
-  aUseEffect(() => {
-    const project = route.name === "project"
-      ? PROJECTS.find((p) => p.visible !== false && (p.id === route.id || p.slug === route.id))
-      : null;
-    const collection = route.name === "brand" ? publishedBrand(route.id) : null;
-    const title = project ? `${project.name} — Project58` : collection ? `${collection.label} — Project58` : "Project58 — Architecture";
-    const description = project && project.summary
-      ? project.summary
-      : "Project58 is an architecture studio working across retail, residential, renovation and hospitality projects.";
-    document.title = title;
-
-    let meta = document.querySelector('meta[name="description"]');
-    if (!meta) {
-      meta = document.createElement("meta");
-      meta.name = "description";
-      document.head.appendChild(meta);
-    }
-    meta.content = description;
-
-    let canonical = document.querySelector('link[rel="canonical"]');
-    if (!canonical) {
-      canonical = document.createElement("link");
-      canonical.rel = "canonical";
-      document.head.appendChild(canonical);
-    }
-    canonical.href = `${location.origin}${pathFromRoute(route)}`;
-  }, [route.name, route.id, route.brand, route.type, route.view, contentVersion]);
+    if (!window.P58SEO) return;
+    const content = { ...window.readP58Store(), projects: PROJECTS, categories: window.siteCategories() };
+    window.P58SEO.apply(window.P58SEO.metadata({ route, content, lang, siteOrigin: window.P58_SITE_ORIGIN }));
+  }, [route.name, route.id, route.brand, route.type, route.view, lang, contentVersion]);
 
   let page = null;
   if (route.name === "home")         page = (window.visibleProjects ? window.visibleProjects() : PROJECTS.filter((p) => p.visible !== false)).length ? <HomePage go={go} /> : <ProjectsPage go={go} />;
@@ -315,12 +289,15 @@ function App() {
   if (route.name === "agency")       page = <AgencyPage go={go} />;
   if (route.name === "start")        page = <StartProjectPage go={go} />;
   if (route.name === "contact")      page = <ContactPage go={go} />;
+  if (route.name === "services")     page = <ServicesPage go={go} />;
   if (route.name === "project") {
     const projectIsVisible = PROJECTS.some((p) => p.visible !== false && (p.id === route.id || p.slug === route.id));
     page = projectIsVisible
       ? <ProjectPage id={route.id} go={go} from={route.from} transitionDirection={route.transitionDirection} />
-      : <ProjectsPage go={go} />;
+      : <NotFoundPage go={go} />;
   }
+
+  if (route.name === "notfound" || (route.name === "brand" && !publishedBrand(route.id))) page = <NotFoundPage go={go} />;
 
   return (
     <React.Fragment>
@@ -369,7 +346,8 @@ function pageLabel(r) {
    show the bundled defaults and then visibly swap to the published content a
    moment later — most obvious on the hero images. The promise always resolves,
    so a deployment with no API is delayed by one failed fetch, not forever. */
-(window.P58_CONTENT_READY || Promise.resolve()).then(() => {
+window.P58App = App;
+if (!window.P58_SERVER_RENDER) (window.P58_CONTENT_READY || Promise.resolve()).then(() => {
   ReactDOM.createRoot(document.getElementById("root")).render(
     <window.LangProvider>
       <App />

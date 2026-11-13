@@ -12,3 +12,8 @@ node_modules/
 # Local Firebase CLI diagnostics can contain authentication metadata
 firebase-debug*.log
 .firebase/
+
+# Generated browser and server bundles
+site.bundle.js
+api/_site-source.js
+react.runtime.js

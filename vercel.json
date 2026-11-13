@@ -3,26 +3,110 @@
   "cleanUrls": true,
   "trailingSlash": false,
   "redirects": [
-    { "source": "/card", "destination": "/card/georgios", "permanent": false }
+    {
+      "source": "/card",
+      "destination": "/card/georgios",
+      "permanent": false
+    },
+    {
+      "source": "/",
+      "destination": "/en",
+      "permanent": true
+    },
+    {
+      "source": "/index",
+      "destination": "/en",
+      "permanent": true
+    },
+    {
+      "source": "/projects",
+      "destination": "/en/projects",
+      "permanent": true
+    },
+    {
+      "source": "/architecture",
+      "destination": "/en/architecture",
+      "permanent": true
+    },
+    {
+      "source": "/interiors",
+      "destination": "/en/interiors",
+      "permanent": true
+    },
+    {
+      "source": "/people",
+      "destination": "/en/people",
+      "permanent": true
+    },
+    {
+      "source": "/agency",
+      "destination": "/en/people",
+      "permanent": true
+    },
+    {
+      "source": "/start-a-project",
+      "destination": "/en/start-a-project",
+      "permanent": true
+    },
+    {
+      "source": "/contact",
+      "destination": "/en/contact",
+      "permanent": true
+    },
+    {
+      "source": "/services",
+      "destination": "/en/services",
+      "permanent": true
+    },
+    {
+      "source": "/projects/:path+",
+      "destination": "/en/projects/:path+",
+      "permanent": true
+    }
   ],
   "rewrites": [
-    { "source": "/projects/brands/:id", "destination": "/index" },
-    { "source": "/card/member/:id", "destination": "/card/index" },
-    { "source": "/card/georgios", "destination": "/card/index" },
-    { "source": "/", "destination": "/index" },
-    { "source": "/projects", "destination": "/index" },
-    { "source": "/projects/:slug", "destination": "/index" },
-    { "source": "/architecture", "destination": "/index" },
-    { "source": "/interiors", "destination": "/index" },
-    { "source": "/people", "destination": "/index" },
-    { "source": "/agency", "destination": "/index" },
-    { "source": "/start-a-project", "destination": "/index" },
-    { "source": "/contact", "destination": "/index" }
+    {
+      "source": "/card/member/:id",
+      "destination": "/card/index"
+    },
+    {
+      "source": "/card/georgios",
+      "destination": "/card/index"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/page?document=sitemap"
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "/api/page?document=robots"
+    },
+    {
+      "source": "/en",
+      "destination": "/api/page?path=/en/"
+    },
+    {
+      "source": "/en/:path*",
+      "destination": "/api/page?path=/en/:path*"
+    },
+    {
+      "source": "/el",
+      "destination": "/api/page?path=/el/"
+    },
+    {
+      "source": "/el/:path*",
+      "destination": "/api/page?path=/el/:path*"
+    }
   ],
   "headers": [
     {
       "source": "/card/(.*)",
-      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
     },
     {
       "source": "/assets/(.*)",
@@ -45,16 +129,29 @@
     {
       "source": "/api/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, max-age=0" },
-        { "key": "X-Content-Type-Options", "value": "nosniff" }
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
       ]
     },
     {
       "source": "/login",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store, max-age=0" },
-        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
+        {
+          "key": "Cache-Control",
+          "value": "no-store, max-age=0"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow"
+        }
       ]
     }
-  ]
+  ],
+  "buildCommand": "npm run build"
 }

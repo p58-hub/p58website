@@ -11,7 +11,7 @@ ARCHIVES/
 firebase-debug*.log
 firebase/
 firebase.json
-scripts/
+scripts/tests/
 *.md
 TODO.txt
 .visual-audit*
